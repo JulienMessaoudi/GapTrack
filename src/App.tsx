@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, MotionConfig, motion } from "motion/react";
 import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
 import { Button } from "./components/ui/button";
@@ -6,7 +6,7 @@ import { Input } from "./components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "./components/ui/select";
 import { Badge } from "./components/ui/badge";
 import { toast } from "sonner";
-import {Filter, Languages, Moon, Redo2, Search, Sun, Undo2, ArrowUp, Paperclip, Download, Plus, Copy, X, Trash2, AlertTriangle, Shield, ShieldCheck, Lightbulb, Info, Loader2, CheckCircle2, AlertCircle, Pencil, BarChart3, ListChecks, ListTodo, PanelLeftClose, PanelLeftOpen, Users, LogOut, UserPlus, History, ClipboardCheck, FileClock, FileCheck2, FileX2, Clock3} from "lucide-react";
+import {Filter, Redo2, Search, Undo2, ArrowUp, Paperclip, Download, Plus, Copy, X, Trash2, AlertTriangle, Shield, ShieldCheck, Lightbulb, Info, Loader2, CheckCircle2, AlertCircle, Pencil, BarChart3, ListChecks, ListTodo, Users, LogOut, UserPlus, History, ClipboardCheck, FileClock, FileCheck2, FileX2, Clock3} from "lucide-react";
 import { ResponsiveContainer, Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Tooltip } from "recharts";
 import { LoginAccessPage } from "./components/LoginAccessPage";
 import { LandingHomePage } from "./components/LandingHomePage";
@@ -1160,7 +1160,7 @@ function formatDueHuman(due: string | undefined, lang: LangKey): string {
   if (days === 0) return lang === "fr" ? "Aujourd’hui" : "Today";
   if (days === 1) return lang === "fr" ? "Demain" : "Tomorrow";
   if (days <= 7) return lang === "fr" ? `Dans ${days} j` : `In ${days}d`;
-  return due;
+  return due ?? (lang === "fr" ? "À planifier" : "To schedule");
 }
 
 function weeklyFocusForControl(row: ControlItem, lang: LangKey): WeeklyFocus {
@@ -1880,6 +1880,7 @@ function templateModelCSV(frameworkId: FrameworkId, lang: LangKey): string {
   const NEWLINE = "\r\n";
   const header = ["ref", "domain", "impact", "description"];
   const exampleDomain = lang === "fr" ? "Organisation" : "Organization";
+  const exampleRef = frameworkId === "ISO27001" ? "A.5.1" : "1.1";
   const exampleDesc =
     lang === "fr"
       ? "EXEMPLE (à remplacer) : contrôle interne / exigence de sécurité"
@@ -1893,7 +1894,7 @@ function templateModelCSV(frameworkId: FrameworkId, lang: LangKey): string {
 
   const rows = [
     header,
-    ["A.5.1", exampleDomain, "2", exampleDesc],
+    [exampleRef, exampleDomain, "2", exampleDesc],
   ];
 
   const csv = (lang === "fr" ? "\uFEFF" : "") + rows.map((r) => r.map(esc).join(delimiter)).join(NEWLINE);
@@ -1907,6 +1908,7 @@ function templateModelJSON(frameworkId: FrameworkId, lang: LangKey): string {
       : `${frameworkId} template (fill me)`;
   const version = frameworkId === "ISO27001" ? "2022" : "1.0";
   const exampleDomain = lang === "fr" ? "Organisation" : "Organization";
+  const exampleRef = frameworkId === "ISO27001" ? "A.5.1" : "1.1";
   const exampleDesc =
     lang === "fr"
       ? "EXEMPLE (à remplacer) : contrôle interne / exigence de sécurité"
@@ -1916,7 +1918,7 @@ function templateModelJSON(frameworkId: FrameworkId, lang: LangKey): string {
     name,
     version,
     rows: [
-      { ref: "A.5.1", domain: exampleDomain, impact: 2, description: exampleDesc },
+      { ref: exampleRef, domain: exampleDomain, impact: 2, description: exampleDesc },
     ],
   };
 
@@ -2467,6 +2469,7 @@ function CommandPalette({ open, setOpen, onNavigate, onToggleTheme, domains }: {
     { label: "Aller au Journal d’audit", action: () => onNavigate('journal') },
     { label: 'Rechercher (Listing)', action: () => { onNavigate('listing'); setTimeout(()=>window.dispatchEvent(new Event('focus-search')), 0); } },
     { label: "Aller au Plan d’action", action: () => onNavigate("plan") },
+    { label: 'Changer de thème', action: onToggleTheme },
   ];
   const domainCmds = domains.map(d => ({ label: `Filtrer domaine: ${d}`, action: () => { onNavigate('listing'); setTimeout(()=>window.dispatchEvent(new CustomEvent('set-domain-filter', { detail: d })), 0); } }));
   const items = [...base, ...domainCmds].filter(it => it.label.toLowerCase().includes(q.toLowerCase()));
@@ -3674,9 +3677,6 @@ function MobileNav({ current, onNavigate, lang }: { current: string; onNavigate:
 
 function Toolbar({
   lang,
-  setLang,
-  theme,
-  setTheme,
   onUndo,
   onRedo,
   sessions,
@@ -3686,7 +3686,6 @@ function Toolbar({
   onDuplicateSession,
   onDeleteSession,
   saveState,
-  lastSavedAt,
   onRenameSession,
   onRetrySync,
   activeUser,
@@ -3973,7 +3972,7 @@ function useStickyShadow() {
   return { sentinelRef, isStuck };
 }
 
-function ListingView({ rows, setRows, lang, theme, onOpenEvidence, evidenceCountFor, evidenceListFor, proofStatusFor, setProofStatusForRow, plans, openRequest, onOpenRequestConsumed }: { rows: ControlItem[]; setRows: (r: ControlItem[]) => void; lang: LangKey; theme: "dark" | "light"; onOpenEvidence: (control: ControlItem) => void; evidenceCountFor: (controlId: string) => number; evidenceListFor: (controlId: string) => EvidenceItem[]; proofStatusFor: (controlId: string) => EvidenceStatus; setProofStatusForRow: (controlId: string, status: EvidenceStatus) => void; plans: Record<string, PlanAction>; openRequest?: ListingOpenRequest | null; onOpenRequestConsumed?: () => void}) {
+function ListingView({ rows, setRows, lang, onOpenEvidence, evidenceCountFor, evidenceListFor, proofStatusFor, setProofStatusForRow, plans, openRequest, onOpenRequestConsumed }: { rows: ControlItem[]; setRows: (r: ControlItem[]) => void; lang: LangKey; theme: "dark" | "light"; onOpenEvidence: (control: ControlItem) => void; evidenceCountFor: (controlId: string) => number; evidenceListFor: (controlId: string) => EvidenceItem[]; proofStatusFor: (controlId: string) => EvidenceStatus; setProofStatusForRow: (controlId: string, status: EvidenceStatus) => void; plans: Record<string, PlanAction>; openRequest?: ListingOpenRequest | null; onOpenRequestConsumed?: () => void}) {
   const t = I18N[lang];
 
   const { sentinelRef: listingSentinelRef, isStuck: listingStuck } = useStickyShadow();
@@ -4429,29 +4428,12 @@ function ListingView({ rows, setRows, lang, theme, onOpenEvidence, evidenceCount
     );
   };
   
-  const impactMeta = (impact: number) => {
-	if (impact >= 3)
-		return {
-			label: lang === "fr" ? "Élevé" : "High",
-			cls: "border border-red-300 bg-red-100 text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-100 font-semibold",
-		};
-	if (impact === 2)
-		return {
-			label: lang === "fr" ? "Moyen" : "Medium",
-			cls: "border border-amber-300 bg-amber-100 text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100 font-semibold",
-		};
-	return {
-		label: lang === "fr" ? "Faible" : "Low",
-		cls: "border border-emerald-300 bg-emerald-100 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-100 font-semibold",
-	};
-  };
-
   const isDarkMode = () =>
 	document.documentElement.classList.contains("dark") ||
 	document.body.classList.contains("dark");
 
   const impactStyle = (impact: number) => {
-		const dark = typeof document !== "undefined" && document.documentElement.classList.contains("dark");
+		const dark = typeof document !== "undefined" && isDarkMode();
 
 	// Dark : on veut le rendu pastel clair (comme ta capture 3)
 	if (dark) {
@@ -5417,14 +5399,6 @@ function PlanView({
     if (p === "p2") return 2;
     if (p === "p3") return 3;
     return 99;
-  };
-
-  const prioShort = (p?: PlanAction["priority"] | string) => {
-    const r = prioRank(p);
-    if (r === 1) return "P1";
-    if (r === 2) return "P2";
-    if (r === 3) return "P3";
-    return "";
   };
 
 
@@ -6462,40 +6436,6 @@ function DashboardView({
     return { icon: <ShieldCheck className="h-5 w-5" />, title: `Maturity score ${p}%`, lead: "Security is part of the culture", lines: ["Robust processes and continuous improvement."] };
   }, [agg.globalPercent, lang]);
 
-  const planStats = React.useMemo(() => {
-    const gaps = rows.filter((r) => isGapStatus(r.realized));
-
-    const hasPlan = (id: string) => {
-      const p = plans?.[id];
-      if (!p) return false;
-      return !!((p.owner || "").trim() || p.due || p.priority || (p.comment || "").trim());
-    };
-
-    const withPlan = gaps.filter((g) => hasPlan(g.id));
-    const withoutPlan = gaps.filter((g) => !hasPlan(g.id));
-    const pct = gaps.length ? Math.round((withPlan.length / gaps.length) * 100) : 0;
-
-    const cmpRef = (a: string, b: string) =>
-      a.localeCompare(b, lang === "fr" ? "fr" : "en", { numeric: true, sensitivity: "base" });
-
-    const topWithout = [...withoutPlan]
-      .sort((a, b) => (b.impact - a.impact) || cmpRef(a.ref, b.ref))
-      .slice(0, 5);
-
-    return { gapsTotal: gaps.length, withPlan: withPlan.length, pct, topWithout };
-  }, [rows, plans, lang]);
-
-  const proofStats = React.useMemo(() => {
-    const missingValidated = rows.filter((r) => isImplementedStatus(r.realized) && proofStatusFor(r.id) !== "validated");
-    const cmpRef = (a: string, b: string) =>
-      a.localeCompare(b, lang === "fr" ? "fr" : "en", { numeric: true, sensitivity: "base" });
-    const topMissingValidated = [...missingValidated]
-      .sort((a, b) => (b.impact - a.impact) || cmpRef(a.ref, b.ref))
-      .slice(0, 5);
-
-    return { topMissingValidated };
-  }, [rows, proofStatusFor, lang]);
-
 
   const dashboardOps = React.useMemo(() => {
     const cmpRef = (a: string, b: string) =>
@@ -7493,7 +7433,7 @@ function AuditLogView({ entries, lang, onExport, onClear, canClear }: { entries:
   return (
     <main className="p-4 space-y-4">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <Card className="glass-card"><CardContent className="p-4"><div className="text-xs text-muted-foreground">{lang === "fr" ? "Événements" : "Events"}</div><div className="text-3xl font-semibold tabular-nums">{entries.length}</div></CardContent></Card>
+        <Card className="glass-card"><CardContent className="p-4"><div className="text-xs text-muted-foreground">{lang === "fr" ? "Événements" : "Events"}</div><div className="text-3xl font-semibold tabular-nums">{entries.length}</div><div className="mt-1 text-[11px] text-muted-foreground">{lang === "fr" ? "Preuves" : "Evidence"}: {evidenceEvents}</div></CardContent></Card>
         <Card className="glass-card"><CardContent className="p-4"><div className="text-xs text-muted-foreground">{lang === "fr" ? "Aujourd’hui" : "Today"}</div><div className="text-3xl font-semibold tabular-nums">{todayEvents}</div></CardContent></Card>
         <Card className="glass-card"><CardContent className="p-4"><div className="text-xs text-muted-foreground">{lang === "fr" ? "Revues de preuve" : "Evidence reviews"}</div><div className="text-3xl font-semibold tabular-nums">{validationEvents}</div></CardContent></Card>
       </div>
@@ -9241,7 +9181,7 @@ export default function App() {
     rememberSnapshot();
     const previous = rowsRef.current;
     const actual = typeof next === "function" ? (next as any)(previous) : next;
-    const prevById = new Map(previous.map((r) => [r.id, r]));
+    const prevById = new Map<string, ControlItem>(previous.map((r): [string, ControlItem] => [r.id, r]));
     rowsRef.current = actual;
     setRows(actual);
     actual.forEach((row) => {
