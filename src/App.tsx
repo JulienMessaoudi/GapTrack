@@ -4497,7 +4497,7 @@ function ListingView({ rows, setRows, lang, onOpenEvidence, evidenceCountFor, ev
                 </SelectContent>
               </Select>
 
-              <Select value={impactFilter} onValueChange={(v) => setImpactFilter(v as typeof impactFilter)}>
+              <Select value={impactFilter} onValueChange={(value: string) => setImpactFilter(value as "all" | "1" | "2" | "3")}>
                 <SelectTrigger className="w-full sm:w-[160px]">
                   <span className="truncate">
                     {impactFilter === "all" ? (lang === "fr" ? "Tous les impacts" : "All impacts") : `Impact ${impactFilter}`}
@@ -4527,7 +4527,7 @@ function ListingView({ rows, setRows, lang, onOpenEvidence, evidenceCountFor, ev
                 </SelectContent>
               </Select>
 
-              <Select value={evidenceFilter} onValueChange={(v) => setEvidenceFilter(v as typeof evidenceFilter)}>
+              <Select value={evidenceFilter} onValueChange={(value: string) => setEvidenceFilter(value as "all" | "with" | "without")}>
                 <SelectTrigger className="w-full sm:w-[200px]">
                   <span className="truncate">
                     {evidenceFilter === "all"
@@ -9184,7 +9184,7 @@ export default function App() {
     const prevById = new Map<string, ControlItem>(previous.map((r): [string, ControlItem] => [r.id, r]));
     rowsRef.current = actual;
     setRows(actual);
-    actual.forEach((row) => {
+    actual.forEach((row: ControlItem) => {
       const prev = prevById.get(row.id);
       if (prev && prev.realized !== row.realized) {
         appendAuditLog({
