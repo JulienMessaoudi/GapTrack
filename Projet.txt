@@ -1,0 +1,1304 @@
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
+import { toast } from "sonner";
+import { Filter, Languages, Moon, Redo2, Search, Sun, Undo2, ArrowUp, Paperclip, Plus, Copy, X, Trash2 } from "lucide-react";
+import { ResponsiveContainer, Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Tooltip } from "recharts";
+
+// ==================
+// Types
+// ==================
+interface ControlItem {
+  id: string;
+  ref: string; // ex: "1.1"
+  domain: string; // ex: "Politique de securite"
+  impact: 1 | 2 | 3; // poids
+  description: string; // point de controle
+  realized: 0 | 1; // 0 non fait, 1 fait
+}
+
+interface Session {
+  id: string;
+  name: string;
+  createdAt: string; // ISO
+}
+
+interface EvidenceItem {
+  id: string;
+  filename: string;
+  size: number; // bytes
+  note?: string;
+  addedAt: string; // ISO
+}
+
+// ==================
+// Constants & i18n (ASCII-only)
+// ==================
+const STORAGE_KEY = "grc_rssi_controls_v1"; // legacy (pre-sessions)
+const STORAGE_SETTINGS = "grc_rssi_settings_v1";
+const SESSIONS_KEY = "grc_rssi_sessions_v1";
+const ACTIVE_SESSION_KEY = "grc_rssi_session_active_v1";
+
+function rowsKeyForSession(sessionId: string){ return `grc_rssi_rows__${sessionId}`; }
+function evidKeyForSession(sessionId: string){ return `grc_rssi_ev__${sessionId}`; }
+
+const I18N = {
+  fr: {
+    appTitle: "Plateforme GRC/SSI - Evaluations & Tableaux de bord",
+    listing: "Listing",
+    dashboard: "Tableau de bord",
+    bulkDone: "Marquer tout (filtre) comme fait",
+    bulkUndone: "Marquer tout (filtre) comme non fait",
+    search: "Rechercher...",
+    domain: "Domaine",
+    impact: "Impact",
+    controlPoint: "Point de controle",
+    realized: "Realise",
+    ref: "Reference",
+    globalScore: "Maturite globale",
+    level: "Niveau",
+    empty: "Aucune ligne. Donnees manquantes.",
+    autosaved: "Modifications enregistrees",
+    theme: "Theme",
+    dark: "Sombre",
+    light: "Clair",
+    language: "Langue",
+    top3: "Top 3 des domaines a prioriser",
+    byDomain: "Resultats par domaine",
+    maturityRadar: "Maturite par domaine (%)",
+    items: "lignes",
+    session: "Session",
+    newSession: "Nouvelle",
+    duplicate: "Dupliquer",
+    evidence: "Preuves & note",
+    addFile: "Ajouter un fichier",
+    addNote: "Ajouter une note",
+    noEvidence: "Aucune piece jointe pour ce controle.",
+    export: "Imprimer / Export PDF",
+    compare: "Comparaison",
+    delete: "Supprimer",
+    cannotDeleteLast: "Impossible de supprimer la derniere session.",
+    confirmDeleteTitle: "Supprimer la session ?",
+    confirmDeleteDesc: "Cette action supprimera definitivement la session dans ce navigateur.",
+    confirm: "Confirmer",
+    cancel: "Annuler",
+  },
+  en: {
+    appTitle: "GRC/Sec Platform - Assessments & Dashboards",
+    listing: "Listing",
+    dashboard: "Dashboard",
+    bulkDone: "Mark all (filtered) as done",
+    bulkUndone: "Mark all (filtered) as not done",
+    search: "Search...",
+    domain: "Domain",
+    impact: "Impact",
+    controlPoint: "Control point",
+    realized: "Done",
+    ref: "Ref",
+    globalScore: "Global maturity",
+    level: "Level",
+    empty: "No rows yet.",
+    autosaved: "Changes saved",
+    theme: "Theme",
+    dark: "Dark",
+    light: "Light",
+    language: "Language",
+    top3: "Top 3 domains to prioritize",
+    byDomain: "Results by domain",
+    maturityRadar: "Maturity by domain (%)",
+    items: "rows",
+    session: "Session",
+    newSession: "New",
+    duplicate: "Duplicate",
+    evidence: "Evidence & note",
+    addFile: "Add file",
+    addNote: "Add note",
+    noEvidence: "No attachment for this control.",
+    export: "Print / Export PDF",
+    compare: "Comparison",
+    delete: "Delete",
+    cannotDeleteLast: "Cannot delete the last session.",
+    confirmDeleteTitle: "Delete session?",
+    confirmDeleteDesc: "This will permanently remove the session in this browser.",
+    confirm: "Confirm",
+    cancel: "Cancel",
+  },
+};
+
+type LangKey = keyof typeof I18N;
+
+// Dataset embedded (if any) or fetched fallback
+const FIXED_LISTING: ControlItem[] = [];
+
+// ==================
+// Utils
+// ==================
+function uuid(){ return (globalThis as any).crypto?.randomUUID?.() || `${Date.now()}_${Math.random().toString(16).slice(2)}`; }
+
+function maturityLabel(p: number, lang: LangKey) {
+  const map = (frLabel: string) => (lang === "fr" ? frLabel : ({
+    "Niveau critique": "Critical",
+    "Niveau initial": "Initial",
+    "Niveau opportunite": "Opportunity",
+    "Niveau gere": "Managed",
+    "Niveau optimise": "Optimized",
+  } as Record<string, string>)[frLabel] || frLabel);
+  if (p <= 20) return map("Niveau critique");
+  if (p <= 40) return map("Niveau initial");
+  if (p <= 60) return map("Niveau opportunite");
+  if (p <= 80) return map("Niveau gere");
+  return map("Niveau optimise");
+}
+
+function significationText(p: number, lang: LangKey) {
+  if (lang === "fr") {
+    if (p <= 20) return "Aucun dispositif de securite structure. Risques majeurs : mesures urgentes a engager.";
+    if (p <= 40) return "Dispositif emergent : prioriser les fondamentaux et l'organisation.";
+    if (p <= 60) return "Dispositif en construction : saisir les opportunites d'amelioration.";
+    if (p <= 80) return "Dispositif gere : consolider les controles et la conformite.";
+    return "Dispositif optimise : viser l'amelioration continue et la resilience.";
+  }
+  if (p <= 20) return "No structured security program. Major risks: urgent measures required.";
+  if (p <= 40) return "Emerging program: prioritize fundamentals and organization.";
+  if (p <= 60) return "In-progress program: capture improvement opportunities.";
+  if (p <= 80) return "Managed program: consolidate controls and compliance.";
+  return "Optimized program: pursue continuous improvement and resilience.";
+}
+
+// ==================
+// Storage helpers
+// ==================
+function loadLegacyRows(): ControlItem[] | null {
+  try { const raw = localStorage.getItem(STORAGE_KEY); return raw ? JSON.parse(raw) as ControlItem[] : null; } catch { return null; }
+}
+function loadSettings() { try { const raw = localStorage.getItem(STORAGE_SETTINGS); return raw ? JSON.parse(raw) : {}; } catch { return {}; } }
+function saveSettings(s: any) { localStorage.setItem(STORAGE_SETTINGS, JSON.stringify(s)); }
+
+function loadSessions(): Session[] {
+  try { const raw = localStorage.getItem(SESSIONS_KEY); return raw ? JSON.parse(raw) as Session[] : []; } catch { return []; }
+}
+function saveSessions(arr: Session[]){ localStorage.setItem(SESSIONS_KEY, JSON.stringify(arr)); }
+function loadActiveSessionId(): string | null { try { return localStorage.getItem(ACTIVE_SESSION_KEY); } catch { return null; } }
+function saveActiveSessionId(id: string){ localStorage.setItem(ACTIVE_SESSION_KEY, id); }
+
+function loadRowsForSession(sessionId: string): ControlItem[] | null {
+  try { const raw = localStorage.getItem(rowsKeyForSession(sessionId)); return raw ? JSON.parse(raw) as ControlItem[] : null; } catch { return null; }
+}
+function saveRowsForSession(sessionId: string, rows: ControlItem[]){ localStorage.setItem(rowsKeyForSession(sessionId), JSON.stringify(rows)); }
+
+function loadEvidencesForSession(sessionId: string): Record<string, EvidenceItem[]> {
+  try { const raw = localStorage.getItem(evidKeyForSession(sessionId)); return raw ? JSON.parse(raw) as Record<string, EvidenceItem[]> : {}; } catch { return {}; }
+}
+function saveEvidencesForSession(sessionId: string, map: Record<string, EvidenceItem[]>) {
+  localStorage.setItem(evidKeyForSession(sessionId), JSON.stringify(map));
+}
+
+// Seed rows helper used when creating or resetting a session
+function seedRowsFrom(current: ControlItem[]): ControlItem[] {
+  if (current && current.length) return current.map(r => ({ ...r, realized: 0 as 0 | 1 }));
+  const legacy = loadLegacyRows();
+  if (legacy && legacy.length) return legacy.map(r => ({ ...r }));
+  if (FIXED_LISTING && FIXED_LISTING.length) return FIXED_LISTING.map(r => ({ ...r }));
+  return [];
+}
+
+// ==================
+// Theming CSS (dark that actually darkens surfaces)
+// ==================
+const THEME_CSS = `
+:root{
+  --background:#ffffff;
+  --foreground:#0b1220;
+  --muted:#f1f5f9;
+  --muted-foreground:#64748b;
+  --border:#e2e8f0;
+  --card:#ffffff;
+  --card-foreground:#0b1220;
+  --primary:#2563eb;
+  --primary-foreground:#ffffff;
+}
+.dark{
+  --background:#0b1220;
+  --foreground:#e2e8f0;
+  --muted:#0f172a;
+  --muted-foreground:#94a3b8;
+  --border:#1f2937;
+  --card:#0f172a;
+  --card-foreground:#e5e7eb;
+  --primary:#60a5fa;
+  --primary-foreground:#0b1220;
+}
+html,body{background:var(--background);color:var(--foreground);} 
+.bg-background{background-color:var(--background)!important;}
+.text-foreground{color:var(--foreground)!important;}
+.text-muted-foreground{color:var(--muted-foreground)!important;}
+.border{border-color:var(--border)!important;}
+.border-t{border-top-color:var(--border)!important;}
+.bg-muted\/50{background-color:rgba(148,163,184,.1);background-color:color-mix(in srgb, var(--muted) 50%, transparent);} 
+.hover\:bg-muted\/20:hover{background-color:rgba(148,163,184,.08);background-color:color-mix(in srgb, var(--muted) 20%, transparent);} 
+/* Card helpers */
+.bg-card{background-color:var(--card)!important;}
+.text-card-foreground{color:var(--card-foreground)!important;}
+/* Primary helpers for contrasty chips */
+.bg-primary{background-color:var(--primary)!important;}
+.text-primary-foreground{color:var(--primary-foreground)!important;}
+.border-primary{border-color:var(--primary)!important;}
+/* Switch theming */
+.ui-switch{background-color:color-mix(in srgb, var(--foreground) 6%, transparent)!important}
+.dark .ui-switch{background-color:#0d1a2b!important}
+.ui-switch[data-state="checked"]{background-color:var(--primary)!important}
+.ui-switch[data-state="checked"] > span{background-color:var(--primary-foreground)!important}
+/* Shadows on dark */
+.dark .shadow-sm{box-shadow:0 1px 0 rgba(255,255,255,0.03), 0 1px 2px rgba(0,0,0,0.25)!important;}
+/* KPI pills */
+.kpi{display:inline-flex;align-items:center;gap:.35rem;padding:.35rem .6rem;border-radius:9999px;border:1px solid var(--border);background:color-mix(in srgb, var(--muted) 50%, transparent);color:var(--card-foreground);font-size:.8rem;}
+.dark .kpi{background:color-mix(in srgb, var(--muted) 65%, transparent);} 
+/* Progress bar */
+.progress{height:8px;border-radius:9999px;border:1px solid var(--border);background:color-mix(in srgb, var(--muted) 55%, transparent);overflow:hidden}
+.progress__bar{height:100%;background:var(--primary);border-radius:9999px}
+/* Row selection highlight */
+.row-selected{outline:2px solid color-mix(in srgb, var(--primary) 60%, transparent);outline-offset:-2px;background:color-mix(in srgb, var(--muted) 30%, transparent)}
+/* Command palette */
+.cmd-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:flex-start;justify-content:center;padding:10vh 1rem;z-index:9999;}
+.cmd-panel{width:100%;max-width:680px;background:var(--card);color:var(--card-foreground);border:1px solid var(--border);border-radius:16px;box-shadow:0 10px 40px rgba(0,0,0,.3);position:relative;z-index:10000;}
+.cmd-panel header{padding:.75rem 1rem;border-bottom:1px solid var(--border);display:flex;gap:.5rem;align-items:center}
+.cmd-panel input{flex:1;background:transparent;border:none;outline:none;color:inherit}
+.cmd-list{max-height:50vh;overflow:auto}
+.cmd-item{padding:.65rem 1rem;cursor:pointer}
+.cmd-item:hover,.cmd-item.active{background:color-mix(in srgb, var(--muted) 40%, transparent)}
+/* Drawer */
+.drawer-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9998}
+.drawer{position:fixed;top:0;right:0;height:100%;width:400px;max-width:100%;background:var(--card);color:var(--card-foreground);border-left:1px solid var(--border);box-shadow:0 10px 40px rgba(0,0,0,.3);z-index:10000;display:flex;flex-direction:column}
+.drawer header{display:flex;align-items:center;justify-content:space-between;padding:0.75rem 1rem;border-bottom:1px solid var(--border)}
+.drawer .body{padding:1rem;gap:0.75rem;display:flex;flex-direction:column;overflow:auto}
+/* Modal */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:10001}
+.modal{width:100%;max-width:420px;background:var(--card);color:var(--card-foreground);border:1px solid var(--border);border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.35)}
+.modal header{padding:1rem 1rem .5rem 1rem;font-weight:600}
+.modal .body{padding:0 .75rem 1rem .75rem;color:var(--muted-foreground)}
+.modal footer{display:flex;justify-content:flex-end;gap:.5rem;padding:0 1rem 1rem 1rem}
+/* Print */
+.no-print{}
+.print-only{display:none}
+.screen-only{display:block}
+@media print{
+  .no-print,.cmd-overlay,.cmd-panel,.ui-switch,.drawer-overlay,.drawer,.modal-overlay,.modal{display:none!important}
+  .screen-only{display:none!important}
+  .print-only{display:block!important}
+  html,body{background:#fff!important;color:#000!important}
+  .w-64{display:none!important}
+  .border{border-color:#ddd!important}
+  .page{page-break-after:always}
+  .page:last-child{page-break-after:auto}
+}
+`;
+
+const PRINT_BASE_CSS = `
+*{box-sizing:border-box}
+html,body{background:#fff;color:#000;font:14px/1.4 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial}
+.page{page-break-after:always}
+.page:last-child{page-break-after:auto}
+h1{font-size:28px;margin:0 0 8px}
+h2{font-size:20px;margin:0 0 8px}
+.text-sm{font-size:12px}
+.text-3xl{font-size:28px}
+.text-xl{font-size:20px}
+.font-bold{font-weight:700}
+.grid{display:grid}
+.grid-cols-3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.gap-4{gap:16px}
+.border{border:1px solid #ddd}
+.rounded-md{border-radius:8px}
+.p-4{padding:16px}
+.p-10{padding:40px}
+.mb-3{margin-bottom:12px}
+.mt-6{margin-top:24px}
+.w-full{width:100%}
+.text-right{text-align:right}
+.text-left{text-align:left}
+table{border-collapse:collapse;width:100%}
+th,td{border-top:1px solid #ddd;padding:8px 8px;text-align:left;vertical-align:top}
+thead tr th{background:#f5f5f5}
+`;
+
+function ThemeStyles(){
+  return <style dangerouslySetInnerHTML={{ __html: THEME_CSS }} />;
+}
+
+function ScrollTopButton(){
+  const [visible, setVisible] = React.useState(false);
+  React.useEffect(()=>{
+    const onScroll = () => setVisible(window.scrollY > 300);
+    window.addEventListener('scroll', onScroll);
+    onScroll();
+    return () => window.removeEventListener('scroll', onScroll);
+  },[]);
+  if(!visible) return null;
+  return (
+    <button
+      onClick={()=>window.scrollTo({top:0, behavior:'smooth'})}
+      className="fixed bottom-6 right-6 z-50 rounded-full bg-primary text-primary-foreground shadow-sm p-3 hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-primary no-print"
+      aria-label="Remonter en haut"
+      title="Remonter en haut"
+    >
+      <ArrowUp className="h-5 w-5"/>
+    </button>
+  );
+}
+
+function CommandPalette({ open, setOpen, onNavigate, onToggleTheme, domains }: { open: boolean; setOpen: (b: boolean) => void; onNavigate: (k: string) => void; onToggleTheme: () => void; domains: string[] }){
+  const [q, setQ] = React.useState("");
+  const base = [
+    { label: 'Aller au Listing', action: () => onNavigate('listing') },
+    { label: 'Aller au Tableau de bord', action: () => onNavigate('dashboard') },
+    { label: 'Basculer le theme', action: () => onToggleTheme() },
+    { label: 'Rechercher (Listing)', action: () => { onNavigate('listing'); setTimeout(()=>window.dispatchEvent(new Event('focus-search')), 0); } },
+  ];
+  const domainCmds = domains.map(d => ({ label: `Filtrer domaine: ${d}`, action: () => { onNavigate('listing'); setTimeout(()=>window.dispatchEvent(new CustomEvent('set-domain-filter', { detail: d })), 0); } }));
+  const items = [...base, ...domainCmds].filter(it => it.label.toLowerCase().includes(q.toLowerCase()));
+  const [active, setActive] = React.useState(0);
+  React.useEffect(()=>{
+    const onKey = (e: KeyboardEvent) => {
+      if(!open) return;
+      if(e.key === 'Escape'){ setOpen(false); }
+      if(e.key === 'ArrowDown'){ e.preventDefault(); setActive(a=>Math.min(items.length-1, a+1)); }
+      if(e.key === 'ArrowUp'){ e.preventDefault(); setActive(a=>Math.max(0, a-1)); }
+      if(e.key === 'Enter'){ e.preventDefault(); const it = items[active]; if(it){ setOpen(false); it.action(); } }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open, items, active]);
+  React.useEffect(()=>{ document.body.style.overflow = open ? 'hidden' : ''; return () => { document.body.style.overflow = ''; }; }, [open]);
+  if(!open) return null;
+  return (
+    <div className="cmd-overlay no-print" role="dialog" aria-modal="true" onClick={()=>setOpen(false)}>
+      <div className="cmd-panel" onClick={(e)=>e.stopPropagation()}>
+        <header>
+          <span className="text-xs text-muted-foreground">⌘K</span>
+          <input autoFocus placeholder="Rechercher une commande..." value={q} onChange={e=>setQ(e.target.value)} />
+        </header>
+        <div className="cmd-list">
+          {items.map((it,i)=> (
+            <div key={i} className={"cmd-item" + (i===active?" active":"")} onMouseEnter={()=>setActive(i)} onClick={()=>{ setOpen(false); it.action(); }}>
+              {it.label}
+            </div>
+          ))}
+          {items.length===0 && <div className="cmd-item text-muted-foreground">Aucun resultat</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ConfirmDialog({ open, title, description, confirmLabel, cancelLabel, onConfirm, onCancel }:{ open:boolean; title:string; description:string; confirmLabel:string; cancelLabel:string; onConfirm:()=>void; onCancel:()=>void }){
+  useEffect(()=>{ document.body.style.overflow = open ? 'hidden' : ''; return () => { document.body.style.overflow = ''; }; }, [open]);
+  useEffect(()=>{
+    if(!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if(e.key === 'Escape') onCancel();
+      if(e.key === 'Enter') onConfirm();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open, onConfirm, onCancel]);
+  if(!open) return null;
+  return (
+    <div className="modal-overlay no-print" role="dialog" aria-modal="true" onClick={onCancel}>
+      <div className="modal" onClick={e=>e.stopPropagation()}>
+        <header>{title}</header>
+        <div className="body">{description}</div>
+        <footer>
+          <Button variant="ghost" onClick={onCancel}>{cancelLabel}</Button>
+          <Button variant="destructive" onClick={onConfirm}>{confirmLabel}</Button>
+        </footer>
+      </div>
+    </div>
+  );
+}
+
+function Sidebar({ current, onNavigate, lang }: { current: string; onNavigate: (k: string) => void; lang: LangKey }) {
+  const t = I18N[lang];
+  const items = [
+    { key: "listing", label: t.listing },
+    { key: "dashboard", label: t.dashboard },
+  ];
+  return (
+    <div className="w-64 shrink-0 h-full border-r bg-background/60 p-3 hidden md:flex md:flex-col gap-2 no-print">
+      <div className="text-xl font-semibold px-2">GRC/SSI</div>
+      {items.map((it) => (
+        <Button key={it.key} variant={current === it.key ? "default" : "ghost"} className="justify-start" onClick={() => onNavigate(it.key)}>
+          {it.label}
+        </Button>
+      ))}
+      <div className="mt-auto text-xs text-muted-foreground px-2 py-3">Demo - no backend. Autosave in browser.</div>
+    </div>
+  );
+}
+
+function Toolbar({
+  lang,
+  setLang,
+  theme,
+  setTheme,
+  onUndo,
+  onRedo,
+  sessions,
+  activeSessionId,
+  onChangeSession,
+  onCreateSession,
+  onDuplicateSession,
+  onDeleteSession,
+}: {
+  lang: LangKey;
+  setLang: (l: LangKey) => void;
+  theme: "light" | "dark";
+  setTheme: (m: "light" | "dark") => void;
+  onUndo: () => void;
+  onRedo: () => void;
+  sessions: Session[];
+  activeSessionId: string;
+  onChangeSession: (id: string) => void;
+  onCreateSession: () => void;
+  onDuplicateSession: () => void;
+  onDeleteSession: () => void;
+}) {
+  const t = I18N[lang];
+  return (
+    <div className="flex items-center gap-2 p-2 border-b sticky top-0 z-20 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60 no-print">
+      <div className="font-medium text-sm px-1">{t.appTitle}</div>
+      <div className="ml-auto flex items-center gap-2">
+        {/* Sessions */}
+        <Select value={activeSessionId} onValueChange={(v)=>onChangeSession(v)}>
+          <SelectTrigger className="w-[220px]" title={t.session}>
+            <span className="truncate">{sessions.find(s=>s.id===activeSessionId)?.name || t.session}</span>
+          </SelectTrigger>
+          <SelectContent>
+            {sessions.map(s => (<SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>))}
+          </SelectContent>
+        </Select>
+        <Button size="sm" variant="outline" onClick={onCreateSession} title={t.newSession}><Plus className="h-4 w-4"/></Button>
+        <Button size="sm" variant="outline" onClick={onDuplicateSession} title={t.duplicate}><Copy className="h-4 w-4"/></Button>
+        <Button size="sm" variant="destructive" onClick={onDeleteSession} title={t.delete}><Trash2 className="h-4 w-4"/></Button>
+
+        {/* Undo/Redo */}
+        <Button size="sm" variant="outline" onClick={onUndo}>
+          <Undo2 className="mr-1 h-4 w-4" />
+          Undo
+        </Button>
+        <Button size="sm" variant="outline" onClick={onRedo}>
+          <Redo2 className="mr-1 h-4 w-4" />
+          Redo
+        </Button>
+        {/* Lang / Theme */}
+        <Select value={lang} onValueChange={(v) => setLang(v as LangKey)}>
+          <SelectTrigger className="w-[110px]">
+            <Languages className="h-4 w-4 mr-1" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="fr">FR</SelectItem>
+            <SelectItem value="en">EN</SelectItem>
+          </SelectContent>
+        </Select>
+        <Button size="sm" variant="outline" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
+          {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function PageHeader({ tab, lang, rows }: { tab: string; lang: LangKey; rows: ControlItem[] }) {
+  const t = I18N[lang];
+  const titleMap: Record<string, string> = {
+    listing: t.listing,
+    dashboard: t.dashboard,
+  };
+  const subMap: Record<string, string> = lang === "fr"
+    ? {
+        listing: "Evaluation et saisie (0/1) des controles",
+        dashboard: "Synthese des scores et priorites",
+      }
+    : {
+        listing: "Assessment and 0/1 entry of controls",
+        dashboard: "Scores and priorities overview",
+      };
+  const title = titleMap[tab] ?? "";
+  const sub = subMap[tab] ?? "";
+
+  const total = rows.length;
+  const done = rows.filter(r => r.realized === 1).length;
+  const donePct = total > 0 ? Math.round((done / total) * 100) : 0;
+  const lbl = lang === "fr" ? { completed: "Realise", of: "sur" } : { completed: "Completed", of: "of" };
+
+  return (
+    <div className="px-4 pt-4 pb-3 border-b bg-background/60">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+          <p className="text-sm text-muted-foreground">{sub}</p>
+        </div>
+        {tab === "listing" && (
+          <div className="w-full sm:w-80" aria-label="progress">
+            <div className="flex items-baseline justify-between text-xs mb-1">
+              <span>{lbl.completed}</span>
+              <span>{done} {lbl.of} {total} ({donePct}%)</span>
+            </div>
+            <div className="progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={donePct}>
+              <div className="progress__bar" style={{ width: `${donePct}%` }} />
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ListingView({ rows, setRows, lang, onOpenEvidence, evidenceCountFor }: { rows: ControlItem[]; setRows: (r: ControlItem[]) => void; lang: LangKey; onOpenEvidence: (control: ControlItem) => void; evidenceCountFor: (controlId: string) => number }) {
+  const t = I18N[lang];
+  const [domainFilter, setDomainFilter] = useState<string | "all">("all");
+  const [search, setSearch] = useState("");
+
+  // Keyboard navigation & quick toggle
+  const [selIndex, setSelIndex] = useState<number>(-1);
+  const filteredRef = useRef<ControlItem[]>([]);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (document.activeElement as HTMLElement | null)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || (document.activeElement as HTMLElement | null)?.isContentEditable) return;
+      const filtered = filteredRef.current;
+      if (e.key === 'ArrowDown') { e.preventDefault(); setSelIndex(i => Math.min(filtered.length - 1, i < 0 ? 0 : i + 1)); }
+      if (e.key === 'ArrowUp') { e.preventDefault(); setSelIndex(i => Math.max(0, i < 0 ? 0 : i - 1)); }
+      if (e.key === '1') { e.preventDefault(); const i = selIndex < 0 ? 0 : selIndex; const r = filtered[i]; if (r) setRealized(r.id, 1); }
+      if (e.key === '0') { e.preventDefault(); const i = selIndex < 0 ? 0 : selIndex; const r = filtered[i]; if (r) setRealized(r.id, 0); }
+      if (e.key === ' ') { e.preventDefault(); const i = selIndex < 0 ? 0 : selIndex; const r = filtered[i]; if (r) setRealized(r.id, r.realized ? 0 : 1); }
+      if (e.key.toLowerCase() === 'n') { e.preventDefault(); const i = selIndex < 0 ? 0 : selIndex; const r = filtered[i]; if (r) onOpenEvidence(r); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [selIndex, onOpenEvidence]);
+
+  const searchRef = React.useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const onFocus = () => searchRef.current?.focus();
+    const onSetDomain = (e: any) => setDomainFilter(((e && e.detail) || 'all') as any);
+    window.addEventListener('focus-search', onFocus);
+    window.addEventListener('set-domain-filter', onSetDomain as any);
+    return () => {
+      window.removeEventListener('focus-search', onFocus);
+      window.removeEventListener('set-domain-filter', onSetDomain as any);
+    };
+  }, []);
+
+  const domains = useMemo(() => Array.from(new Set(rows.map((r) => r.domain))).sort(), [rows]);
+  const filtered = useMemo(() => {
+    const out = rows.filter(
+      (r) => (domainFilter === "all" || r.domain === domainFilter) && (r.description.toLowerCase().includes(search.toLowerCase()) || r.ref.toLowerCase().includes(search.toLowerCase())),
+    );
+    filteredRef.current = out;
+    return out;
+  }, [rows, domainFilter, search]);
+
+  const setRealized = (id: string, v: 0 | 1) => {
+    setRows(rows.map((r) => (r.id === id ? { ...r, realized: v } : r)));
+  };
+  const bulkSet = (value: 0 | 1) => {
+    const ids = new Set(filtered.map((f) => f.id));
+    setRows(rows.map((r) => (ids.has(r.id) ? { ...r, realized: value } : r)));
+  };
+
+  return (
+    <div className="p-4 space-y-4">
+      <div className="flex flex-wrap md:flex-nowrap items-center gap-2 border-b py-2">
+        <Select value={domainFilter} onValueChange={setDomainFilter}>
+          <SelectTrigger className="w-[280px]">
+            <Filter className="h-4 w-4 mr-1" />
+            <span className="truncate">{domainFilter === "all" ? t.domain : domainFilter}</span>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">{lang === "fr" ? "Tous les domaines" : "All domains"}</SelectItem>
+            {domains.map((d) => (
+              <SelectItem key={d} value={d}>
+                {d}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <div className="relative">
+          <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Input ref={searchRef} className="pl-8 w-[280px]" placeholder={t.search} value={search} onChange={(e) => setSearch(e.target.value)} />
+        </div>
+
+        <Button onClick={() => bulkSet(1)} variant="outline" size="sm">{t.bulkDone}</Button>
+        <Button onClick={() => bulkSet(0)} variant="outline" size="sm">{t.bulkUndone}</Button>
+
+        <div className="ml-auto text-sm text-muted-foreground">
+          {filtered.length} / {rows.length} {t.items}
+        </div>
+      </div>
+
+      <div className="rounded-2xl overflow-hidden border">
+        <table className="w-full text-sm">
+          <thead className="bg-muted/50">
+            <tr>
+              <th className="p-2 w-24 text-left">{t.ref}</th>
+              <th className="p-2 w-64 text-left">{t.domain}</th>
+              <th className="p-2 w-28 text-left">{t.impact}</th>
+              <th className="p-2 text-left">{t.controlPoint}</th>
+              <th className="p-2 w-36 text-left">{t.realized}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.length === 0 && (
+              <tr>
+                <td colSpan={5} className="p-6 text-center text-muted-foreground">{t.empty}</td>
+              </tr>
+            )}
+            {filtered.map((r, idx) => (
+              <tr key={r.id} className={"border-t hover:bg-muted/20 " + (idx===selIndex?"row-selected":"")} onClick={() => setSelIndex(idx)} tabIndex={0}>
+                <td className="p-2 align-top">{r.ref}</td>
+                <td className="p-2 align-top">{r.domain}</td>
+                <td className="p-2 align-top">{r.impact}</td>
+                <td className="p-2 align-top">{r.description}</td>
+                <td className="p-2 align-top">
+                  <div className="flex items-center gap-2">
+                    <Switch className="ui-switch" checked={r.realized === 1} onCheckedChange={(v) => setRealized(r.id, v ? 1 : 0)} aria-label={`realise ${r.ref}`}/>
+                    <Badge className={r.realized ? "bg-primary text-primary-foreground border-0 font-semibold" : "bg-transparent border text-muted-foreground"}>{r.realized ? "1" : "0"}</Badge>
+                    <Button variant="outline" size="icon" onClick={(e)=>{ e.stopPropagation(); onOpenEvidence(r); }} title={t.evidence}>
+                      <Paperclip className="h-4 w-4"/>
+                    </Button>
+                    {evidenceCountFor(r.id) > 0 && <span className="kpi">{evidenceCountFor(r.id)} file(s)</span>}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function DashboardView({ rows, lang, compareWith, onExport }: { rows: ControlItem[]; lang: LangKey; compareWith?: ControlItem[] | null; onExport: () => void }) {
+  const t = I18N[lang];
+  const agg = useMemo(() => {
+    const map: Record<string, { points: number; max: number; count: number }> = {};
+    for (const r of rows) {
+      const rec = map[r.domain] || (map[r.domain] = { points: 0, max: 0, count: 0 });
+      rec.points += r.impact * r.realized;
+      rec.max += r.impact;
+      rec.count += 1;
+    }
+    const arr = Object.entries(map).map(([domain, v]) => ({
+      domain,
+      points: v.points,
+      max: v.max,
+      count: v.count,
+      percent: v.max > 0 ? Number(((v.points / v.max) * 100).toFixed(2)) : 0,
+    }));
+    const global = arr.reduce((a, c) => a + c.points, 0);
+    const globalMax = arr.reduce((a, c) => a + c.max, 0);
+    const globalPercent = globalMax > 0 ? Number(((global / globalMax) * 100).toFixed(2)) : 0;
+    return { arr, globalPercent };
+  }, [rows]);
+
+  const top3 = useMemo(() => [...agg.arr].sort((a, b) => a.percent - b.percent).slice(0, 3), [agg]);
+  const level = maturityLabel(agg.globalPercent, lang);
+  const radarData = agg.arr.map((d) => ({ domain: d.domain, value: d.percent }));
+
+  const comp = useMemo(()=>{
+    if(!compareWith || !compareWith.length) return null;
+    const m = compareWith.reduce((acc, r)=>{ acc.points += r.impact * r.realized; acc.max += r.impact; return acc; }, {points:0, max:0});
+    const pct = m.max>0 ? Number(((m.points/m.max)*100).toFixed(2)) : 0;
+    const delta = Number((agg.globalPercent - pct).toFixed(2));
+    return { pct, delta };
+  }, [compareWith, agg.globalPercent]);
+
+  return (
+    <>
+      <div className="no-print flex justify-end px-4 -mb-2">
+        <Button variant="outline" size="sm" onClick={onExport}>{t.export}</Button>
+      </div>
+      <div className="p-4 grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <Card className="lg:col-span-1">
+          <CardHeader>
+            <CardTitle>{t.globalScore}</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <div className="text-4xl font-bold">{agg.globalPercent}%</div>
+            <Badge className="text-sm">{t.level}: {level}</Badge>
+            {comp && (
+              <div className="text-sm">
+                <span className="kpi" title={t.compare}>Δ {comp.delta}% vs {comp.pct}%</span>
+              </div>
+            )}
+            <p className="text-sm text-muted-foreground">{significationText(agg.globalPercent, lang)}</p>
+          </CardContent>
+        </Card>
+
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle>{t.maturityRadar}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <RadarChart data={radarData}>
+                  <PolarGrid />
+                  <PolarAngleAxis dataKey="domain" tick={{ fontSize: 12, fill: "var(--card-foreground)" }} />
+                  <PolarRadiusAxis angle={30} domain={[0, 100]} />
+                  <Radar name="%" dataKey="value" stroke="#8884d8" fill="#8884d8" fillOpacity={0.3} />
+                  <Tooltip
+                    contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", color: "var(--card-foreground)" }}
+                    labelStyle={{ color: "var(--card-foreground)", fontWeight: 600 }}
+                    itemStyle={{ color: "var(--card-foreground)" }}
+                    formatter={(value: any) => [`${value}%`, ""]}
+                    labelFormatter={(label: any) => `${label}`}
+                  />
+                </RadarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle>{t.byDomain}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="rounded-2xl overflow-hidden border">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50">
+                  <tr>
+                    <th className="p-2 text-left">{I18N[lang].domain}</th>
+                    <th className="p-2 text-right">%</th>
+                    <th className="p-2 text-right">{I18N[lang].impact}</th>
+                    <th className="p-2 text-right">{I18N[lang].realized}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...agg.arr].sort((a, b) => a.domain.localeCompare(b.domain)).map((d) => (
+                    <tr key={d.domain} className="border-t">
+                      <td className="p-2">{d.domain}</td>
+                      <td className="p-2 text-right font-medium">{d.percent}%</td>
+                      <td className="p-2 text-right">{d.max}</td>
+                      <td className="p-2 text-right">{d.points}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>{t.top3}</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {top3.map((d, i) => (
+              <div key={d.domain} className="flex items-center justify-between">
+                <div className="font-medium">{i + 1}. {d.domain}</div>
+                <Badge variant="destructive">{d.percent}%</Badge>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      </div>
+    </>
+  );
+}
+
+function EvidenceDrawer({ open, onClose, control, evidenceMap, setEvidenceMap, lang }: { open: boolean; onClose: ()=>void; control: ControlItem | null; evidenceMap: Record<string, EvidenceItem[]>; setEvidenceMap: (m: Record<string, EvidenceItem[]>)=>void; lang: LangKey }){
+  const t = I18N[lang];
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [note, setNote] = useState("");
+
+  useEffect(()=>{ if(!open){ setNote(""); } }, [open]);
+  if(!open || !control) return null;
+
+  const list = evidenceMap[control.id] || [];
+
+  const addFile = async (file: File) => {
+    const item: EvidenceItem = { id: uuid(), filename: file.name, size: file.size, addedAt: new Date().toISOString() };
+    const next = { ...evidenceMap, [control.id]: [item, ...list] };
+    setEvidenceMap(next);
+  };
+  const addNote = () => {
+    if(!note.trim()) return; 
+    const item: EvidenceItem = { id: uuid(), filename: `note.txt`, size: note.length, note: note.trim(), addedAt: new Date().toISOString() };
+    const next = { ...evidenceMap, [control.id]: [item, ...list] };
+    setEvidenceMap(next); setNote("");
+  };
+  const remove = (id: string) => {
+    const next = { ...evidenceMap, [control.id]: (evidenceMap[control.id]||[]).filter(i=>i.id!==id) };
+    setEvidenceMap(next);
+  };
+
+  return (
+    <>
+      <div className="drawer-overlay" onClick={onClose}/>
+      <div className="drawer" role="dialog" aria-modal="true" aria-label={t.evidence}>
+        <header>
+          <div className="font-medium">{t.evidence} — {control.ref}</div>
+          <Button variant="ghost" size="icon" onClick={onClose}><X className="h-5 w-5"/></Button>
+        </header>
+        <div className="body">
+          <div className="text-sm text-muted-foreground">{control.description}</div>
+          <div className="flex gap-2 items-center">
+            <input ref={fileInputRef} type="file" onChange={(e)=>{ const f=e.target.files?.[0]; if(f) addFile(f); e.currentTarget.value=''; }} className="hidden"/>
+            <Button variant="outline" onClick={()=>fileInputRef.current?.click()}><Paperclip className="h-4 w-4 mr-1"/>{t.addFile}</Button>
+          </div>
+          <div className="space-y-1">
+            <label className="text-sm">{t.addNote}</label>
+            <textarea className="w-full min-h-[90px] rounded-md border bg-background p-2" value={note} onChange={e=>setNote(e.target.value)} placeholder="..."/>
+            <div><Button size="sm" onClick={addNote}>{lang==='fr'? 'Enregistrer' : 'Save'}</Button></div>
+          </div>
+
+          <div>
+            <div className="text-sm font-medium mb-1">{lang==='fr'? 'Pieces jointes' : 'Attachments'}</div>
+            {list.length===0 && <div className="text-sm text-muted-foreground">{t.noEvidence}</div>}
+            <div className="space-y-2">
+              {list.map(it => (
+                <div key={it.id} className="flex items-center justify-between border rounded-md p-2">
+                  <div className="truncate">
+                    <div className="font-medium truncate">{it.filename}</div>
+                    <div className="text-xs text-muted-foreground">{new Date(it.addedAt).toLocaleString()} • {Math.round(it.size/1024)} KB{it.note?` • note`:''}</div>
+                    {it.note && <div className="text-sm mt-1 whitespace-pre-wrap">{it.note}</div>}
+                  </div>
+                  <Button variant="ghost" size="sm" onClick={()=>remove(it.id)}>{lang==='fr'? 'Supprimer' : 'Delete'}</Button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function PrintExecutive({ rows, lang, sessionName, baseline }: { rows: ControlItem[]; lang: LangKey; sessionName: string; baseline?: ControlItem[] | null }){
+  // Aggregations
+  const sum = (a:number,b:number)=>a+b;
+  const agg = React.useMemo(()=>{
+    const byDomain: Record<string, {points:number; max:number; count:number}> = {};
+    for(const r of rows){ const x = byDomain[r.domain] || (byDomain[r.domain] = {points:0,max:0,count:0}); x.points += r.impact * r.realized; x.max += r.impact; x.count++; }
+    const arr = Object.entries(byDomain).map(([domain,v])=>({ domain, points:v.points, max:v.max, count:v.count, percent: v.max? Number(((v.points/v.max)*100).toFixed(2)) : 0 }));
+    const global = arr.map(d=>d.points).reduce(sum,0);
+    const globalMax = arr.map(d=>d.max).reduce(sum,0);
+    const globalPercent = globalMax? Number(((global/globalMax)*100).toFixed(2)) : 0;
+    return {arr, globalPercent};
+  }, [rows]);
+
+  const baseMap = React.useMemo(()=>{
+    if(!baseline || !baseline.length) return null;
+    const m: Record<string, {points:number; max:number}> = {};
+    for(const r of baseline){ const x = m[r.domain] || (m[r.domain] = {points:0,max:0}); x.points += r.impact * r.realized; x.max += r.impact; }
+    const pct: Record<string, number> = {};
+    Object.entries(m).forEach(([d,v])=>{ pct[d] = v.max? Number(((v.points/v.max)*100).toFixed(2)) : 0; });
+    return pct;
+  }, [baseline]);
+
+  const level = maturityLabel(agg.globalPercent, lang);
+  const t = I18N[lang];
+
+  const gaps = React.useMemo(()=> rows.filter(r=>r.realized===0).sort((a,b)=> b.impact - a.impact), [rows]);
+
+  return (
+    <div className="print-only">
+      {/* Cover page */}
+      <section className="page p-10">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold">{lang==='fr'? 'Rapport d\'audit securite' : 'Security Audit Report'}</h1>
+            <p className="text-sm text-muted-foreground">{sessionName} • {new Date().toLocaleDateString()}</p>
+          </div>
+          <div className="text-right">
+            <div className="text-xs">{lang==='fr'? 'Genere automatiquement' : 'Auto-generated'}</div>
+            <div className="text-xs">{lang==='fr'? 'Plateforme GRC/SSI' : 'GRC/Sec Platform'}</div>
+          </div>
+        </div>
+        <div className="mt-8 grid grid-cols-3 gap-4">
+          <div className="border rounded-md p-4">
+            <div className="text-xs text-muted-foreground">{t.globalScore}</div>
+            <div className="text-4xl font-bold">{agg.globalPercent}%</div>
+            <div className="text-sm">{t.level}: {level}</div>
+          </div>
+          <div className="border rounded-md p-4">
+            <div className="text-xs text-muted-foreground">{lang==='fr'? 'Nombre de controles' : 'Controls count'}</div>
+            <div className="text-4xl font-bold">{rows.length}</div>
+            <div className="text-sm">{lang==='fr'? 'Evalue(s) dans la session' : 'assessed in session'}</div>
+          </div>
+          <div className="border rounded-md p-4">
+            <div className="text-xs text-muted-foreground">{lang==='fr'? 'Ecarts (non realises)' : 'Gaps (not done)'}</div>
+            <div className="text-4xl font-bold">{gaps.length}</div>
+            <div className="text-sm">{lang==='fr'? 'A prioriser selon impact' : 'Prioritize by impact'}</div>
+          </div>
+        </div>
+        <p className="mt-6 text-sm">{significationText(agg.globalPercent, lang)}</p>
+      </section>
+
+      {/* Domain breakdown */}
+      <section className="page p-10">
+        <h2 className="text-xl font-semibold mb-3">{t.byDomain}</h2>
+        <table className="w-full text-sm border">
+          <thead className="bg-muted/50">
+            <tr>
+              <th className="p-2 text-left">{t.domain}</th>
+              <th className="p-2 text-right">%</th>
+              {baseMap && <th className="p-2 text-right">Δ</th>}
+              <th className="p-2 text-right">{t.impact}</th>
+              <th className="p-2 text-right">{t.realized}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {[...agg.arr].sort((a,b)=> a.domain.localeCompare(b.domain)).map(d=>{
+              const base = baseMap? (baseMap[d.domain] ?? null) : null;
+              const delta = base!==null && base!==undefined ? Number((d.percent - base).toFixed(2)) : null;
+              return (
+                <tr key={d.domain} className="border-t">
+                  <td className="p-2">{d.domain}</td>
+                  <td className="p-2 text-right font-medium">{d.percent}%</td>
+                  {baseMap && <td className="p-2 text-right">{delta!==null? (delta>0?`+${delta}%`:`${delta}%`) : '-'}</td>}
+                  <td className="p-2 text-right">{d.max}</td>
+                  <td className="p-2 text-right">{d.points}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </section>
+
+      {/* Gaps */}
+      <section className="page p-10">
+        <h2 className="text-xl font-semibold mb-3">{lang==='fr'? 'Liste des ecarts (0)' : 'List of gaps (0)'}</h2>
+        <table className="w-full text-sm border">
+          <thead className="bg-muted/50">
+            <tr>
+              <th className="p-2 text-left">{t.ref}</th>
+              <th className="p-2 text-left">{t.domain}</th>
+              <th className="p-2 text-left">{t.impact}</th>
+              <th className="p-2 text-left">{t.controlPoint}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {gaps.map(g => (
+              <tr key={g.id} className="border-t">
+                <td className="p-2">{g.ref}</td>
+                <td className="p-2">{g.domain}</td>
+                <td className="p-2">{g.impact}</td>
+                <td className="p-2">{g.description}</td>
+              </tr>
+            ))}
+            {gaps.length===0 && (
+              <tr><td colSpan={4} className="p-4 text-center text-muted-foreground">{lang==='fr'? 'Aucun ecart' : 'No gaps'}</td></tr>
+            )}
+          </tbody>
+        </table>
+      </section>
+    </div>
+  );
+}
+
+export default function App() {
+  const [theme, setTheme] = useState<"light" | "dark">((loadSettings().theme as any) || "light");
+  const [lang, setLang] = useState<LangKey>((loadSettings().lang as any) || "fr");
+  const [tab, setTab] = useState("listing");
+
+  // Sessions
+  const [sessions, setSessions] = useState<Session[]>(()=>loadSessions());
+  const [activeSessionId, setActiveSessionId] = useState<string>(()=>loadActiveSessionId() || "");
+
+  // Current dataset (rows) and evidences for active session
+  const [rows, setRows] = useState<ControlItem[]>([]);
+  const [evidenceMap, setEvidenceMap] = useState<Record<string, EvidenceItem[]>>({});
+
+  // Undo/redo stacks (per session in memory)
+  const undoStack = useRef<ControlItem[][]>([]);
+  const redoStack = useRef<ControlItem[][]>([]);
+
+  // Init sessions if empty, and hydrate rows/evidences for active
+  useEffect(()=>{
+    let s = loadSessions();
+    let active = loadActiveSessionId();
+    if(s.length === 0){
+      const first: Session = { id: uuid(), name: lang==='fr'? 'Audit 1' : 'Audit 1', createdAt: new Date().toISOString() };
+      s = [first];
+      saveSessions(s);
+      active = first.id; saveActiveSessionId(active);
+      // Seed rows for first session using legacy or fixed or fallback later
+      const legacy = loadLegacyRows();
+      const seed = (legacy && legacy.length? legacy : FIXED_LISTING);
+      if(seed && seed.length){ saveRowsForSession(first.id, seed); }
+    }
+    setSessions(s);
+    setActiveSessionId(active || s[0].id);
+  }, []);
+
+  // Load rows/evidences whenever active session changes
+  useEffect(()=>{
+    if(!activeSessionId) return;
+    const r = loadRowsForSession(activeSessionId) || [];
+    setRows(r);
+    setEvidenceMap(loadEvidencesForSession(activeSessionId));
+  }, [activeSessionId]);
+
+  // Autosave rows/evidences for session
+  useEffect(()=>{ if(!activeSessionId) return; saveRowsForSession(activeSessionId, rows); if(rows && rows.length) toast.success(I18N[lang].autosaved,{duration:900}); }, [rows, lang, activeSessionId]);
+  useEffect(()=>{ if(!activeSessionId) return; saveEvidencesForSession(activeSessionId, evidenceMap); }, [evidenceMap, activeSessionId]);
+
+  // Theme & language persistence
+  useEffect(() => {
+    const s = loadSettings();
+    saveSettings({ ...s, lang, theme });
+    const root = document.documentElement;
+    if (theme === "dark") root.classList.add("dark"); else root.classList.remove("dark");
+    (root as HTMLElement).style.colorScheme = theme;
+  }, [lang, theme]);
+
+  // Undo/redo global shortcuts
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const cmd = e.ctrlKey || e.metaKey;
+      if (cmd && e.key.toLowerCase() === "z" && !e.shiftKey) {
+        e.preventDefault();
+        if (undoStack.current.length) { const prev = undoStack.current.pop()!; redoStack.current.push(rows); setRows(prev); }
+      }
+      if (cmd && e.key.toLowerCase() === "z" && e.shiftKey) {
+        e.preventDefault();
+        if (redoStack.current.length) { const next = redoStack.current.pop()!; undoStack.current.push(rows); setRows(next); }
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [rows]);
+
+  // Command palette (Ctrl/Cmd+K)
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { const cmd = e.ctrlKey || e.metaKey; if (cmd && e.key.toLowerCase() === 'k') { e.preventDefault(); setPaletteOpen(v => !v); } };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  // Self-tests (non-blocking)
+  function runSelfTests() {
+    try {
+      console.assert(maturityLabel(10, "fr") === "Niveau critique", "maturityLabel FR basic");
+      console.assert(maturityLabel(90, "fr") === "Niveau optimise", "maturityLabel FR upper");
+      const sample: ControlItem[] = [
+        { id: "a", ref: "1.1", domain: "D1", impact: 3, description: "", realized: 1 },
+        { id: "b", ref: "1.2", domain: "D1", impact: 1, description: "", realized: 0 },
+      ];
+      const pts = sample.reduce((s, r) => s + r.impact * r.realized, 0);
+      console.assert(pts === 3, "aggregation test");
+      console.assert(significationText(10, 'en').toLowerCase().includes('no structured'), 'signification EN');
+      console.assert(significationText(85, 'fr').toLowerCase().includes('optimise'), 'signification FR');
+      const seeded = seedRowsFrom(sample);
+      console.assert(seeded.every(r=>r.realized===0), 'seed resets realized');
+    } catch (e) {
+      console.warn("Self-tests failed", e);
+    }
+  }
+  runSelfTests();
+
+  // Fallback: if the active session has no rows yet, attempt to fetch preview JSON (sandbox)
+  useEffect(() => {
+    if (!activeSessionId) return;
+    if (rows && rows.length) return;
+    const url = "sandbox:/mnt/data/listing_152_min.json"; // preview-only path
+    fetch(url)
+      .then((r) => (r.ok ? r.text() : Promise.reject(r.status)))
+      .then((text) => {
+        try {
+          const arr = JSON.parse(text);
+          if (Array.isArray(arr) && arr.length > 0) {
+            setRows(arr as ControlItem[]);
+          }
+        } catch {}
+      })
+      .catch(() => {});
+  }, [activeSessionId]);
+
+  // History-aware setter
+  const commit = (next: ControlItem[]) => { undoStack.current.push(rows); redoStack.current = []; setRows(next); };
+  const setRowsWithHistory = (next: ControlItem[] | ((prev: ControlItem[]) => ControlItem[])) => { const actual = typeof next === "function" ? (next as any)(rows) : next; commit(actual); };
+
+  // Sessions API
+  const createSession = () => {
+    const s: Session = { id: uuid(), name: lang==='fr'? `Audit ${sessions.length+1}` : `Audit ${sessions.length+1}`, createdAt: new Date().toISOString() };
+    const next = [s, ...sessions]; setSessions(next); saveSessions(next); saveActiveSessionId(s.id); setActiveSessionId(s.id);
+    // initialize rows = copy of FIXED_LISTING with realized=0, or copy of current rows?
+    const base = rows.length? rows.map(r=>({ ...r })) : (FIXED_LISTING.length? FIXED_LISTING : []);
+    saveRowsForSession(s.id, base);
+    setRows(base);
+    setEvidenceMap({});
+    toast.success(lang==='fr'? 'Nouvelle session creee' : 'New session created');
+  };
+
+  const duplicateSession = () => {
+    if(!activeSessionId){ createSession(); return; }
+    const cur = sessions.find(s=>s.id===activeSessionId);
+    const clone: Session = { id: uuid(), name: (cur?.name || 'Audit') + ' (copy)', createdAt: new Date().toISOString() };
+    const next = [clone, ...sessions]; setSessions(next); saveSessions(next); saveActiveSessionId(clone.id); setActiveSessionId(clone.id);
+    saveRowsForSession(clone.id, rows);
+    saveEvidencesForSession(clone.id, evidenceMap);
+    toast.success(lang==='fr'? 'Session dupliquee' : 'Session duplicated');
+  };
+
+  const performDeleteSession = () => {
+    const idx = sessions.findIndex(s => s.id === activeSessionId);
+    const isLast = sessions.length <= 1;
+    if (isLast) {
+      // Reset to a fresh single session if we delete the last one
+      const fresh: Session = { id: uuid(), name: lang==='fr' ? 'Audit 1' : 'Audit 1', createdAt: new Date().toISOString() };
+      const base = seedRowsFrom(rows);
+      saveSessions([fresh]); setSessions([fresh]);
+      saveActiveSessionId(fresh.id); setActiveSessionId(fresh.id);
+      saveRowsForSession(fresh.id, base); setRows(base);
+      setEvidenceMap({});
+      toast.success(lang==='fr' ? 'Session reinitialisee' : 'Session reset');
+      return;
+    }
+
+    // Normal deletion path
+    const survivors = sessions.filter(s => s.id !== activeSessionId);
+    saveSessions(survivors); setSessions(survivors);
+    try { localStorage.removeItem(rowsKeyForSession(activeSessionId)); localStorage.removeItem(evidKeyForSession(activeSessionId)); } catch {}
+
+    const neighbor = survivors[idx - 1] || survivors[idx] || survivors[0];
+    const newActive = neighbor?.id || '';
+    if (newActive) {
+      saveActiveSessionId(newActive); setActiveSessionId(newActive);
+      const r = loadRowsForSession(newActive) || [];
+      setRows(r);
+      setEvidenceMap(loadEvidencesForSession(newActive));
+    } else {
+      try { localStorage.removeItem(ACTIVE_SESSION_KEY); } catch {}
+      setActiveSessionId(''); setRows([]); setEvidenceMap({});
+    }
+
+    toast.success(lang==='fr' ? 'Session supprimee' : 'Session deleted');
+  };
+
+  const [confirmDelOpen, setConfirmDelOpen] = useState(false);
+  const deleteSession = () => { setConfirmDelOpen(true); };
+
+  // Evidence drawer state
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerControl, setDrawerControl] = useState<ControlItem | null>(null);
+  const openEvidence = (control: ControlItem) => { setDrawerControl(control); setDrawerOpen(true); };
+  const closeEvidence = () => setDrawerOpen(false);
+
+  // Baseline comparison (previous session by createdAt)
+  const compareRows = useMemo(()=>{
+    if(sessions.length < 2) return null;
+    const others = sessions.filter(s=>s.id !== activeSessionId).sort((a,b)=> new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    const prev = others[0];
+    if(!prev) return null;
+    return loadRowsForSession(prev.id);
+  }, [sessions, activeSessionId]);
+
+  const handleExport = React.useCallback(() => {
+    try {
+      const src = document.querySelector('.print-only') as HTMLElement | null;
+      if (!src) { toast.error(lang==='fr'?'Aucun contenu a imprimer':'Nothing to print'); return; }
+      const iframe = document.createElement('iframe');
+      iframe.style.position = 'fixed';
+      iframe.style.right = '0';
+      iframe.style.bottom = '0';
+      iframe.style.width = '0';
+      iframe.style.height = '0';
+      iframe.style.border = '0';
+      document.body.appendChild(iframe);
+      const doc = (iframe.contentDocument || (iframe.contentWindow && iframe.contentWindow.document)) as Document | null;
+      if (!doc) { document.body.removeChild(iframe); toast.error(lang==='fr'?'Export indisponible':'Export unavailable'); return; }
+      const title = (sessions.find(s=>s.id===activeSessionId)?.name) || 'Audit';
+      doc.open();
+      doc.write(`<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><style>${PRINT_BASE_CSS}</style></head><body>${src.innerHTML}</body></html>`);
+      doc.close();
+      setTimeout(() => {
+        try { (iframe.contentWindow as any).focus(); (iframe.contentWindow as any).print(); } catch(_) {}
+        setTimeout(() => { if (iframe.parentNode) iframe.parentNode.removeChild(iframe); }, 1000);
+      }, 80);
+    } catch (e) {
+      console.error(e);
+      toast.error('Export error');
+    }
+  }, [lang, sessions, activeSessionId]);
+
+  const t = I18N[lang];
+  const delDesc = sessions.length <= 1
+    ? (lang==='fr' ? "Ceci reinitialisera l'application avec une session vierge." : "This will reset the app to a fresh session.")
+    : (lang==='fr' ? t.confirmDeleteDesc : t.confirmDeleteDesc);
+
+  return (
+    <div className="min-h-screen bg-background text-foreground">
+      <ThemeStyles/>
+      <div className="screen-only">
+      <Toolbar
+        lang={lang}
+        setLang={setLang}
+        theme={theme}
+        setTheme={setTheme}
+        onUndo={() => { if (undoStack.current.length) { const prev = undoStack.current.pop()!; redoStack.current.push(rows); setRows(prev); } }}
+        onRedo={() => { if (redoStack.current.length) { const next = redoStack.current.pop()!; undoStack.current.push(rows); setRows(next); } }}
+        sessions={sessions}
+        activeSessionId={activeSessionId}
+        onChangeSession={(id)=>{ saveActiveSessionId(id); setActiveSessionId(id); }}
+        onCreateSession={createSession}
+        onDuplicateSession={duplicateSession}
+        onDeleteSession={deleteSession}
+      />
+      <div className="flex">
+        <Sidebar current={tab} onNavigate={setTab} lang={lang} />
+        <div className="flex-1">
+          <PageHeader tab={tab} lang={lang} rows={rows} />
+          <Tabs value={tab} onValueChange={setTab} className="w-full">
+            <TabsContent value="listing">
+              <ListingView
+                rows={rows}
+                setRows={setRowsWithHistory}
+                lang={lang}
+                onOpenEvidence={openEvidence}
+                evidenceCountFor={(id)=> (evidenceMap[id]?.length || 0)}
+              />
+            </TabsContent>
+            <TabsContent value="dashboard">
+              <DashboardView rows={rows} lang={lang} compareWith={compareRows || undefined} onExport={handleExport} />
+            </TabsContent>
+          </Tabs>
+        </div>
+      </div>
+
+      <CommandPalette open={paletteOpen} setOpen={setPaletteOpen} onNavigate={setTab} onToggleTheme={() => setTheme(theme==='dark'?'light':'dark')} domains={Array.from(new Set(rows.map(r=>r.domain))).sort()} />
+      <ScrollTopButton/>
+
+      <EvidenceDrawer
+        open={drawerOpen}
+        onClose={closeEvidence}
+        control={drawerControl}
+        evidenceMap={evidenceMap}
+        setEvidenceMap={(m)=>{ setEvidenceMap(m); }}
+        lang={lang}
+      />
+      </div>
+
+      <ConfirmDialog
+        open={confirmDelOpen}
+        title={t.confirmDeleteTitle}
+        description={delDesc}
+        confirmLabel={t.confirm}
+        cancelLabel={t.cancel}
+        onConfirm={()=>{ setConfirmDelOpen(false); performDeleteSession(); }}
+        onCancel={()=>setConfirmDelOpen(false)}
+      />
+
+      <PrintExecutive rows={rows} lang={lang} sessionName={(sessions.find(s=>s.id===activeSessionId)?.name) || 'Audit'} baseline={compareRows || undefined}/>
+    </div>
+  );
+}

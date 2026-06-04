@@ -1,0 +1,396 @@
+/* GapTrack global visual theme
+   Charge ce fichier APRES index.css pour donner au reste de l'application
+   la meme experience visuelle que la page de connexion. */
+
+:root,
+.dark {
+  color-scheme: dark;
+
+  --background: 222 72% 5%;
+  --foreground: 210 40% 98%;
+
+  --card: 222 49% 10%;
+  --card-foreground: 210 40% 98%;
+
+  --popover: 222 49% 10%;
+  --popover-foreground: 210 40% 98%;
+
+  --primary: 221 92% 60%;
+  --primary-foreground: 210 40% 98%;
+
+  --secondary: 219 42% 15%;
+  --secondary-foreground: 210 40% 98%;
+
+  --muted: 219 34% 17%;
+  --muted-foreground: 218 22% 72%;
+
+  --accent: 221 92% 60%;
+  --accent-foreground: 210 40% 98%;
+
+  --destructive: 348 84% 62%;
+  --destructive-foreground: 210 40% 98%;
+
+  --border: 219 34% 22%;
+  --input: 219 34% 22%;
+  --ring: 221 92% 60%;
+
+  --radius: 0.9rem;
+
+  --gt-bg-0: #050a18;
+  --gt-bg-1: #081126;
+  --gt-bg-2: #07152d;
+  --gt-panel: rgba(13, 24, 48, 0.74);
+  --gt-panel-strong: rgba(18, 32, 62, 0.86);
+  --gt-panel-soft: rgba(255, 255, 255, 0.045);
+  --gt-border: rgba(173, 195, 232, 0.18);
+  --gt-border-strong: rgba(173, 195, 232, 0.32);
+  --gt-text: #f8fbff;
+  --gt-muted: #b9c3d5;
+  --gt-muted-2: #8fa0ba;
+  --gt-blue: #3e7cff;
+  --gt-blue-2: #1e56df;
+  --gt-cyan: #64e8ff;
+  --gt-emerald: #62e7cb;
+  --gt-danger: #e24f65;
+  --gt-warning: #ffd085;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  color: var(--gt-text) !important;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+  background:
+    radial-gradient(circle at 78% 14%, rgba(43, 114, 255, 0.30), transparent 29%),
+    radial-gradient(circle at 17% 88%, rgba(35, 110, 255, 0.22), transparent 31%),
+    linear-gradient(135deg, var(--gt-bg-1) 0%, var(--gt-bg-0) 48%, var(--gt-bg-2) 100%) !important;
+  background-attachment: fixed !important;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.16;
+  background-image:
+    linear-gradient(rgba(255,255,255,.10) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.10) 1px, transparent 1px);
+  background-size: 80px 80px;
+  -webkit-mask-image: linear-gradient(to bottom, transparent, black 17%, black 78%, transparent);
+  mask-image: linear-gradient(to bottom, transparent, black 17%, black 78%, transparent);
+}
+
+* {
+  scrollbar-color: rgba(140, 166, 215, .55) rgba(4, 10, 24, .65);
+}
+
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(4, 10, 24, .65);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(140, 166, 215, .42);
+  border: 3px solid rgba(4, 10, 24, .65);
+  border-radius: 999px;
+}
+
+/* Fond general des pages de l'application */
+.min-h-screen,
+[class*="min-h-screen"],
+[class*="bg-background"],
+.bg-background {
+  background: transparent !important;
+  color: var(--gt-text) !important;
+}
+
+/* Surfaces: cartes, panneaux, popovers, modales, sidebars */
+.bg-card,
+[class*="bg-card"],
+.bg-popover,
+[class*="bg-popover"],
+.bg-muted,
+[class*="bg-muted"],
+.bg-secondary,
+[class*="bg-secondary"],
+[role="dialog"],
+[data-radix-popper-content-wrapper] > *,
+.rounded-xl.border,
+.rounded-2xl.border,
+.rounded-lg.border,
+.rounded-md.border {
+  background:
+    linear-gradient(180deg, rgba(28, 43, 76, .78), rgba(13, 24, 48, .66)),
+    var(--gt-panel) !important;
+  border-color: var(--gt-border) !important;
+  color: var(--gt-text) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.055),
+    0 18px 50px rgba(0,0,0,.20) !important;
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+
+/* Panneaux tres visibles */
+.shadow,
+.shadow-sm,
+.shadow-md,
+.shadow-lg,
+.shadow-xl,
+.shadow-2xl {
+  box-shadow:
+    0 24px 70px rgba(0,0,0,.28),
+    inset 0 1px 0 rgba(255,255,255,.055) !important;
+}
+
+.border,
+[class*="border-"] {
+  border-color: var(--gt-border) !important;
+}
+
+/* Typographie */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  color: #fff !important;
+  letter-spacing: -0.025em;
+}
+
+.text-muted-foreground,
+[class*="text-muted-foreground"],
+.text-slate-400,
+.text-slate-500,
+.text-gray-400,
+.text-gray-500 {
+  color: var(--gt-muted-2) !important;
+}
+
+.text-foreground,
+[class*="text-foreground"],
+.text-card-foreground,
+[class*="text-card-foreground"] {
+  color: var(--gt-text) !important;
+}
+
+/* Inputs, select, textarea */
+input:not([type="checkbox"]):not([type="radio"]),
+textarea,
+select,
+[role="combobox"] {
+  color: var(--gt-text) !important;
+  background: rgba(5, 12, 28, .44) !important;
+  border-color: rgba(158, 178, 215, .26) !important;
+  border-radius: 10px !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.035) !important;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: rgba(185, 195, 213, .62) !important;
+}
+
+input:focus,
+textarea:focus,
+select:focus,
+[role="combobox"]:focus,
+[role="combobox"][data-state="open"] {
+  border-color: var(--gt-blue) !important;
+  box-shadow: 0 0 0 3px rgba(63, 117, 255, .15) !important;
+  outline: none !important;
+}
+
+select option {
+  color: #0f172a;
+  background: #fff;
+}
+
+/* Boutons */
+button,
+[role="button"] {
+  border-radius: 10px;
+}
+
+.bg-primary,
+button[class*="bg-primary"] {
+  color: #fff !important;
+  background: linear-gradient(180deg, var(--gt-blue), var(--gt-blue-2)) !important;
+  border-color: rgba(120, 160, 255, .36) !important;
+  box-shadow:
+    0 15px 35px rgba(35, 94, 255, .28),
+    inset 0 1px 0 rgba(255,255,255,.24) !important;
+}
+
+button:hover,
+[role="button"]:hover {
+  filter: brightness(1.05);
+}
+
+button.border,
+button[class*="border"],
+[role="button"].border,
+[role="button"][class*="border"] {
+  color: var(--gt-text) !important;
+  background: rgba(255,255,255,.035) !important;
+  border-color: rgba(174, 194, 229, .32) !important;
+}
+
+/* Navigation / sidebar */
+aside,
+nav,
+header {
+  border-color: var(--gt-border) !important;
+}
+
+aside[class*="border"],
+nav[class*="border"],
+header[class*="border"] {
+  background: rgba(5, 12, 27, .58) !important;
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+
+/* Etats actifs dans le menu */
+.bg-blue-500,
+.bg-blue-600,
+.bg-sky-500,
+.bg-sky-600,
+[class*="bg-blue-500"],
+[class*="bg-blue-600"],
+[class*="bg-sky-500"],
+[class*="bg-sky-600"] {
+  background: linear-gradient(90deg, #235de8, #3e7cff) !important;
+  color: #fff !important;
+  box-shadow: 0 12px 30px rgba(35, 94, 255, .28) !important;
+}
+
+/* Badges */
+.rounded-full.border,
+[class*="rounded-full"][class*="border"] {
+  background: rgba(255,255,255,.045) !important;
+  border-color: rgba(174, 194, 229, .22) !important;
+  color: var(--gt-muted) !important;
+}
+
+/* Status colors: on garde des couleurs lisibles mais dans le style glass */
+[class*="emerald"],
+.text-emerald-300,
+.text-emerald-400,
+.text-emerald-500,
+.text-emerald-600,
+.text-emerald-700 {
+  color: var(--gt-emerald) !important;
+}
+
+[class*="rose"],
+.text-rose-300,
+.text-rose-400,
+.text-rose-500,
+.text-rose-600,
+.text-rose-700 {
+  color: #ff8ba0 !important;
+}
+
+[class*="amber"],
+.text-amber-300,
+.text-amber-400,
+.text-amber-500,
+.text-amber-600,
+.text-amber-700 {
+  color: var(--gt-warning) !important;
+}
+
+/* Tables / listing */
+table {
+  border-collapse: separate !important;
+  border-spacing: 0 !important;
+  color: var(--gt-text) !important;
+}
+
+thead,
+thead tr,
+th {
+  background: rgba(8, 18, 40, .74) !important;
+  color: #dce6f8 !important;
+  border-color: rgba(174, 194, 229, .16) !important;
+}
+
+tbody tr {
+  background: rgba(12, 24, 49, .30) !important;
+  border-color: rgba(174, 194, 229, .10) !important;
+  transition: background .16s ease, box-shadow .16s ease;
+}
+
+tbody tr:hover {
+  background: rgba(35, 83, 170, .20) !important;
+}
+
+td,
+th {
+  border-color: rgba(174, 194, 229, .10) !important;
+}
+
+/* Progress bars */
+[role="progressbar"],
+[class*="progress"] {
+  background: rgba(255,255,255,.08) !important;
+}
+
+[role="progressbar"] > *,
+[class*="progress"] > * {
+  background: linear-gradient(90deg, var(--gt-blue), var(--gt-cyan)) !important;
+}
+
+/* Graphiques Recharts */
+.recharts-wrapper text {
+  fill: var(--gt-muted) !important;
+}
+
+.recharts-cartesian-grid line,
+.recharts-polar-grid-angle line,
+.recharts-polar-grid-concentric path {
+  stroke: rgba(174, 194, 229, .13) !important;
+}
+
+.recharts-tooltip-wrapper,
+.recharts-default-tooltip {
+  color: var(--gt-text) !important;
+  background: rgba(10, 20, 42, .94) !important;
+  border: 1px solid var(--gt-border-strong) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 22px 60px rgba(0,0,0,.34) !important;
+}
+
+/* Dialogues / overlays */
+[role="dialog"] {
+  border-radius: 18px !important;
+  border: 1px solid var(--gt-border-strong) !important;
+}
+
+/* Liens */
+a {
+  color: #72a5ff;
+}
+
+a:hover {
+  color: #9ec0ff;
+}
+
+/* Selection */
+::selection {
+  background: rgba(62, 124, 255, .45);
+  color: #fff;
+}

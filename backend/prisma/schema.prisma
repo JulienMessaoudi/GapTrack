@@ -1,0 +1,109 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+enum Role {
+  OWNER
+  AUDITOR
+  VIEWER
+}
+
+enum AuditShareRole {
+  AUDITOR
+  VIEWER
+}
+
+enum AuditEventType {
+  CREATED
+  STATE_UPDATED
+  RENAMED
+  SHARE_ADDED
+  SHARE_REMOVED
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+
+  memberships Membership[]
+  events      AuditEvent[] @relation("AuditEventActor")
+
+  auditSharesReceived AuditShare[] @relation("AuditShareRecipient")
+  auditSharesCreated  AuditShare[] @relation("AuditShareCreator")
+}
+
+model Organization {
+  id          String       @id @default(cuid())
+  name        String
+  createdAt   DateTime     @default(now())
+
+  memberships Membership[]
+  audits      Audit[]
+}
+
+model Membership {
+  id        String        @id @default(cuid())
+  role      Role          @default(OWNER)
+  userId    String
+  orgId     String
+  createdAt DateTime      @default(now())
+
+  user      User          @relation(fields: [userId], references: [id])
+  org       Organization  @relation(fields: [orgId], references: [id])
+
+  @@unique([userId, orgId])
+}
+
+model Audit {
+  id              String       @id @default(cuid())
+  orgId           String
+  name            String
+  state           Json?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  updatedByUserId String?
+
+  org             Organization @relation(fields: [orgId], references: [id])
+  updatedBy       User?        @relation(fields: [updatedByUserId], references: [id])
+
+  shares          AuditShare[]
+  events          AuditEvent[]
+
+  @@index([orgId])
+}
+
+model AuditShare {
+  id              String         @id @default(cuid())
+  auditId         String
+  userId          String
+  role            AuditShareRole @default(VIEWER)
+  createdAt       DateTime       @default(now())
+  createdByUserId String?
+
+  audit     Audit @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  user      User  @relation("AuditShareRecipient", fields: [userId], references: [id], onDelete: Cascade)
+  createdBy User? @relation("AuditShareCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([auditId, userId])
+  @@index([userId])
+}
+
+model AuditEvent {
+  id          String         @id @default(cuid())
+  auditId     String
+  type        AuditEventType
+  createdAt   DateTime       @default(now())
+  actorUserId String
+  meta        Json?
+
+  actor       User           @relation("AuditEventActor", fields: [actorUserId], references: [id])
+  audit       Audit          @relation(fields: [auditId], references: [id], onDelete: Cascade)
+
+  @@index([auditId, createdAt])
+}

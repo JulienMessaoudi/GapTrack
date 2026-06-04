@@ -1,0 +1,1218 @@
+[
+  {
+    "id": "c_1_1",
+    "ref": "1.1",
+    "domain": "Facteurs clés de succès",
+    "impact": 3,
+    "description": "Une politique de sécurité est définie et correspond à l'activité de l'Organisation",
+    "realized": 0
+  },
+  {
+    "id": "c_1_2",
+    "ref": "1.2",
+    "domain": "Facteurs clés de succès",
+    "impact": 2,
+    "description": "Une démarche de mise en oeuvre de la gestion de la sécurité est adoptée et compatible avec la culture de l'Organisation",
+    "realized": 0
+  },
+  {
+    "id": "c_1_3",
+    "ref": "1.3",
+    "domain": "Facteurs clés de succès",
+    "impact": 3,
+    "description": "La direction assure un soutien total et un engagement visible",
+    "realized": 0
+  },
+  {
+    "id": "c_1_4",
+    "ref": "1.4",
+    "domain": "Facteurs clés de succès",
+    "impact": 2,
+    "description": "Les exigences de sécurité et les risques sont compris et évalués",
+    "realized": 0
+  },
+  {
+    "id": "c_1_5",
+    "ref": "1.5",
+    "domain": "Facteurs clés de succès",
+    "impact": 3,
+    "description": "L’ensemble des responsables et des employés sont sensibilisés et informés",
+    "realized": 0
+  },
+  {
+    "id": "c_1_6",
+    "ref": "1.6",
+    "domain": "Facteurs clés de succès",
+    "impact": 1,
+    "description": "Les lignes directrices de la politique de sécurité et des normes de sécurité de l'information sont distribuées à tous les employés et à tous les fournisseurs",
+    "realized": 0
+  },
+  {
+    "id": "c_1_7",
+    "ref": "1.7",
+    "domain": "Facteurs clés de succès",
+    "impact": 2,
+    "description": "Les acteurs de la sécurité sont formés de manière appropriée",
+    "realized": 0
+  },
+  {
+    "id": "c_1_8",
+    "ref": "1.8",
+    "domain": "Facteurs clés de succès",
+    "impact": 1,
+    "description": "Un système de mesure complet est mis en place afin d'évaluer l'efficacité de la gestion de la sécurité de l'information et pour collecter les suggestions d'amélioration",
+    "realized": 0
+  },
+  {
+    "id": "c_2_1",
+    "ref": "2.1",
+    "domain": "Politique de sécurité",
+    "impact": 2,
+    "description": "Il existe une politique de sécurité formalisée avec une implication de la direction générale et une définition claire des responsabilités",
+    "realized": 0
+  },
+  {
+    "id": "c_2_2",
+    "ref": "2.2",
+    "domain": "Politique de sécurité",
+    "impact": 1,
+    "description": "La communication se fait à tous les utilisateurs sous une forme pertinente, accessible et compréhensible au lecteur",
+    "realized": 0
+  },
+  {
+    "id": "c_2_4",
+    "ref": "2.4",
+    "domain": "Politique de sécurité",
+    "impact": 2,
+    "description": "La démarche de sécurité inclut la totalité de l’informatique et non les seuls réseaux, serveurs et applications. Les imprimantes et téléphones sous IP, l’informatique technique et industrielle, l’informatique de gestion technique des bâtiments, celle de gestion des accès et temps de travail, etc. bénéficient sans exception ni zone d’ombre du dispositif de sécurité",
+    "realized": 0
+  },
+  {
+    "id": "c_2_31",
+    "ref": "2.31",
+    "domain": "Politique de sécurité",
+    "impact": 2,
+    "description": "Une revue régulière de la politique est réalisée afin de vérifier son adéquation avec les évolutions des activités de l'organisation et donc des risques",
+    "realized": 0
+  },
+  {
+    "id": "c_2_32",
+    "ref": "2.32",
+    "domain": "Politique de sécurité",
+    "impact": 1,
+    "description": "Une revue régulière de la politique est réalisée afin de vérifier son adéquation avec les changements technologiques",
+    "realized": 0
+  },
+  {
+    "id": "c_2_33",
+    "ref": "2.33",
+    "domain": "Politique de sécurité",
+    "impact": 3,
+    "description": "Une revue régulière de la politique est réalisée afin de vérifier son adéquation avec l'historique des incidents",
+    "realized": 0
+  },
+  {
+    "id": "c_3_1",
+    "ref": "3.1",
+    "domain": "Organisation de la sécurité",
+    "impact": 2,
+    "description": "Il existe une structure dédiée à la gestion de la sécurité de l'information : un comité sécurité, un responsable de la sécurité du système d'information (RSSI) et des correspondants sécurité dans les unités",
+    "realized": 0
+  },
+  {
+    "id": "c_3_2",
+    "ref": "3.2",
+    "domain": "Organisation de la sécurité",
+    "impact": 3,
+    "description": "Il y a une attribution claire des responsabilités",
+    "realized": 0
+  },
+  {
+    "id": "c_3_3",
+    "ref": "3.3",
+    "domain": "Organisation de la sécurité",
+    "impact": 1,
+    "description": "Un propriétaire est désigné, il est responsable de la mise en oeuvre et du suivi des évolutions à apporter",
+    "realized": 0
+  },
+  {
+    "id": "c_3_4",
+    "ref": "3.4",
+    "domain": "Organisation de la sécurité",
+    "impact": 2,
+    "description": "Il existe des procédures d'autorisation de nouveaux matériels ou logiciels",
+    "realized": 0
+  },
+  {
+    "id": "c_3_8",
+    "ref": "3.8",
+    "domain": "Organisation de la sécurité",
+    "impact": 2,
+    "description": "Il existe une revue régulière de la sécurité des audits aussi bien internes qu'externes",
+    "realized": 0
+  },
+  {
+    "id": "c_3_51",
+    "ref": "3.51",
+    "domain": "Organisation de la sécurité",
+    "impact": 3,
+    "description": "les accès par des tiers aux infrastructures de traitement de l'information sont contrôlés",
+    "realized": 0
+  },
+  {
+    "id": "c_3_52",
+    "ref": "3.52",
+    "domain": "Organisation de la sécurité",
+    "impact": 1,
+    "description": "une analyse des risques a été menée",
+    "realized": 0
+  },
+  {
+    "id": "c_3_53",
+    "ref": "3.53",
+    "domain": "Organisation de la sécurité",
+    "impact": 2,
+    "description": "Des mesures de protection de l'information ont été établies et sont acceptées contractuellement par le tiers : clause de confidentialité, transfert de propriété, responsabilités, règles d'accès physique et logique, restitution ou destruction de l'information confiée, remplacement de collaborateur....",
+    "realized": 0
+  },
+  {
+    "id": "c_3_61",
+    "ref": "3.61",
+    "domain": "Organisation de la sécurité",
+    "impact": 1,
+    "description": "En ce qui concerne les modalités de protection de l'information confiée à des sous-traitants, il faut vérifier la prise en compte des exigences de sécurité dans les conditions contractuelles : mesures prises pour sécuriser les données pendant l'échange et pendant la conservation par le sous-traitant, modalité de restitution ou de destruction de l'information confiée, possibilité pour le sous-traitant de faire appel à de la sous-traitance, plan de continuité, clause d'audit",
+    "realized": 0
+  },
+  {
+    "id": "c_3_62",
+    "ref": "3.62",
+    "domain": "Organisation de la sécurité",
+    "impact": 3,
+    "description": "En ce qui concerne les modalités de protection de l'information confiée à des sous-traitants, il faut vérifier le respect des lois pour les données personnelles et la propriété intellectuelle",
+    "realized": 0
+  },
+  {
+    "id": "c_3_71",
+    "ref": "3.71",
+    "domain": "Organisation de la sécurité",
+    "impact": 2,
+    "description": "Il existe des modalités de signalement rapide des incidents de sécurité",
+    "realized": 0
+  },
+  {
+    "id": "c_3_72",
+    "ref": "3.72",
+    "domain": "Organisation de la sécurité",
+    "impact": 3,
+    "description": "Il existe des modalités de réaction aux signalements des failles de sécurité",
+    "realized": 0
+  },
+  {
+    "id": "c_3_73",
+    "ref": "3.73",
+    "domain": "Organisation de la sécurité",
+    "impact": 2,
+    "description": "Il existe des modalités de réaction aux signalements du fonctionnement défectueux de logiciels",
+    "realized": 0
+  },
+  {
+    "id": "c_3_74",
+    "ref": "3.74",
+    "domain": "Organisation de la sécurité",
+    "impact": 3,
+    "description": "Il existe des modalités de capitalisation sur la résolution d'incidents",
+    "realized": 0
+  },
+  {
+    "id": "c_3_75",
+    "ref": "3.75",
+    "domain": "Organisation de la sécurité",
+    "impact": 1,
+    "description": "Il existe des processus disciplinaires",
+    "realized": 0
+  },
+  {
+    "id": "c_4_1",
+    "ref": "4.1",
+    "domain": "Classification et contrôle des actifs",
+    "impact": 1,
+    "description": "Les actifs sont inventoriés et hiérarchisés par valeur pour l'organisation",
+    "realized": 0
+  },
+  {
+    "id": "c_4_2",
+    "ref": "4.2",
+    "domain": "Classification et contrôle des actifs",
+    "impact": 2,
+    "description": "Pour tout actif important, un propriétaire est désigné et informé de ses responsabilités",
+    "realized": 0
+  },
+  {
+    "id": "c_4_3",
+    "ref": "4.3",
+    "domain": "Classification et contrôle des actifs",
+    "impact": 2,
+    "description": "Il existe un système de classification qui définit un ensemble approprié de niveaux de protection",
+    "realized": 0
+  },
+  {
+    "id": "c_4_4",
+    "ref": "4.4",
+    "domain": "Classification et contrôle des actifs",
+    "impact": 1,
+    "description": "Chaque actif a fait l'objet d'une étude visant à déterminer son niveau de classification",
+    "realized": 0
+  },
+  {
+    "id": "c_5_2",
+    "ref": "5.2",
+    "domain": "Sécurité du personnel",
+    "impact": 2,
+    "description": "Les utilisateurs sont formés",
+    "realized": 0
+  },
+  {
+    "id": "c_5_11",
+    "ref": "5.11",
+    "domain": "Sécurité du personnel",
+    "impact": 3,
+    "description": "La sécurité est incluse dans les responsabilités des postes",
+    "realized": 0
+  },
+  {
+    "id": "c_5_12",
+    "ref": "5.12",
+    "domain": "Sécurité du personnel",
+    "impact": 2,
+    "description": "La sélection du personnel et la politique de recrutement sont définies",
+    "realized": 0
+  },
+  {
+    "id": "c_5_13",
+    "ref": "5.13",
+    "domain": "Sécurité du personnel",
+    "impact": 2,
+    "description": "Des accords de confidentialité sont définis",
+    "realized": 0
+  },
+  {
+    "id": "c_6_1",
+    "ref": "6.1",
+    "domain": "Gestion des communications et des opérations",
+    "impact": 3,
+    "description": "La documentation des procédures et les responsabilités opérationnelles existent et prennent en compte la sécurité",
+    "realized": 0
+  },
+  {
+    "id": "c_6_2",
+    "ref": "6.2",
+    "domain": "Gestion des communications et des opérations",
+    "impact": 1,
+    "description": "Les modifications opérationnelles sont contrôlées",
+    "realized": 0
+  },
+  {
+    "id": "c_6_3",
+    "ref": "6.3",
+    "domain": "Gestion des communications et des opérations",
+    "impact": 2,
+    "description": "Des procédures de gestion des incidents sont établies",
+    "realized": 0
+  },
+  {
+    "id": "c_6_4",
+    "ref": "6.4",
+    "domain": "Gestion des communications et des opérations",
+    "impact": 1,
+    "description": "Les fonctions et les infrastructures sont séparées",
+    "realized": 0
+  },
+  {
+    "id": "c_6_5",
+    "ref": "6.5",
+    "domain": "Gestion des communications et des opérations",
+    "impact": 2,
+    "description": "Les études de sécurité ont été réalisées en cas de gestion externes des infrastructures",
+    "realized": 0
+  },
+  {
+    "id": "c_6_6",
+    "ref": "6.6",
+    "domain": "Gestion des communications et des opérations",
+    "impact": 3,
+    "description": "Des mesures de protection contre les infections logiques existent, sont pertinentes et à jour",
+    "realized": 0
+  },
+  {
+    "id": "c_6_71",
+    "ref": "6.71",
+    "domain": "Gestion des communications et des opérations",
+    "impact": 3,
+    "description": "Une réalisation régulière des copies de sauvegarde des données, des applications et des paramètres est réalisée",
+    "realized": 0
+  },
+  {
+    "id": "c_6_72",
+    "ref": "6.72",
+    "domain": "Gestion des communications et des opérations",
+    "impact": 1,
+    "description": "Sauvegarde et archivage sont deux sujets traités distinctement",
+    "realized": 0
+  },
+  {
+    "id": "c_6_73",
+    "ref": "6.73",
+    "domain": "Gestion des communications et des opérations",
+    "impact": 1,
+    "description": "La conservation des données comporte une échéance",
+    "realized": 0
+  },
+  {
+    "id": "c_6_74",
+    "ref": "6.74",
+    "domain": "Gestion des communications et des opérations",
+    "impact": 2,
+    "description": "Plusieurs générations de sauvegardes sont conservées",
+    "realized": 0
+  },
+  {
+    "id": "c_6_75",
+    "ref": "6.75",
+    "domain": "Gestion des communications et des opérations",
+    "impact": 2,
+    "description": "Le stockage des sauvegardes est effectué en lieu sûr",
+    "realized": 0
+  },
+  {
+    "id": "c_6_76",
+    "ref": "6.76",
+    "domain": "Gestion des communications et des opérations",
+    "impact": 1,
+    "description": "Les supports de sauvegarde sont régulièrement testés",
+    "realized": 0
+  },
+  {
+    "id": "c_6_77",
+    "ref": "6.77",
+    "domain": "Gestion des communications et des opérations",
+    "impact": 2,
+    "description": "Les procédures de restauration sont régulièrement éprouvées et testées",
+    "realized": 0
+  },
+  {
+    "id": "c_6_81",
+    "ref": "6.81",
+    "domain": "Gestion des communications et des opérations",
+    "impact": 3,
+    "description": "Tous les supports amovibles sont tenus en lieu sûr",
+    "realized": 0
+  },
+  {
+    "id": "c_6_82",
+    "ref": "6.82",
+    "domain": "Gestion des communications et des opérations",
+    "impact": 2,
+    "description": "Le contenu des supports à réutiliser hors de l'organisation sont effacés de manière sécurisée",
+    "realized": 0
+  },
+  {
+    "id": "c_6_83",
+    "ref": "6.83",
+    "domain": "Gestion des communications et des opérations",
+    "impact": 1,
+    "description": "Il existe une procédure de mise au rebut des supports prévoyant leur destruction",
+    "realized": 0
+  },
+  {
+    "id": "c_6_84",
+    "ref": "6.84",
+    "domain": "Gestion des communications et des opérations",
+    "impact": 2,
+    "description": "Il existe des procédures de manipulation des supports adaptées au niveau de sensibilité de l'information contenue",
+    "realized": 0
+  },
+  {
+    "id": "c_6_91",
+    "ref": "6.91",
+    "domain": "Gestion des communications et des opérations",
+    "impact": 1,
+    "description": "Les échanges d'informations et de logiciels entre les organisations sont régis par des accords, des règles",
+    "realized": 0
+  },
+  {
+    "id": "c_6_92",
+    "ref": "6.92",
+    "domain": "Gestion des communications et des opérations",
+    "impact": 3,
+    "description": "Les courriers électroniques sont entourés de mesures sécurisées (règles d'utilisation, protections anti-menaces, sensibilisation des usagers…)",
+    "realized": 0
+  },
+  {
+    "id": "c_7_11",
+    "ref": "7.11",
+    "domain": "Conformité",
+    "impact": 3,
+    "description": "Les traitements, logiciels et procédures sont conformes aux exigences légales et réglementaires en matière de protection des données personnelles",
+    "realized": 0
+  },
+  {
+    "id": "c_7_12",
+    "ref": "7.12",
+    "domain": "Conformité",
+    "impact": 2,
+    "description": "La propriété intellectuelle est respectée",
+    "realized": 0
+  },
+  {
+    "id": "c_7_13",
+    "ref": "7.13",
+    "domain": "Conformité",
+    "impact": 2,
+    "description": "La conservation de l'information aux exigences légales et réglementaires est respectée",
+    "realized": 0
+  },
+  {
+    "id": "c_7_21",
+    "ref": "7.21",
+    "domain": "Conformité",
+    "impact": 2,
+    "description": "Des audits de sécurité internes et externes ont lieu régulièrement",
+    "realized": 0
+  },
+  {
+    "id": "c_7_22",
+    "ref": "7.22",
+    "domain": "Conformité",
+    "impact": 1,
+    "description": "Réalisation régulière de revues systématiques et de tests empiriques (exemple : test d'intrusion)",
+    "realized": 0
+  },
+  {
+    "id": "c_7_23",
+    "ref": "7.23",
+    "domain": "Conformité",
+    "impact": 1,
+    "description": "La protection des outils d'audit des systèmes est vérifiée régulièrement",
+    "realized": 0
+  },
+  {
+    "id": "c_7_24",
+    "ref": "7.24",
+    "domain": "Conformité",
+    "impact": 1,
+    "description": "Les rapports d'audit sont stockés de manière sécurisée",
+    "realized": 0
+  },
+  {
+    "id": "c_8_1",
+    "ref": "8.1",
+    "domain": "Gestion des identifiants et des mots de passe",
+    "impact": 3,
+    "description": "Un seul utilisateur par identifiant",
+    "realized": 0
+  },
+  {
+    "id": "c_8_2",
+    "ref": "8.2",
+    "domain": "Gestion des identifiants et des mots de passe",
+    "impact": 2,
+    "description": "Les identifiants inutilisés sont révoqués après un certain délai",
+    "realized": 0
+  },
+  {
+    "id": "c_8_31",
+    "ref": "8.31",
+    "domain": "Gestion des identifiants et des mots de passe",
+    "impact": 1,
+    "description": "Les règles de bases sont connues et mises en place de manière systématique",
+    "realized": 0
+  },
+  {
+    "id": "c_8_32",
+    "ref": "8.32",
+    "domain": "Gestion des identifiants et des mots de passe",
+    "impact": 3,
+    "description": "Le titulaire d'un compte est le seul à connaître son mot de passe",
+    "realized": 0
+  },
+  {
+    "id": "c_8_33",
+    "ref": "8.33",
+    "domain": "Gestion des identifiants et des mots de passe",
+    "impact": 2,
+    "description": "Les mots de passe font office d'un changement périodique",
+    "realized": 0
+  },
+  {
+    "id": "c_8_34",
+    "ref": "8.34",
+    "domain": "Gestion des identifiants et des mots de passe",
+    "impact": 2,
+    "description": "Les identifiants et mots de passes sont soumis à des règles de composition",
+    "realized": 0
+  },
+  {
+    "id": "c_8_35",
+    "ref": "8.35",
+    "domain": "Gestion des identifiants et des mots de passe",
+    "impact": 1,
+    "description": "Il existe des procédures en cas d'inactivation ou de perte d'identifiant ou de mot de passe",
+    "realized": 0
+  },
+  {
+    "id": "c_9_11",
+    "ref": "9.11",
+    "domain": "Contrôle des accès",
+    "impact": 1,
+    "description": "Les applications individuelles de l'organisation disposent d'exigences de sécurité",
+    "realized": 0
+  },
+  {
+    "id": "c_9_12",
+    "ref": "9.12",
+    "domain": "Contrôle des accès",
+    "impact": 1,
+    "description": "La politiques de dissémination de l'information et d'autorisation d'accès ainsi que les niveaux de sécurité et la classification de l'information est définie",
+    "realized": 0
+  },
+  {
+    "id": "c_9_13",
+    "ref": "9.13",
+    "domain": "Contrôle des accès",
+    "impact": 2,
+    "description": "Les obligations contractuelles concernant la protection de l'accès aux données sont mises en œuvre et documentées",
+    "realized": 0
+  },
+  {
+    "id": "c_9_14",
+    "ref": "9.14",
+    "domain": "Contrôle des accès",
+    "impact": 2,
+    "description": "Des profils d'accès standard des utilisateurs pour les catégories communes de travail sont définis et documentés",
+    "realized": 0
+  },
+  {
+    "id": "c_9_15",
+    "ref": "9.15",
+    "domain": "Contrôle des accès",
+    "impact": 2,
+    "description": "La distinction des règles obligatoires et des recommandations facultatives est clairement établie et définie",
+    "realized": 0
+  },
+  {
+    "id": "c_9_16",
+    "ref": "9.16",
+    "domain": "Contrôle des accès",
+    "impact": 2,
+    "description": "Les règles sont décrites préférentiellement comme \"tout est interdit sauf\" plutôt que \"tout est permis sauf\"",
+    "realized": 0
+  },
+  {
+    "id": "c_9_17",
+    "ref": "9.17",
+    "domain": "Contrôle des accès",
+    "impact": 3,
+    "description": "Les règles doivent être validées par un responsable (séparation des fonctions)",
+    "realized": 0
+  },
+  {
+    "id": "c_9_21",
+    "ref": "9.21",
+    "domain": "Contrôle des accès",
+    "impact": 3,
+    "description": "Chaque utilisateur est identifié de manière unique",
+    "realized": 0
+  },
+  {
+    "id": "c_9_22",
+    "ref": "9.22",
+    "domain": "Contrôle des accès",
+    "impact": 3,
+    "description": "Des mécanismes de contrôle permettent de s'assurer que l'utilisateur a été autorisé par le propriétaire des informations auxquelles il accède",
+    "realized": 0
+  },
+  {
+    "id": "c_9_23",
+    "ref": "9.23",
+    "domain": "Contrôle des accès",
+    "impact": 2,
+    "description": "La suppression des droits d'accès d'un utilisateur ayant changé de poste ou quitté l'organisation est bien effectuée",
+    "realized": 0
+  },
+  {
+    "id": "c_9_24",
+    "ref": "9.24",
+    "domain": "Contrôle des accès",
+    "impact": 2,
+    "description": "Il existe un contrôle périodique et une suppression des codes d'identification utilisateurs redondants et des comptes qui ne sont plus utilisés",
+    "realized": 0
+  },
+  {
+    "id": "c_9_25",
+    "ref": "9.25",
+    "domain": "Contrôle des accès",
+    "impact": 3,
+    "description": "Les codes d'identification ne sont pas réaffectés",
+    "realized": 0
+  },
+  {
+    "id": "c_9_26",
+    "ref": "9.26",
+    "domain": "Contrôle des accès",
+    "impact": 2,
+    "description": "L'attribution des privilèges aux individus est faite sur la base de leurs \"besoins minimum\" par rapport à la fonction qu'ils remplissent",
+    "realized": 0
+  },
+  {
+    "id": "c_9_27",
+    "ref": "9.27",
+    "domain": "Contrôle des accès",
+    "impact": 1,
+    "description": "Les droits d'accès utilisateur font office d'un contrôle régulier",
+    "realized": 0
+  },
+  {
+    "id": "c_9_31",
+    "ref": "9.31",
+    "domain": "Contrôle des accès",
+    "impact": 3,
+    "description": "Tout compte utilisateur doit être protégé par un mot de passe",
+    "realized": 0
+  },
+  {
+    "id": "c_9_32",
+    "ref": "9.32",
+    "domain": "Contrôle des accès",
+    "impact": 3,
+    "description": "Les utilisateurs sont sensibilisés et engagés à : - ne pas divulguer leur mot de passe - ne pas écrire leur mot de passe de façon trop évidente - ne pas stocker leur mot de passe dans une procédure automatique - changer leur mot de passe dès qu'ils le soupçonnent d'être compromis",
+    "realized": 0
+  },
+  {
+    "id": "c_9_33",
+    "ref": "9.33",
+    "domain": "Contrôle des accès",
+    "impact": 3,
+    "description": "Un mot de passe temporaire est envoyé pour la première utilisation et il est bien changé par l'utilisateur dès la première utilisation",
+    "realized": 0
+  },
+  {
+    "id": "c_9_34",
+    "ref": "9.34",
+    "domain": "Contrôle des accès",
+    "impact": 2,
+    "description": "Les mots de passe temporaires sont transmis aux utilisateurs de manière sûre",
+    "realized": 0
+  },
+  {
+    "id": "c_9_35",
+    "ref": "9.35",
+    "domain": "Contrôle des accès",
+    "impact": 2,
+    "description": "Le système impose un changement régulier du mot de passe",
+    "realized": 0
+  },
+  {
+    "id": "c_9_36",
+    "ref": "9.36",
+    "domain": "Contrôle des accès",
+    "impact": 2,
+    "description": "Le système impose le choix de mots de passe robustes",
+    "realized": 0
+  },
+  {
+    "id": "c_9_37",
+    "ref": "9.37",
+    "domain": "Contrôle des accès",
+    "impact": 1,
+    "description": "Les utilisateurs sont encouragés et disciplinés à se déconnecter",
+    "realized": 0
+  },
+  {
+    "id": "c_9_38",
+    "ref": "9.38",
+    "domain": "Contrôle des accès",
+    "impact": 3,
+    "description": "La déconnexion doit être automatique en cas d'inactivité prolongée",
+    "realized": 0
+  },
+  {
+    "id": "c_9_41",
+    "ref": "9.41",
+    "domain": "Contrôle des accès",
+    "impact": 3,
+    "description": "Les accès réseau passent par une authentification des utilisateurs pour les connexions externes",
+    "realized": 0
+  },
+  {
+    "id": "c_9_42",
+    "ref": "9.42",
+    "domain": "Contrôle des accès",
+    "impact": 2,
+    "description": "Il existe des équipements et ou mécanismes de protection des ports de diagnostic à distance et de télémaintenance",
+    "realized": 0
+  },
+  {
+    "id": "c_9_43",
+    "ref": "9.43",
+    "domain": "Contrôle des accès",
+    "impact": 2,
+    "description": "Un contrôle des flux (firewalls) est effectué sur les réseaux",
+    "realized": 0
+  },
+  {
+    "id": "c_9_44",
+    "ref": "9.44",
+    "domain": "Contrôle des accès",
+    "impact": 3,
+    "description": "Les accès réseau sont cloisonnés",
+    "realized": 0
+  },
+  {
+    "id": "c_9_51",
+    "ref": "9.51",
+    "domain": "Contrôle des accès",
+    "impact": 3,
+    "description": "L'accès au système d'exploitation se fait via identification / authentification des utilisateurs",
+    "realized": 0
+  },
+  {
+    "id": "c_9_52",
+    "ref": "9.52",
+    "domain": "Contrôle des accès",
+    "impact": 2,
+    "description": "Le nombre de tentatives infructueuses d'accès au système d'exploitation est limité",
+    "realized": 0
+  },
+  {
+    "id": "c_9_53",
+    "ref": "9.53",
+    "domain": "Contrôle des accès",
+    "impact": 1,
+    "description": "Les tentatives infructueuses de connexion au système d'exploitation sont enregistrées",
+    "realized": 0
+  },
+  {
+    "id": "c_9_54",
+    "ref": "9.54",
+    "domain": "Contrôle des accès",
+    "impact": 1,
+    "description": "L'accès aux systèmes d'exploitation font office d'une limitation des jours et heures de connexion",
+    "realized": 0
+  },
+  {
+    "id": "c_9_55",
+    "ref": "9.55",
+    "domain": "Contrôle des accès",
+    "impact": 1,
+    "description": "L'accès aux systèmes d'exploitation permet l'affichage de la dernière connexion",
+    "realized": 0
+  },
+  {
+    "id": "c_9_56",
+    "ref": "9.56",
+    "domain": "Contrôle des accès",
+    "impact": 2,
+    "description": "L'accès aux systèmes d'exploitation permet une protection de l'accès aux utilitaires",
+    "realized": 0
+  },
+  {
+    "id": "c_9_61",
+    "ref": "9.61",
+    "domain": "Contrôle des accès",
+    "impact": 2,
+    "description": "L'accès aux applications fait l'objet d'un contrôle permettant la restriction des accès à l'information",
+    "realized": 0
+  },
+  {
+    "id": "c_9_62",
+    "ref": "9.62",
+    "domain": "Contrôle des accès",
+    "impact": 3,
+    "description": "Les systèmes applicatifs critiques sont isolés",
+    "realized": 0
+  },
+  {
+    "id": "c_9_71",
+    "ref": "9.71",
+    "domain": "Contrôle des accès",
+    "impact": 1,
+    "description": "Les connexions aux systèmes et leur utilisation sont consignées et constituent des journaux d'audit indiquant les dates et personnes concernées",
+    "realized": 0
+  },
+  {
+    "id": "c_9_72",
+    "ref": "9.72",
+    "domain": "Contrôle des accès",
+    "impact": 3,
+    "description": "L'utilisation des systèmes à activités sensibles (opérations privilégiées, modification de la sécurité) est surveillée",
+    "realized": 0
+  },
+  {
+    "id": "c_9_73",
+    "ref": "9.73",
+    "domain": "Contrôle des accès",
+    "impact": 3,
+    "description": "Des alertes sur incident (violation, tentatives infructueuses, notification de firewall ou de sdi) sont remontées et enregistrées",
+    "realized": 0
+  },
+  {
+    "id": "c_9_74",
+    "ref": "9.74",
+    "domain": "Contrôle des accès",
+    "impact": 2,
+    "description": "L'utilisation anormale ou atypique des ressources est surveillée",
+    "realized": 0
+  },
+  {
+    "id": "c_9_75",
+    "ref": "9.75",
+    "domain": "Contrôle des accès",
+    "impact": 2,
+    "description": "Les journaux d'évènements et accès aux systèmes et leur utilisation sont auditables",
+    "realized": 0
+  },
+  {
+    "id": "c_9_76",
+    "ref": "9.76",
+    "domain": "Contrôle des accès",
+    "impact": 1,
+    "description": "Une revue régulière des journaux est effectuée",
+    "realized": 0
+  },
+  {
+    "id": "c_9_77",
+    "ref": "9.77",
+    "domain": "Contrôle des accès",
+    "impact": 2,
+    "description": "Les horloges des journaux d'évènements sont synchronisées et assurent l'exactitude des audits (éléments de preuve)",
+    "realized": 0
+  },
+  {
+    "id": "c_9_81",
+    "ref": "9.81",
+    "domain": "Contrôle des accès",
+    "impact": 3,
+    "description": "Un contrôle d'accès aux ordinateurs portables est réalisé",
+    "realized": 0
+  },
+  {
+    "id": "c_9_82",
+    "ref": "9.82",
+    "domain": "Contrôle des accès",
+    "impact": 2,
+    "description": "Une protection des données stockées (chiffrement) est mise en œuvre",
+    "realized": 0
+  },
+  {
+    "id": "c_9_83",
+    "ref": "9.83",
+    "domain": "Contrôle des accès",
+    "impact": 3,
+    "description": "Les ordinateurs portables possèdent une protection contre les virus",
+    "realized": 0
+  },
+  {
+    "id": "c_9_84",
+    "ref": "9.84",
+    "domain": "Contrôle des accès",
+    "impact": 2,
+    "description": "Les données des ordinateurs portables sont sauvegardées",
+    "realized": 0
+  },
+  {
+    "id": "c_9_85",
+    "ref": "9.85",
+    "domain": "Contrôle des accès",
+    "impact": 1,
+    "description": "Une connexion automatique à distance est possible (PMAD)",
+    "realized": 0
+  },
+  {
+    "id": "c_9_86",
+    "ref": "9.86",
+    "domain": "Contrôle des accès",
+    "impact": 3,
+    "description": "Les personnels dotés d'ordinateurs portables sont sensibilisés à la confidentialité du travail dans les lieux publics ou les moyens de transport, la surveillance du matériel contre le vol, ou encore l'espionnage industriel",
+    "realized": 0
+  },
+  {
+    "id": "c_9_91",
+    "ref": "9.91",
+    "domain": "Contrôle des accès",
+    "impact": 1,
+    "description": "Suite à des incidents, les réactions des possesseurs des ordinateurs concernés sont vérifiées (suivi des incidents)",
+    "realized": 0
+  },
+  {
+    "id": "c_9_92",
+    "ref": "9.92",
+    "domain": "Contrôle des accès",
+    "impact": 1,
+    "description": "Des modalités effectives de remontée d'information sur les incidents, les délais, le parcours et le format (de l'information) existent",
+    "realized": 0
+  },
+  {
+    "id": "c_9_93",
+    "ref": "9.93",
+    "domain": "Contrôle des accès",
+    "impact": 2,
+    "description": "Le ou les ordinateurs incidentés sont isolés des autres",
+    "realized": 0
+  },
+  {
+    "id": "c_9_94",
+    "ref": "9.94",
+    "domain": "Contrôle des accès",
+    "impact": 3,
+    "description": "Des mesures de communication sont prises en cas d'alerte",
+    "realized": 0
+  },
+  {
+    "id": "c_9_95",
+    "ref": "9.95",
+    "domain": "Contrôle des accès",
+    "impact": 3,
+    "description": "Des enquêtes et / ou explorations sont menées afin d'identifier les failles système ayant permis l'incident sont réalisées",
+    "realized": 0
+  },
+  {
+    "id": "c_9_96",
+    "ref": "9.96",
+    "domain": "Contrôle des accès",
+    "impact": 2,
+    "description": "A l'issue d'une crise ou de nouvelles consignes, une communication et des rappels sont effectués auprès des utilisateurs, les modalités de cette communication se montrent également efficaces",
+    "realized": 0
+  },
+  {
+    "id": "c_10_11",
+    "ref": "10.11",
+    "domain": "Développement et maintenance des systèmes",
+    "impact": 1,
+    "description": "Une expression et une spécification détaillée des besoins, contrôle interne, piste d'audit, sécurité sont des points identifiés et mis en œuvre lors du développement et de la maintenance des systèmes",
+    "realized": 0
+  },
+  {
+    "id": "c_10_12",
+    "ref": "10.12",
+    "domain": "Développement et maintenance des systèmes",
+    "impact": 3,
+    "description": "Un audit sécuritaire des spécifications est réalisé systématiquement lors des évolutions programmées des systèmes",
+    "realized": 0
+  },
+  {
+    "id": "c_10_13",
+    "ref": "10.13",
+    "domain": "Développement et maintenance des systèmes",
+    "impact": 2,
+    "description": "Une recette des fonctionnalités de contrôle interne est réalisée",
+    "realized": 0
+  },
+  {
+    "id": "c_10_14",
+    "ref": "10.14",
+    "domain": "Développement et maintenance des systèmes",
+    "impact": 2,
+    "description": "La recette des fonctionnalités est auditée, vérifiée",
+    "realized": 0
+  },
+  {
+    "id": "c_10_15",
+    "ref": "10.15",
+    "domain": "Développement et maintenance des systèmes",
+    "impact": 1,
+    "description": "Un audit post mise en place a lieu afin de garantir la bonne mise en œuvre et l'adéquation avec le besoin et les exigences de sécurité",
+    "realized": 0
+  },
+  {
+    "id": "c_10_21",
+    "ref": "10.21",
+    "domain": "Développement et maintenance des systèmes",
+    "impact": 3,
+    "description": "Les systèmes d'application font l'objet d'une validation des données d'entrée : type, limites de valeur, liste de valeurs possibles",
+    "realized": 0
+  },
+  {
+    "id": "c_10_22",
+    "ref": "10.22",
+    "domain": "Développement et maintenance des systèmes",
+    "impact": 1,
+    "description": "Un contrôle des traitements (contrôles de sessions séquentielles, totaux de contrôle) est réalisé lors du développement des systèmes applicatifs",
+    "realized": 0
+  },
+  {
+    "id": "c_10_23",
+    "ref": "10.23",
+    "domain": "Développement et maintenance des systèmes",
+    "impact": 2,
+    "description": "L'exhaustivité des traitements applicatifs est vérifiée",
+    "realized": 0
+  },
+  {
+    "id": "c_10_24",
+    "ref": "10.24",
+    "domain": "Développement et maintenance des systèmes",
+    "impact": 2,
+    "description": "Les données de sortie des applicatifs en développement font l'objet d'une validation (contrôle de plausibilité, rapprochement)",
+    "realized": 0
+  },
+  {
+    "id": "c_10_31",
+    "ref": "10.31",
+    "domain": "Développement et maintenance des systèmes",
+    "impact": 3,
+    "description": "Des tests systématiques avant le passage en production sont réalisés",
+    "realized": 0
+  },
+  {
+    "id": "c_10_32",
+    "ref": "10.32",
+    "domain": "Développement et maintenance des systèmes",
+    "impact": 3,
+    "description": "Le développement est réalisé sur un environnement différent de celui de production",
+    "realized": 0
+  },
+  {
+    "id": "c_10_33",
+    "ref": "10.33",
+    "domain": "Développement et maintenance des systèmes",
+    "impact": 2,
+    "description": "Les utilisateurs participent à la recette",
+    "realized": 0
+  },
+  {
+    "id": "c_10_34",
+    "ref": "10.34",
+    "domain": "Développement et maintenance des systèmes",
+    "impact": 3,
+    "description": "La recette fait l'objet d'une documentation et d'un archivage",
+    "realized": 0
+  },
+  {
+    "id": "c_10_35",
+    "ref": "10.35",
+    "domain": "Développement et maintenance des systèmes",
+    "impact": 3,
+    "description": "Les fonctions de développement et d'exploitation sont séparées",
+    "realized": 0
+  },
+  {
+    "id": "c_10_36",
+    "ref": "10.36",
+    "domain": "Développement et maintenance des systèmes",
+    "impact": 2,
+    "description": "Une procédure de passage en production lors des maintenances correctives urgentes (journalisation des actions) est rédigée",
+    "realized": 0
+  },
+  {
+    "id": "c_10_41",
+    "ref": "10.41",
+    "domain": "Développement et maintenance des systèmes",
+    "impact": 2,
+    "description": "Les logiciels opérationnels sont contrôlés et leurs données ne sont mises à jour uniquement que par bibliothécaire, les applicatifs forment uniquement un code exécutable et journal d'audit des versions est réalisé",
+    "realized": 0
+  },
+  {
+    "id": "c_10_42",
+    "ref": "10.42",
+    "domain": "Développement et maintenance des systèmes",
+    "impact": 3,
+    "description": "Les données d'essai des systèmes sont protégées via une banalisation des données de production et la conservation d'une copie pour rejouer les tests dans les mêmes conditions",
+    "realized": 0
+  },
+  {
+    "id": "c_10_43",
+    "ref": "10.43",
+    "domain": "Développement et maintenance des systèmes",
+    "impact": 3,
+    "description": "L'accès aux bibliothèques de programmes sources est contrôlé, stocké hors de la production, avec un accès réservé aux développeurs autorisés, une gestion des versions et la conservation de l'historique des modifications",
+    "realized": 0
+  },
+  {
+    "id": "c_11_1",
+    "ref": "11.1",
+    "domain": "Cadre législatif et réglementaire Français",
+    "impact": 3,
+    "description": "Les prescriptions légales découlant du RGPD sont connues et respectées",
+    "realized": 0
+  },
+  {
+    "id": "c_11_3",
+    "ref": "11.3",
+    "domain": "Cadre législatif et réglementaire Français",
+    "impact": 2,
+    "description": "Les lois sur l'usage de moyens de chiffrement et de la signature électronique sont connues et respectées",
+    "realized": 0
+  },
+  {
+    "id": "c_11_21",
+    "ref": "11.21",
+    "domain": "Cadre législatif et réglementaire Français",
+    "impact": 1,
+    "description": "Les bannières d'accueil aux routeurs et aux serveurs d'accès distant (de type \"bienvenue…\") sont bannies et remplacées par des messages d'avertissement conformément à la loi anti-fraude informatique",
+    "realized": 0
+  },
+  {
+    "id": "c_11_22",
+    "ref": "11.22",
+    "domain": "Cadre législatif et réglementaire Français",
+    "impact": 2,
+    "description": "Une communication pertinente est réalisée en interne autours de la loi anti-fraude informatique",
+    "realized": 0
+  },
+  {
+    "id": "c_11_41",
+    "ref": "11.41",
+    "domain": "Cadre législatif et réglementaire Français",
+    "impact": 1,
+    "description": "Les procédures annuelles de sauvegarde et d’archivage des données et des programmes des applications concernées sont contrôlées",
+    "realized": 0
+  },
+  {
+    "id": "c_11_42",
+    "ref": "11.42",
+    "domain": "Cadre législatif et réglementaire Français",
+    "impact": 1,
+    "description": "Les documentations études, exploitation, utilisateurs et une procédure de mise à jour de cette documentation existent",
+    "realized": 0
+  },
+  {
+    "id": "c_11_43",
+    "ref": "11.43",
+    "domain": "Cadre législatif et réglementaire Français",
+    "impact": 2,
+    "description": "Les obligations fiscales sont contractuellement prises en compte avec les fournisseurs concernés : sous-traitance d’un développement (documentation), ASP ou infogérance (mise à disposition de l’administration), ....",
+    "realized": 0
+  },
+  {
+    "id": "c_11_51",
+    "ref": "11.51",
+    "domain": "Cadre législatif et réglementaire Français",
+    "impact": 3,
+    "description": "Un inventaire des configurations logicielles existe et est mis régulièrement à jour",
+    "realized": 0
+  },
+  {
+    "id": "c_11_52",
+    "ref": "11.52",
+    "domain": "Cadre législatif et réglementaire Français",
+    "impact": 2,
+    "description": "Une procédure de mise à jour de cet inventaire (une procédure automatique doit être privilégiée) existe et est adaptée",
+    "realized": 0
+  },
+  {
+    "id": "c_11_53",
+    "ref": "11.53",
+    "domain": "Cadre législatif et réglementaire Français",
+    "impact": 3,
+    "description": "Un contrôle sur un échantillon de postes de travail donne un résultat pertinent et correct",
+    "realized": 0
+  },
+  {
+    "id": "c_11_54",
+    "ref": "11.54",
+    "domain": "Cadre législatif et réglementaire Français",
+    "impact": 3,
+    "description": "Sur la base de l’inventaire fourni, les justificatifs de licences sont bien disponibles",
+    "realized": 0
+  }
+]

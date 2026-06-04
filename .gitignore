@@ -1,0 +1,64 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Dependencies
+node_modules/
+backend/node_modules/
+server/node_modules/
+
+# Build
+dist/
+dist-ssr/
+backend/dist/
+server/dist/
+*.local
+
+# Environment files
+.env
+.env.*
+backend/.env
+backend/.env.*
+server/.env
+server/.env.*
+
+# Local databases / dev files
+*.db
+*.sqlite
+*.sqlite3
+dev
+backend/dev
+server/dev
+
+# Prisma generated / local SQLite
+backend/prisma/dev.db
+backend/prisma/dev.db-journal
+server/prisma/dev.db
+server/prisma/dev.db-journal
+
+# Uploads / local evidence files
+uploads/
+backend/uploads/
+server/uploads/
+
+# Cache
+.cache/
+.turbo/
+.vite/
+coverage/
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
