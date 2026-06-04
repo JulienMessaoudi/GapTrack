@@ -4497,7 +4497,7 @@ function ListingView({ rows, setRows, lang, onOpenEvidence, evidenceCountFor, ev
                 </SelectContent>
               </Select>
 
-              <Select value={impactFilter} onValueChange={setImpactFilter}>
+              <Select value={impactFilter} onValueChange={(v) => setImpactFilter(v as typeof impactFilter)}>
                 <SelectTrigger className="w-full sm:w-[160px]">
                   <span className="truncate">
                     {impactFilter === "all" ? (lang === "fr" ? "Tous les impacts" : "All impacts") : `Impact ${impactFilter}`}
@@ -4527,7 +4527,7 @@ function ListingView({ rows, setRows, lang, onOpenEvidence, evidenceCountFor, ev
                 </SelectContent>
               </Select>
 
-              <Select value={evidenceFilter} onValueChange={setEvidenceFilter}>
+              <Select value={evidenceFilter} onValueChange={(v) => setEvidenceFilter(v as typeof evidenceFilter)}>
                 <SelectTrigger className="w-full sm:w-[200px]">
                   <span className="truncate">
                     {evidenceFilter === "all"
@@ -9180,7 +9180,7 @@ export default function App() {
     if (!requireAuditEditor()) return;
     rememberSnapshot();
     const previous = rowsRef.current;
-    const actual = typeof next === "function" ? (next as any)(previous) : next;
+    const actual: ControlItem[] = typeof next === "function" ? (next as (prev: ControlItem[]) => ControlItem[])(previous) : next;
     const prevById = new Map<string, ControlItem>(previous.map((r): [string, ControlItem] => [r.id, r]));
     rowsRef.current = actual;
     setRows(actual);

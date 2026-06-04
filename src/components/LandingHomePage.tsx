@@ -15,7 +15,6 @@ import {
   Settings,
   Shield,
   ShieldCheck,
-  Sparkles,
   Star,
   Target,
   Users,
