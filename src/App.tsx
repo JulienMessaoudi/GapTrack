@@ -8397,7 +8397,10 @@ function PrintExecutive({
 }
 
 export default function App() {
-  const [theme, setTheme] = useState<"light" | "dark">((loadSettings().theme as any) || "light");
+  const [theme, setTheme] = useState<"light" | "dark">(() => {
+    const savedTheme = loadSettings().theme;
+    return savedTheme === "light" || savedTheme === "dark" ? savedTheme : "dark";
+  });
   const [lang, setLang] = useState<LangKey>((loadSettings().lang as any) || "fr");
   const [tab, setTab] = useState("listing");
   const [showAccessPage, setShowAccessPage] = useState(false);
