@@ -224,16 +224,6 @@ Le plan d’action permet de structurer les mesures de remédiation avec :
 - commentaire ;
 - export.
 
-> Des captures d’écran peuvent être ajoutées dans un dossier `/docs` ou `/public/screenshots`.
-
-Exemple recommandé :
-
-```md
-![Tableau de bord GapTrack](./docs/dashboard.png)
-![Listing des contrôles](./docs/controls.png)
-![Plan d’action](./docs/action-plan.png)
-```
-
 ---
 
 ## Stack technique
