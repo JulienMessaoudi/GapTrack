@@ -2547,6 +2547,7 @@ function UserAccessScreen(props: {
   onCreateAdmin: (payload: NewUserPayload) => Promise<void>;
   onLogin: (userId: string, password: string) => Promise<boolean>;
   onSupabaseAuthenticated: (profile: { email: string; name?: string; organization?: string; role?: UserRole }) => void;
+  onBackHome?: () => void;
 }) {
   return <LoginAccessPage {...props} />;
 }
@@ -8399,18 +8400,49 @@ function PrintExecutive({
   );
 }
 
-type AppRoute = "main" | "reset-password";
+type AppRoute = "home" | "about" | "login" | "app" | "reset-password";
+
+function pathForRoute(route: AppRoute): string {
+  if (route === "about") return "/a-propos";
+  if (route === "login") return "/login";
+  if (route === "app") return "/app";
+  if (route === "reset-password") return "/reset-password";
+  return "/";
+}
 
 function getCurrentAppRoute(): AppRoute {
-  if (typeof window !== "undefined" && window.location.pathname.startsWith("/reset-password")) {
-    return "reset-password";
-  }
+  if (typeof window === "undefined") return "home";
 
-  return "main";
+  const path = window.location.pathname;
+
+  if (path.startsWith("/reset-password")) return "reset-password";
+  if (path.startsWith("/a-propos")) return "about";
+  if (path.startsWith("/login")) return "login";
+  if (path.startsWith("/app")) return "app";
+
+  return "home";
 }
 
 function AppRouter() {
   const [route, setRoute] = useState<AppRoute>(() => getCurrentAppRoute());
+
+  const navigate = React.useCallback((nextRoute: AppRoute, replace = false) => {
+    const nextPath = pathForRoute(nextRoute);
+
+    if (typeof window !== "undefined" && window.location.pathname !== nextPath) {
+      if (replace) {
+        window.history.replaceState({}, "", nextPath);
+      } else {
+        window.history.pushState({}, "", nextPath);
+      }
+    }
+
+    setRoute(nextRoute);
+
+    if (typeof window !== "undefined") {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -8428,19 +8460,24 @@ function AppRouter() {
     return <ResetPasswordPage />;
   }
 
-  return <GapTrackApp />;
+  return <GapTrackApp route={route} navigate={navigate} />;
 }
 
 export default AppRouter;
 
-function GapTrackApp() {
+function GapTrackApp({
+  route,
+  navigate,
+}: {
+  route: AppRoute;
+  navigate: (route: AppRoute, replace?: boolean) => void;
+}) {
   const [theme, setTheme] = useState<"light" | "dark">(() => {
     const savedTheme = loadSettings().theme;
     return savedTheme === "light" || savedTheme === "dark" ? savedTheme : "dark";
   });
   const [lang, setLang] = useState<LangKey>((loadSettings().lang as any) || "fr");
   const [tab, setTab] = useState("listing");
-  const [showAccessPage, setShowAccessPage] = useState(false);
   const [listingOpenRequest, setListingOpenRequest] = useState<ListingOpenRequest | null>(null);
 
   const openListingFromDashboard = React.useCallback((domain: string, controlId?: string) => {
@@ -8475,6 +8512,13 @@ function GapTrackApp() {
     () => users.find((u) => u.id === activeUserId && u.active !== false) || null,
     [users, activeUserId]
   );
+
+  useEffect(() => {
+    if (activeUser && route !== "app") {
+      navigate("app", true);
+    }
+  }, [activeUser, route, navigate]);
+
   const canManageUsersFlag = userCanManageUsers(activeUser);
   const canEditAuditFlag = userCanEditAudit(activeUser);
   const canReviewEvidenceFlag = userCanReviewEvidence(activeUser);
@@ -8590,8 +8634,6 @@ function GapTrackApp() {
       setLocalActorFromUser(active);
       return next;
     });
-
-    setShowAccessPage(false);
   }, []);
 
   useEffect(() => {
@@ -9580,26 +9622,38 @@ function GapTrackApp() {
     : (lang==='fr' ? t.confirmDeleteDesc : t.confirmDeleteDesc);
 
   if (!activeUser) {
-    if (!showAccessPage) {
+    if (route === "login" || route === "app") {
       return (
         <MotionConfig transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }} reducedMotion="user">
-          <LandingHomePage onAccess={() => setShowAccessPage(true)} />
+          <UserAccessScreen
+            mode={users.length === 0 ? "setup" : "login"}
+            lang={lang}
+            setLang={setLang}
+            theme={theme}
+            setTheme={setTheme}
+            users={users}
+            onCreateAdmin={createAdminUser}
+            onLogin={async (userId, password) => {
+              const ok = await loginUser(userId, password);
+              if (ok) navigate("app", true);
+              return ok;
+            }}
+            onSupabaseAuthenticated={(profile) => {
+              syncSupabaseAuthenticatedUser(profile);
+              navigate("app", true);
+            }}
+            onBackHome={() => navigate("home")}
+          />
         </MotionConfig>
       );
     }
 
     return (
       <MotionConfig transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }} reducedMotion="user">
-        <UserAccessScreen
-          mode={users.length === 0 ? "setup" : "login"}
-          lang={lang}
-          setLang={setLang}
-          theme={theme}
-          setTheme={setTheme}
-          users={users}
-          onCreateAdmin={createAdminUser}
-          onLogin={loginUser}
-          onSupabaseAuthenticated={syncSupabaseAuthenticatedUser}
+        <LandingHomePage
+          initialPage={route === "about" ? "apropos" : "plateforme"}
+          onAccess={() => navigate("login")}
+          onNavigate={(page) => navigate(page === "apropos" ? "about" : "home")}
         />
       </MotionConfig>
     );
@@ -9632,7 +9686,10 @@ function GapTrackApp() {
         canManageAudits={canManageAuditsFlag}
         canDeleteAudits={canDeleteAuditsFlag}
         onOpenUsers={() => setUsersDialogOpen(true)}
-        onLogout={logoutUser}
+        onLogout={() => {
+          logoutUser();
+          navigate("home", true);
+        }}
       />
       <div className="flex">
         <Sidebar current={tab} onNavigate={setTab} lang={lang} />

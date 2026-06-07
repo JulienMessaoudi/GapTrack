@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   ArrowRight,
   BarChart3,
@@ -23,11 +23,25 @@ import "./LandingHomePage.css";
 
 type LandingPageView = "plateforme" | "apropos";
 
-export function LandingHomePage({ onAccess }: { onAccess: () => void }) {
-  const [page, setPage] = useState<LandingPageView>("plateforme");
+export function LandingHomePage({
+  onAccess,
+  initialPage = "plateforme",
+  onNavigate,
+}: {
+  onAccess: () => void;
+  initialPage?: LandingPageView;
+  onNavigate?: (page: LandingPageView) => void;
+}) {
+  const [page, setPage] = useState<LandingPageView>(initialPage);
+
+  useEffect(() => {
+    setPage(initialPage);
+  }, [initialPage]);
 
   const openPage = (next: LandingPageView) => {
     setPage(next);
+    onNavigate?.(next);
+
     window.setTimeout(() => {
       document.getElementById("top")?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 0);
