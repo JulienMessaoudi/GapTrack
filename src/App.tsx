@@ -1674,6 +1674,7 @@ function loadUsers(): AppUser[] {
         createdAt: u.createdAt ? String(u.createdAt) : new Date().toISOString(),
         lastLoginAt: u.lastLoginAt ? String(u.lastLoginAt) : undefined,
         active: u.active !== false,
+        subscriptionPlan: normalizeSubscriptionPlan(u.subscriptionPlan),
         passwordHash: u.passwordHash ? String(u.passwordHash) : undefined,
       }))
       .filter((u: AppUser) => u.email);
@@ -1716,6 +1717,14 @@ function userCanManageUsers(user: AppUser | null | undefined): boolean {
 
 function userCanManageSubscriptions(user: AppUser | null | undefined): boolean {
   return normalizeEmail(user?.email || "") === normalizeEmail(PREMIUM_CONTACT_EMAIL);
+}
+
+function isServiceOwnerEmail(email: string | null | undefined): boolean {
+  return normalizeEmail(email || "") === normalizeEmail(PREMIUM_CONTACT_EMAIL);
+}
+
+function userCanCreateUsers(user: AppUser | null | undefined): boolean {
+  return userCanManageUsers(user) && isPremiumPlan(user?.subscriptionPlan);
 }
 
 function userCanEditAudit(user: AppUser | null | undefined): boolean {
@@ -2646,6 +2655,7 @@ function UserManagementDialog({
   onResetPassword,
   onActivatePremiumByEmail,
   canManageSubscriptions,
+  canCreateUsers,
 }: {
   open: boolean;
   onClose: () => void;
@@ -2658,6 +2668,7 @@ function UserManagementDialog({
   onResetPassword: (userId: string, password: string) => Promise<void>;
   onActivatePremiumByEmail: (email: string) => void;
   canManageSubscriptions: boolean;
+  canCreateUsers: boolean;
 }) {
   useEffect(()=>{ document.body.style.overflow = open ? 'hidden' : ''; return () => { document.body.style.overflow = ''; }; }, [open]);
   const [name, setName] = useState("");
@@ -2684,9 +2695,11 @@ function UserManagementDialog({
 
   const admins = users.filter((u) => u.active !== false && u.role === "admin");
   const canManage = userCanManageUsers(activeUser);
+  const canCreate = canCreateUsers;
+  const visibleUsers = canManageSubscriptions ? users : users.filter((u) => !isServiceOwnerEmail(u.email));
 
   async function addUser() {
-    if (!canManage) return;
+    if (!canCreate) return;
     const ok = await onAddUser({
       name,
       email,
@@ -2736,11 +2749,19 @@ function UserManagementDialog({
 
           {!canManage && (
             <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-800 dark:text-amber-200">
-              {lang === "fr" ? "Seul un administrateur peut ajouter, modifier ou désactiver des utilisateurs." : "Only an administrator can add, edit or deactivate users."}
+              {lang === "fr" ? "Seul un administrateur peut modifier ou désactiver des utilisateurs." : "Only an administrator can edit or deactivate users."}
             </div>
           )}
 
-          {canManage && (
+          {canManage && !canCreate && (
+            <div className="rounded-2xl border border-cyan-500/30 bg-cyan-500/10 p-4 text-sm text-cyan-900 dark:text-cyan-100">
+              {lang === "fr"
+                ? "La création d’utilisateurs est réservée aux comptes Premium. Passez ce compte en Premium pour inviter ou créer de nouveaux utilisateurs."
+                : "User creation is reserved for Premium accounts. Upgrade this account to Premium to invite or create new users."}
+            </div>
+          )}
+
+          {canCreate && (
             <div className="rounded-2xl border p-4">
               <div className="mb-3 flex items-center gap-2 font-medium">
                 <UserPlus className="h-4 w-4" />
@@ -2827,7 +2848,7 @@ function UserManagementDialog({
 
           <div className="space-y-3">
             <div className="font-medium">{lang === "fr" ? "Utilisateurs" : "Users"}</div>
-            {users.map((u) => {
+            {visibleUsers.map((u) => {
               const isSelf = activeUser?.id === u.id;
               const disablingLastAdmin = u.role === "admin" && admins.length <= 1 && u.active !== false;
               return (
@@ -3920,14 +3941,13 @@ function Toolbar({
             </Button>
 
             {activeUser && (
-              <Button
-                size="sm"
-                variant="outline"
-                className="hidden md:flex max-w-[260px]"
-                onClick={canManageUsers ? onOpenUsers : undefined}
-                title={canManageUsers ? (lang === "fr" ? "Gérer les utilisateurs" : "Manage users") : userRoleDescription(activeUser.role, lang)}
+              <div
+                className="hidden h-9 max-w-[260px] items-center gap-1 rounded-md border border-input bg-background px-3 text-sm md:flex"
+                title={userRoleDescription(activeUser.role, lang)}
+                role="status"
+                aria-label={lang === "fr" ? "Utilisateur connecté" : "Signed-in user"}
               >
-                <Users className="h-4 w-4 mr-1" />
+                <Users className="h-4 w-4 shrink-0" />
                 <span className="truncate">{activeUser.name}</span>
                 <Badge variant="outline" className={"ml-2 " + userRoleBadgeClass(activeUser.role)}>
                   {userRoleLabel(activeUser.role, lang)}
@@ -3935,7 +3955,7 @@ function Toolbar({
                 <Badge variant="outline" className={"ml-1 " + subscriptionPlanBadgeClass(activeUser.subscriptionPlan)}>
                   {subscriptionPlanLabel(activeUser.subscriptionPlan)}
                 </Badge>
-              </Button>
+              </div>
             )}
 
             {activeUser && !isPremiumPlan(activeUser.subscriptionPlan) && onRequestPremium && (
@@ -8747,6 +8767,7 @@ function GapTrackApp({
   }, [activeUser, route, navigate]);
 
   const canManageUsersFlag = userCanManageUsers(activeUser);
+  const canCreateUsersFlag = userCanCreateUsers(activeUser);
   const canManageSubscriptionsFlag = userCanManageSubscriptions(activeUser);
   const canEditAuditFlag = userCanEditAudit(activeUser);
   const canReviewEvidenceFlag = userCanReviewEvidence(activeUser);
@@ -8998,8 +9019,8 @@ function GapTrackApp({
   }, []);
 
   const addUser = React.useCallback(async (payload: NewUserPayload) => {
-    if (!canManageUsersFlag) {
-      toast.error(lang === "fr" ? "Action réservée aux administrateurs." : "Administrators only.");
+    if (!canCreateUsersFlag) {
+      toast.error(lang === "fr" ? "Création d’utilisateurs réservée aux comptes administrateurs Premium." : "User creation is reserved for Premium administrator accounts.");
       return false;
     }
     const email = normalizeEmail(payload.email);
@@ -9009,6 +9030,10 @@ function GapTrackApp({
     }
     if (users.some((u) => u.email === email)) {
       toast.error(lang === "fr" ? "Cet email existe déjà." : "This email already exists.");
+      return false;
+    }
+    if (isServiceOwnerEmail(email) && !canManageSubscriptionsFlag) {
+      toast.error(lang === "fr" ? "Ce compte propriétaire est protégé." : "This service-owner account is protected.");
       return false;
     }
     if (payload.password.length < 8) {
@@ -9032,7 +9057,7 @@ function GapTrackApp({
     setUsers(next);
     toast.success(lang === "fr" ? "Utilisateur créé." : "User created.");
     return true;
-  }, [activeUser?.organization, canManageSubscriptionsFlag, canManageUsersFlag, lang, users]);
+  }, [activeUser?.organization, canCreateUsersFlag, canManageSubscriptionsFlag, lang, users]);
 
   const updateUser = React.useCallback((userId: string, patch: Partial<AppUser>) => {
     if (!canManageUsersFlag) {
@@ -9046,6 +9071,10 @@ function GapTrackApp({
     setUsers((prev) => {
       const activeAdmins = prev.filter((u) => u.active !== false && u.role === "admin");
       const target = prev.find((u) => u.id === userId);
+      if (target && isServiceOwnerEmail(target.email) && !canManageSubscriptionsFlag) {
+        toast.error(lang === "fr" ? "Ce compte propriétaire est protégé." : "This service-owner account is protected.");
+        return prev;
+      }
       if (target?.role === "admin" && activeAdmins.length <= 1 && (patch.role || patch.active === false)) {
         toast.error(lang === "fr" ? "Impossible de retirer le dernier administrateur actif." : "Cannot remove the last active administrator.");
         return prev;
@@ -9098,6 +9127,10 @@ function GapTrackApp({
     setUsers((prev) => {
       const target = prev.find((u) => u.id === userId);
       const activeAdmins = prev.filter((u) => u.active !== false && u.role === "admin");
+      if (target && isServiceOwnerEmail(target.email) && !canManageSubscriptionsFlag) {
+        toast.error(lang === "fr" ? "Ce compte propriétaire est protégé." : "This service-owner account is protected.");
+        return prev;
+      }
       if (target?.role === "admin" && activeAdmins.length <= 1) {
         toast.error(lang === "fr" ? "Impossible de supprimer le dernier administrateur actif." : "Cannot delete the last active administrator.");
         return prev;
@@ -9106,7 +9139,7 @@ function GapTrackApp({
       saveUsers(next);
       return next;
     });
-  }, [activeUserId, canManageUsersFlag, lang]);
+  }, [activeUserId, canManageSubscriptionsFlag, canManageUsersFlag, lang]);
 
   const resetUserPassword = React.useCallback(async (userId: string, password: string) => {
     if (!canManageUsersFlag) {
@@ -9119,12 +9152,16 @@ function GapTrackApp({
     }
     const target = users.find((u) => u.id === userId);
     if (!target) return;
+    if (isServiceOwnerEmail(target.email) && !canManageSubscriptionsFlag) {
+      toast.error(lang === "fr" ? "Ce compte propriétaire est protégé." : "This service-owner account is protected.");
+      return;
+    }
     const passwordHash = await hashLocalPassword(password, target.email);
     const next = users.map((u) => u.id === userId ? { ...u, passwordHash } : u);
     saveUsers(next);
     setUsers(next);
     toast.success(lang === "fr" ? "Mot de passe réinitialisé." : "Password reset.");
-  }, [canManageUsersFlag, lang, users]);
+  }, [canManageSubscriptionsFlag, canManageUsersFlag, lang, users]);
 
   useEffect(() => {
     if (sessions.length <= 1) return;
@@ -10216,6 +10253,7 @@ function GapTrackApp({
         onResetPassword={resetUserPassword}
         onActivatePremiumByEmail={activatePremiumByEmail}
         canManageSubscriptions={canManageSubscriptionsFlag}
+        canCreateUsers={canCreateUsersFlag}
       />
 
       <CreateAuditWizard
