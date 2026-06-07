@@ -1113,3 +1113,17 @@
   }
 }
 
+/* Pop-up compte déjà existant */
+.gt-existing-account-card {
+  border-color: rgba(255, 190, 96, .34);
+  background:
+    radial-gradient(circle at 85% 0%, rgba(255, 173, 65, .18), transparent 34%),
+    linear-gradient(180deg, rgba(38, 45, 73, .96), rgba(15, 22, 43, .96));
+}
+
+.gt-existing-account-icon {
+  color: #ffd37a;
+  background: rgba(255, 173, 65, .12);
+  border-color: rgba(255, 190, 96, .26);
+}
+

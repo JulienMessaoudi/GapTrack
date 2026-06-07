@@ -63,6 +63,18 @@ function cleanEmail(value: string): string {
   return String(value || "").trim().toLowerCase();
 }
 
+function isExistingAccountError(error: { message?: string; status?: number } | null | undefined): boolean {
+  const message = String(error?.message || "").toLowerCase();
+
+  return (
+    error?.status === 422 ||
+    message.includes("already registered") ||
+    message.includes("already exists") ||
+    message.includes("user already") ||
+    message.includes("email already")
+  );
+}
+
 export function LoginAccessPage({
   mode,
   lang,
@@ -79,6 +91,8 @@ export function LoginAccessPage({
   const [authView, setAuthView] = useState<"login" | "signup">(mode === "setup" ? "signup" : "login");
   const [confirmationEmail, setConfirmationEmail] = useState("");
   const [confirmationPopupOpen, setConfirmationPopupOpen] = useState(false);
+  const [existingAccountEmail, setExistingAccountEmail] = useState("");
+  const [existingAccountPopupOpen, setExistingAccountPopupOpen] = useState(false);
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
@@ -148,7 +162,7 @@ export function LoginAccessPage({
         const targetEmail = cleanEmail(email);
         persistRememberMe(true);
 
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email: targetEmail,
           password,
           options: {
@@ -162,7 +176,26 @@ export function LoginAccessPage({
         });
 
         if (error) {
+          if (isExistingAccountError(error)) {
+            setExistingAccountEmail(targetEmail);
+            setExistingAccountPopupOpen(true);
+            setAuthView("login");
+            setPassword("");
+            return;
+          }
+
           toast.error(error.message);
+          return;
+        }
+
+        // Supabase peut masquer l'existence d'un compte pour éviter l'énumération d'utilisateurs.
+        // Dans ce cas, un user est parfois renvoyé avec identities vide : on le traite comme un compte existant.
+        if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+          await supabase.auth.signOut();
+          setExistingAccountEmail(targetEmail);
+          setExistingAccountPopupOpen(true);
+          setAuthView("login");
+          setPassword("");
           return;
         }
 
@@ -405,6 +438,34 @@ export function LoginAccessPage({
               onClick={() => setConfirmationPopupOpen(false)}
             >
               J’ai compris
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {existingAccountPopupOpen ? (
+        <div className="gt-confirm-overlay" role="dialog" aria-modal="true" aria-labelledby="gt-existing-account-title">
+          <div className="gt-confirm-card gt-existing-account-card">
+            <div className="gt-confirm-icon gt-existing-account-icon">
+              <Mail aria-hidden="true" />
+            </div>
+            <h3 id="gt-existing-account-title">Compte déjà existant</h3>
+            <p>
+              Un compte GapTrack existe déjà avec cette adresse e-mail.
+            </p>
+            <p>
+              Connectez-vous avec <strong>{existingAccountEmail}</strong> ou utilisez “Mot de passe oublié ?” si vous ne connaissez plus votre mot de passe.
+            </p>
+            <button
+              type="button"
+              className="gt-primary"
+              onClick={() => {
+                setExistingAccountPopupOpen(false);
+                setEmail(existingAccountEmail);
+                setAuthView("login");
+              }}
+            >
+              Aller à la connexion
             </button>
           </div>
         </div>
