@@ -940,3 +940,18 @@
   border-color: rgba(255, 190, 96, .26);
 }
 
+
+
+/* Page de réinitialisation du mot de passe */
+.gt-reset-card {
+  margin: 10vh auto;
+  max-width: 560px;
+  justify-self: center;
+}
+
+@media (max-width: 780px) {
+  .gt-reset-card {
+    margin: 86px 20px 32px;
+    max-width: none;
+  }
+}
