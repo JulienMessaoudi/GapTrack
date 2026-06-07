@@ -57,6 +57,10 @@ export function LandingHomePage({ onAccess }: { onAccess: () => void }) {
       </header>
 
       {page === "apropos" ? <AboutPage /> : <HomePage page={page} onAccess={onAccess} openPage={openPage} />}
+
+      <footer className="gth-signature" aria-label="Crédits">
+        Conçu et développé par Julien Messaoudi
+      </footer>
     </main>
   );
 }

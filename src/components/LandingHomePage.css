@@ -1437,3 +1437,36 @@
   }
 }
 
+/* Signature discrète en bas de la landing page */
+.gth-signature {
+  position: relative;
+  z-index: 1;
+  width: min(1680px, calc(100% - 112px));
+  margin: 10px auto 26px;
+  padding: 18px 0 0;
+  border-top: 1px solid rgba(150, 175, 220, .10);
+  color: rgba(203, 213, 232, .52);
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .02em;
+}
+
+.gth-signature:hover {
+  color: rgba(226, 236, 255, .74);
+}
+
+@media (max-width: 1280px) {
+  .gth-signature {
+    width: min(1120px, calc(100% - 48px));
+  }
+}
+
+@media (max-width: 820px) {
+  .gth-signature {
+    width: min(100%, calc(100% - 40px));
+    margin-bottom: 22px;
+    font-size: 11px;
+  }
+}
+
