@@ -66,7 +66,6 @@ function cleanEmail(value: string): string {
 export function LoginAccessPage({
   mode,
   lang,
-  onCreateAdmin,
   onSupabaseAuthenticated,
   onBackHome,
 }: LoginAccessPageProps) {
@@ -77,7 +76,7 @@ export function LoginAccessPage({
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [forceLogin, setForceLogin] = useState(false);
+  const [authView, setAuthView] = useState<"login" | "signup">(mode === "setup" ? "signup" : "login");
   const [confirmationEmail, setConfirmationEmail] = useState("");
   const [confirmationPopupOpen, setConfirmationPopupOpen] = useState(false);
 
@@ -89,8 +88,7 @@ export function LoginAccessPage({
     };
   }, []);
 
-  const effectiveMode = forceLogin ? "login" : mode;
-  const isSetup = effectiveMode === "setup";
+  const isSetup = authView === "signup";
 
   function goBackToHome() {
     if (onBackHome) {
@@ -175,7 +173,7 @@ export function LoginAccessPage({
 
         setConfirmationEmail(targetEmail);
         setConfirmationPopupOpen(true);
-        setForceLogin(true);
+        setAuthView("login");
         setPassword("");
         toast.success(lang === "fr" ? "Compte créé. Vérifiez votre e-mail." : "Account created. Check your email.");
         return;
@@ -220,7 +218,7 @@ export function LoginAccessPage({
   }
 
   return (
-    <div className="gaptrack-auth" data-mode={effectiveMode}>
+    <div className="gaptrack-auth" data-mode={authView}>
       <div className="gt-bg-grid" />
 
       <button type="button" className="gt-home-tab" onClick={goBackToHome} aria-label="Retour à l’accueil">
@@ -273,18 +271,45 @@ export function LoginAccessPage({
           </div>
 
           <div className="gt-login-heading">
-            <h2>{isSetup ? "Créer l’accès" : "Connexion"}</h2>
+            <h2>{isSetup ? "Créer un compte" : "Connexion"}</h2>
             <p>
               {isSetup
-                ? "Créez le premier compte administrateur GapTrack"
+                ? "Créez votre accès GapTrack. Une confirmation e-mail sera obligatoire."
                 : confirmationEmail
                   ? "Confirmez votre e-mail, puis connectez-vous à votre espace GapTrack"
                   : "Accédez à votre espace GapTrack"}
             </p>
           </div>
 
+          <div className="gt-auth-tabs" role="tablist" aria-label="Connexion ou création de compte">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={authView === "login"}
+              className={authView === "login" ? "gt-auth-tab active" : "gt-auth-tab"}
+              onClick={() => {
+                setAuthView("login");
+                setPassword("");
+              }}
+            >
+              Connexion
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={authView === "signup"}
+              className={authView === "signup" ? "gt-auth-tab active" : "gt-auth-tab"}
+              onClick={() => {
+                setAuthView("signup");
+                setPassword("");
+              }}
+            >
+              Créer un compte
+            </button>
+          </div>
+
           <form className="gt-form" onSubmit={submit}>
-            {!isSetup && mode === "setup" ? (
+            {!isSetup && confirmationEmail ? (
               <div className="gt-auth-note">
                 <strong>Compte en attente de confirmation</strong>
                 <span>Vous pourrez accéder à GapTrack après validation du lien reçu par e-mail.</span>
@@ -349,18 +374,6 @@ export function LoginAccessPage({
               {!busy ? <ArrowRight aria-hidden="true" /> : null}
             </button>
 
-            {mode === "setup" ? (
-              <button
-                type="button"
-                className="gt-auth-switch"
-                onClick={() => {
-                  setForceLogin((value) => !value);
-                  setPassword("");
-                }}
-              >
-                {isSetup ? "J’ai déjà confirmé mon e-mail" : "Créer un autre compte"}
-              </button>
-            ) : null}
           </form>
 
           <div className="gt-protection">

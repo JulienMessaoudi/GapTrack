@@ -1068,3 +1068,48 @@
   min-width: 180px;
 }
 
+/* Onglets Connexion / Création de compte dans la carte d'accès */
+.gt-auth-tabs {
+  margin: 0 52px 26px;
+  padding: 5px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+  border: 1px solid rgba(155, 178, 215, .20);
+  border-radius: 14px;
+  background: rgba(5, 12, 28, .30);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.04);
+}
+
+.gt-auth-tab {
+  min-height: 42px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: #aeb9cd;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 850;
+  transition: background .18s ease, color .18s ease, box-shadow .18s ease;
+}
+
+.gt-auth-tab:hover {
+  color: #fff;
+  background: rgba(255,255,255,.05);
+}
+
+.gt-auth-tab.active {
+  color: #fff;
+  background: linear-gradient(180deg, rgba(62, 124, 255, .95), rgba(30, 86, 223, .92));
+  box-shadow:
+    0 10px 24px rgba(35, 94, 255, .24),
+    inset 0 1px 0 rgba(255,255,255,.18);
+}
+
+@media (max-width: 780px) {
+  .gt-auth-tabs {
+    margin-left: 24px;
+    margin-right: 24px;
+  }
+}
+
