@@ -21,16 +21,15 @@ import {
 } from "lucide-react";
 import "./LandingHomePage.css";
 
-const DEMO_MAILTO = "mailto:julien.messaoudi@edu.esiee.fr?subject=Demande%20de%20d%C3%A9mo%20GapTrack&body=Bonjour%2C%0A%0AJe%20souhaite%20demander%20une%20d%C3%A9mo%20de%20GapTrack.%0A%0AOrganisation%20%3A%20%0ABesoin%20%3A%20%0A%0AMerci.";
-
 type LandingPageView = "plateforme" | "apropos";
+type SubscriptionPlan = "free" | "premium";
 
 export function LandingHomePage({
   onAccess,
   initialPage = "plateforme",
   onNavigate,
 }: {
-  onAccess: () => void;
+  onAccess: (plan?: SubscriptionPlan) => void;
   initialPage?: LandingPageView;
   onNavigate?: (page: LandingPageView) => void;
 }) {
@@ -40,17 +39,24 @@ export function LandingHomePage({
     setPage(initialPage);
   }, [initialPage]);
 
-  const scrollToSection = (id: string) => {
-    window.setTimeout(() => {
-      document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 0);
-  };
-
   const openPage = (next: LandingPageView) => {
     setPage(next);
     onNavigate?.(next);
 
-    scrollToSection("top");
+    window.setTimeout(() => {
+      document.getElementById("top")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 0);
+  };
+
+  const openOffers = () => {
+    if (page !== "plateforme") {
+      setPage("plateforme");
+      onNavigate?.("plateforme");
+    }
+
+    window.setTimeout(() => {
+      document.getElementById("gth-pricing")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 80);
   };
 
   return (
@@ -67,18 +73,18 @@ export function LandingHomePage({
 
         <nav className="gth-nav" aria-label="Navigation principale">
           <button className={page === "plateforme" ? "gth-nav-active" : ""} type="button" onClick={() => openPage("plateforme")}>Accueil</button>
+          <button type="button" onClick={openOffers}>Offres</button>
           <button className={page === "apropos" ? "gth-nav-active" : ""} type="button" onClick={() => openPage("apropos")}>À propos</button>
-          <button type="button" onClick={() => { openPage("plateforme"); scrollToSection("gth-access-model"); }}>Offres</button>
         </nav>
 
-        <button className="gth-login-button" type="button" onClick={onAccess}>
-          Essai gratuit
+        <button className="gth-login-button" type="button" onClick={() => onAccess()}>
+          Se connecter
           <ArrowRight aria-hidden="true" />
         </button>
       </header>
 
-	  {page === "apropos" ? <AboutPage /> : <HomePage onAccess={onAccess} />}
-	  
+      {page === "apropos" ? <AboutPage /> : <HomePage onAccess={onAccess} openPage={openPage} />}
+
       <footer className="gth-signature" aria-label="Crédits">
         Conçu et développé par Julien Messaoudi
       </footer>
@@ -88,8 +94,10 @@ export function LandingHomePage({
 
 function HomePage({
   onAccess,
+  openPage,
 }: {
-  onAccess: () => void;
+  onAccess: (plan?: SubscriptionPlan) => void;
+  openPage: (page: LandingPageView) => void;
 }) {
   return (
     <>
@@ -103,7 +111,7 @@ function HomePage({
           <h1>Centralisez vos preuves <br />et vos écarts <br /><span>dans un espace unique</span></h1>
 
           <p className="gth-lead">
-Testez gratuitement les workflows essentiels, puis passez en Premium quand vos audits, preuves et exports deviennent critiques.
+            Une expérience fluide pour piloter vos audits, suivre les actions et partager les preuves avec les bonnes personnes.
           </p>
 
           <div className="gth-benefits" aria-label="Bénéfices principaux">
@@ -113,14 +121,13 @@ Testez gratuitement les workflows essentiels, puis passez en Premium quand vos a
           </div>
 
           <div className="gth-hero-actions">
-            <button className="gth-primary" type="button" onClick={onAccess}>
-Essayer gratuitement
+            <button className="gth-primary" type="button" onClick={() => onAccess("free")}>
+              Découvrir gratuitement
               <ArrowRight aria-hidden="true" />
             </button>
-            <a className="gth-secondary" href={DEMO_MAILTO}>
-              Demander une démo
-              <Mail aria-hidden="true" />
-            </a>
+            <button className="gth-secondary" type="button" onClick={() => openPage("apropos")}>
+              En savoir plus
+            </button>
           </div>
         </div>
 
@@ -137,8 +144,73 @@ Essayer gratuitement
         </div>
       </section>
 
-      <AccessModelSection onAccess={onAccess} />
+      <PricingSection onSelectPlan={onAccess} />
     </>
+  );
+}
+
+function PricingSection({ onSelectPlan }: { onSelectPlan: (plan: SubscriptionPlan) => void }) {
+  const plans = [
+    {
+      key: "free" as const,
+      label: "Free",
+      badge: "Pour démarrer",
+      price: "0€",
+      period: "/ mois",
+      description: "Idéal pour tester GapTrack, préparer un premier audit et structurer vos preuves localement.",
+      features: ["1 audit actif", "Tableau de bord de maturité", "Preuves et notes locales", "Export PDF standard"],
+      cta: "Commencer gratuitement",
+    },
+    {
+      key: "premium" as const,
+      label: "Premium",
+      badge: "Le plus complet",
+      price: "Sur devis",
+      period: "",
+      description: "Pensé pour les équipes, cabinets et organisations qui veulent collaborer et industrialiser leurs audits.",
+      features: ["Audits illimités", "Utilisateurs et rôles avancés", "Suivi des preuves à valider", "Reporting complet et accompagnement"],
+      cta: "Choisir Premium",
+      highlighted: true,
+    },
+  ];
+
+  return (
+    <section className="gth-pricing-section" id="gth-pricing" aria-label="Offres GapTrack Free et Premium">
+      <div className="gth-pricing-heading">
+        <div className="gth-kicker">
+          <Star aria-hidden="true" />
+          OFFRES GAPTRACK
+        </div>
+        <h2>Choisissez la version adaptée à votre usage</h2>
+        <p>Une version Free pour découvrir la plateforme, puis une version Premium pour collaborer, suivre plus d’audits et professionnaliser votre conformité.</p>
+      </div>
+
+      <div className="gth-pricing-grid">
+        {plans.map((plan) => (
+          <article key={plan.key} className={`gth-price-card${plan.highlighted ? " gth-price-card-premium" : ""}`}>
+            <div className="gth-price-topline">
+              <span>{plan.badge}</span>
+              {plan.highlighted ? <strong>Recommandé</strong> : null}
+            </div>
+            <h3>{plan.label}</h3>
+            <p>{plan.description}</p>
+            <div className="gth-price">
+              <strong>{plan.price}</strong>
+              {plan.period ? <small>{plan.period}</small> : null}
+            </div>
+            <ul>
+              {plan.features.map((feature) => (
+                <li key={feature}><CheckCircle2 aria-hidden="true" />{feature}</li>
+              ))}
+            </ul>
+            <button className={plan.highlighted ? "gth-primary" : "gth-secondary"} type="button" onClick={() => onSelectPlan(plan.key)}>
+              {plan.cta}
+              <ArrowRight aria-hidden="true" />
+            </button>
+          </article>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -163,7 +235,7 @@ function AboutPage() {
           </p>
 
           <div className="gth-hero-actions gth-about-actions">
-            <a className="gth-primary gth-about-contact-primary" href={DEMO_MAILTO}>
+            <a className="gth-primary gth-about-contact-primary" href="mailto:julien.messaoudi@edu.esiee.fr">
               Contacter le créateur
               <Mail aria-hidden="true" />
             </a>
@@ -221,84 +293,6 @@ function AboutPage() {
         <div className="gth-cta-shield" aria-hidden="true"><ShieldCheck /></div>
       </div>
     </section>
-  );
-}
-
-function AccessModelSection({ onAccess }: { onAccess: () => void }) {
-  return (
-    <section className="gth-access-section" id="gth-access-model">
-      <div className="gth-section-heading">
-        <span>MODÈLE D’ACCÈS</span>
-        <h2>Entrée simple, usage professionnel réservé aux offres payantes</h2>
-        <p>GapTrack reste facile à tester, tout en protégeant les fonctionnalités qui ont le plus de valeur métier.</p>
-      </div>
-
-      <div className="gth-access-grid">
-        <AccessCard
-          icon={<Eye />}
-          title="Démo publique"
-          badge="Sans risque"
-          text="Un aperçu guidé avec des données fictives pour comprendre le workflow avant de créer un compte."
-          items={["Tableau de bord exemple", "Audit de démonstration", "Aucune donnée réelle"]}
-        />
-        <AccessCard
-          icon={<ShieldCheck />}
-          title="Free"
-          badge="Pour tester"
-          text="Un compte gratuit pour essayer GapTrack sur un périmètre limité."
-          items={["1 audit actif", "Fonctions essentielles", "Export et multi-audits réservés Premium"]}
-          cta={<button className="gth-card-cta" type="button" onClick={onAccess}>Créer un compte gratuit</button>}
-        />
-        <AccessCard
-          icon={<Star />}
-          title="Premium"
-          badge="Usage réel"
-          text="L’offre adaptée dès que GapTrack devient un outil de travail opérationnel."
-          items={["Audits multiples", "Exports PDF", "Preuves et plans d’action avancés"]}
-        />
-        <AccessCard
-          icon={<Users />}
-          title="Entreprise"
-          badge="Sur démo"
-          text="Pour les équipes, cabinets et organisations qui manipulent des preuves sensibles."
-          items={["Démo personnalisée", "Collaboration et rôles", "Support et cadrage sécurité"]}
-          cta={<a className="gth-card-cta" href={DEMO_MAILTO}>Demander une démo</a>}
-        />
-      </div>
-    </section>
-  );
-}
-
-function AccessCard({
-  icon,
-  title,
-  badge,
-  text,
-  items,
-  cta,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  badge: string;
-  text: string;
-  items: string[];
-  cta?: React.ReactNode;
-}) {
-  return (
-    <article className="gth-access-card">
-      <div className="gth-access-card-top">
-        <span className="gth-access-icon">{icon}</span>
-        <em>{badge}</em>
-      </div>
-      <h3>{title}</h3>
-      <p>{text}</p>
-      <ul>
-        {items.map((item) => (
-          <li key={item}><CheckCircle2 aria-hidden="true" />{item}</li>
-        ))}
-      </ul>
-      {cta ? <div className="gth-access-cta">{cta}</div> : null}
-    </article>
   );
 }
 

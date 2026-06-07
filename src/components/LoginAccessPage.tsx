@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import {
   ArrowRight,
+  CheckCircle2,
   Eye,
   EyeOff,
   Layers,
@@ -19,9 +20,7 @@ import "./LoginAccessPage.css";
 type LangKey = "fr" | "en";
 type ThemeMode = "light" | "dark";
 type UserRole = "admin" | "auditor" | "contributor" | "viewer";
-type UserPlan = "free" | "premium" | "enterprise";
-
-const DEMO_MAILTO = "mailto:julien.messaoudi@edu.esiee.fr?subject=Demande%20de%20d%C3%A9mo%20GapTrack&body=Bonjour%2C%0A%0AJe%20souhaite%20demander%20une%20d%C3%A9mo%20de%20GapTrack.%0A%0AOrganisation%20%3A%20%0ABesoin%20%3A%20%0A%0AMerci.";
+type SubscriptionPlan = "free" | "premium";
 
 interface AppUser {
   id: string;
@@ -32,8 +31,8 @@ interface AppUser {
   createdAt: string;
   lastLoginAt?: string;
   active: boolean;
-  plan?: UserPlan;
   passwordHash?: string;
+  subscriptionPlan?: SubscriptionPlan;
 }
 
 interface NewUserPayload {
@@ -42,6 +41,7 @@ interface NewUserPayload {
   password: string;
   role: UserRole;
   organization?: string;
+  subscriptionPlan?: SubscriptionPlan;
 }
 
 interface SupabaseAuthProfile {
@@ -49,7 +49,7 @@ interface SupabaseAuthProfile {
   name?: string;
   organization?: string;
   role?: UserRole;
-  plan?: UserPlan;
+  subscriptionPlan?: SubscriptionPlan;
 }
 
 interface LoginAccessPageProps {
@@ -81,9 +81,27 @@ function isExistingAccountError(error: { message?: string; status?: number } | n
   );
 }
 
-function normalizeUserPlan(value: unknown): UserPlan {
-  if (value === "premium" || value === "enterprise") return value;
-  return "free";
+
+function normalizeSubscriptionPlan(value: unknown): SubscriptionPlan {
+  return value === "premium" ? "premium" : "free";
+}
+
+function planLabel(plan: SubscriptionPlan): string {
+  return plan === "premium" ? "Premium" : "Free";
+}
+
+function planDescription(plan: SubscriptionPlan): string {
+  return plan === "premium"
+    ? "Audits illimités, collaboration avancée et reporting complet."
+    : "1 audit actif, preuves locales et export PDF standard.";
+}
+
+function readSelectedPlan(): SubscriptionPlan {
+  try {
+    return normalizeSubscriptionPlan(sessionStorage.getItem("gaptrack_selected_plan"));
+  } catch {
+    return "free";
+  }
 }
 
 export function LoginAccessPage({
@@ -100,6 +118,7 @@ export function LoginAccessPage({
   const [rememberMe, setRememberMe] = useState(false);
   const [busy, setBusy] = useState(false);
   const [authView, setAuthView] = useState<"login" | "signup">(mode === "setup" ? "signup" : "login");
+  const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan>(() => readSelectedPlan());
   const [confirmationEmail, setConfirmationEmail] = useState("");
   const [confirmationPopupOpen, setConfirmationPopupOpen] = useState(false);
   const [existingAccountEmail, setExistingAccountEmail] = useState("");
@@ -112,6 +131,12 @@ export function LoginAccessPage({
       document.body.style.overflow = previousOverflow;
     };
   }, []);
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem("gaptrack_selected_plan", selectedPlan);
+    } catch {}
+  }, [selectedPlan]);
 
   const isSetup = authView === "signup";
 
@@ -181,7 +206,7 @@ export function LoginAccessPage({
               name: name.trim(),
               organization: organization.trim(),
               role: "admin",
-              plan: "free",
+              subscriptionPlan: selectedPlan,
             },
             emailRedirectTo: window.location.origin,
           },
@@ -254,7 +279,7 @@ export function LoginAccessPage({
         name: typeof profile.name === "string" ? profile.name : undefined,
         organization: typeof profile.organization === "string" ? profile.organization : undefined,
         role: profile.role === "admin" || profile.role === "auditor" || profile.role === "contributor" || profile.role === "viewer" ? profile.role : undefined,
-        plan: profile.plan === "free" || profile.plan === "premium" || profile.plan === "enterprise" ? normalizeUserPlan(profile.plan) : undefined,
+        subscriptionPlan: normalizeSubscriptionPlan(profile.subscriptionPlan),
       });
 
       toast.success(lang === "fr" ? "Connexion réussie." : "Signed in.");
@@ -286,7 +311,7 @@ export function LoginAccessPage({
           </h1>
 
           <p className="gt-subtitle">
-            Créez un compte Free pour tester les workflows essentiels, ou demandez une démo pour un usage Premium / Entreprise.
+            GapTrack centralise vos audits, preuves et plans d’action pour renforcer votre conformité et votre résilience.
           </p>
 
           <div className="gt-features">
@@ -313,14 +338,14 @@ export function LoginAccessPage({
         <section className="gt-login-card" aria-label={isSetup ? "Création du compte" : "Connexion"}>
           <div className="gt-secure-badge">
             <ShieldCheck aria-hidden="true" />
-            <span>{isSetup ? "Essai Free sécurisé" : "Accès sécurisé"}</span>
+            <span>{isSetup ? "Premier accès sécurisé" : "Accès sécurisé"}</span>
           </div>
 
           <div className="gt-login-heading">
-            <h2>{isSetup ? "Créer un compte gratuit" : "Connexion"}</h2>
+            <h2>{isSetup ? "Créer un compte" : "Connexion"}</h2>
             <p>
               {isSetup
-                ? "L’offre Free permet de tester GapTrack sur un périmètre limité. Une confirmation e-mail sera obligatoire."
+                ? `Créez votre accès GapTrack ${planLabel(selectedPlan)}. Une confirmation e-mail sera obligatoire.`
                 : confirmationEmail
                   ? "Confirmez votre e-mail, puis connectez-vous à votre espace GapTrack"
                   : "Accédez à votre espace GapTrack"}
@@ -350,18 +375,11 @@ export function LoginAccessPage({
                 setPassword("");
               }}
             >
-              Essai gratuit
+              Créer un compte
             </button>
           </div>
 
           <form className="gt-form" onSubmit={submit}>
-            {isSetup ? (
-              <div className="gt-plan-note">
-                <strong>Offre Free incluse</strong>
-                <span>1 audit actif pour tester. Les audits multiples, exports PDF et usages équipe passent en Premium.</span>
-              </div>
-            ) : null}
-
             {!isSetup && confirmationEmail ? (
               <div className="gt-auth-note">
                 <strong>Compte en attente de confirmation</strong>
@@ -370,7 +388,41 @@ export function LoginAccessPage({
             ) : null}
 
             {isSetup ? (
+              <div className="gt-plan-selection" aria-label="Choix de l’offre GapTrack">
+                <button
+                  type="button"
+                  className={selectedPlan === "free" ? "gt-plan-option active" : "gt-plan-option"}
+                  onClick={() => setSelectedPlan("free")}
+                  aria-pressed={selectedPlan === "free"}
+                >
+                  <span>Free</span>
+                  <strong>0€</strong>
+                  <small>Découvrir avec un audit actif</small>
+                </button>
+                <button
+                  type="button"
+                  className={selectedPlan === "premium" ? "gt-plan-option gt-plan-option-premium active" : "gt-plan-option gt-plan-option-premium"}
+                  onClick={() => setSelectedPlan("premium")}
+                  aria-pressed={selectedPlan === "premium"}
+                >
+                  <span>Premium</span>
+                  <strong>Sur devis</strong>
+                  <small>Équipes, rôles et audits illimités</small>
+                </button>
+              </div>
+            ) : null}
+
+            {isSetup ? (
               <>
+                <div className={`gt-selected-plan gt-selected-plan-${selectedPlan}`}>
+                  <CheckCircle2 aria-hidden="true" />
+                  <div>
+                    <span>Offre sélectionnée</span>
+                    <strong>{planLabel(selectedPlan)}</strong>
+                  </div>
+                  <p>{planDescription(selectedPlan)}</p>
+                </div>
+
                 <Field label="Nom">
                   <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Administrateur" autoComplete="name" />
                 </Field>
@@ -423,15 +475,9 @@ export function LoginAccessPage({
 
             <button type="submit" className="gt-primary" disabled={busy}>
               {busy ? <Loader2 className="gt-spin" aria-hidden="true" /> : null}
-              <span>{isSetup ? "Créer mon compte Free" : "Se connecter"}</span>
+              <span>{isSetup ? `Créer le compte ${planLabel(selectedPlan)}` : "Se connecter"}</span>
               {!busy ? <ArrowRight aria-hidden="true" /> : null}
             </button>
-
-            <div className="gt-demo-callout">
-              <strong>Besoin d’un accès Premium ou Entreprise ?</strong>
-              <span>Demandez une démo pour un usage réel : exports, audits multiples, équipe et cadrage sécurité.</span>
-              <a href={DEMO_MAILTO}>Demander une démo</a>
-            </div>
 
           </form>
 
@@ -439,7 +485,7 @@ export function LoginAccessPage({
             <div className="gt-protection-icon"><ShieldCheck aria-hidden="true" /></div>
             <div>
               <h3>Vos données sont protégées</h3>
-              <p>Authentification Supabase, confirmation e-mail et accès Free limité avant passage Premium ou Entreprise.</p>
+              <p>Authentification Supabase, session protégée et offre choisie conservée dans le profil utilisateur.</p>
             </div>
           </div>
         </section>
@@ -458,6 +504,7 @@ export function LoginAccessPage({
             <p>
               Cliquez sur le lien envoyé à <strong>{confirmationEmail}</strong>, puis revenez vous connecter.
             </p>
+            <p className="gt-confirm-plan">Offre sélectionnée : <strong>{planLabel(selectedPlan)}</strong></p>
             <button
               type="button"
               className="gt-primary"
