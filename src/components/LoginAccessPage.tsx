@@ -77,6 +77,9 @@ export function LoginAccessPage({
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [forceLogin, setForceLogin] = useState(false);
+  const [confirmationEmail, setConfirmationEmail] = useState("");
+  const [confirmationPopupOpen, setConfirmationPopupOpen] = useState(false);
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
@@ -86,7 +89,8 @@ export function LoginAccessPage({
     };
   }, []);
 
-  const isSetup = mode === "setup";
+  const effectiveMode = forceLogin ? "login" : mode;
+  const isSetup = effectiveMode === "setup";
 
   function goBackToHome() {
     if (onBackHome) {
@@ -164,20 +168,16 @@ export function LoginAccessPage({
           return;
         }
 
-        await onCreateAdmin({
-          name: name.trim(),
-          email: targetEmail,
-          password,
-          role: "admin",
-          organization: organization.trim(),
-        });
+        // Sécurité produit : même si Supabase renvoie une session,
+        // on ne donne pas accès à GapTrack immédiatement après l'inscription.
+        // L'utilisateur doit confirmer son e-mail puis se reconnecter.
+        await supabase.auth.signOut();
 
-        onSupabaseAuthenticated?.({
-          email: targetEmail,
-          name: name.trim(),
-          organization: organization.trim(),
-          role: "admin",
-        });
+        setConfirmationEmail(targetEmail);
+        setConfirmationPopupOpen(true);
+        setForceLogin(true);
+        setPassword("");
+        toast.success(lang === "fr" ? "Compte créé. Vérifiez votre e-mail." : "Account created. Check your email.");
         return;
       }
 
@@ -220,7 +220,7 @@ export function LoginAccessPage({
   }
 
   return (
-    <div className="gaptrack-auth" data-mode={mode}>
+    <div className="gaptrack-auth" data-mode={effectiveMode}>
       <div className="gt-bg-grid" />
 
       <button type="button" className="gt-home-tab" onClick={goBackToHome} aria-label="Retour à l’accueil">
@@ -274,10 +274,23 @@ export function LoginAccessPage({
 
           <div className="gt-login-heading">
             <h2>{isSetup ? "Créer l’accès" : "Connexion"}</h2>
-            <p>{isSetup ? "Créez le premier compte administrateur GapTrack" : "Accédez à votre espace GapTrack"}</p>
+            <p>
+              {isSetup
+                ? "Créez le premier compte administrateur GapTrack"
+                : confirmationEmail
+                  ? "Confirmez votre e-mail, puis connectez-vous à votre espace GapTrack"
+                  : "Accédez à votre espace GapTrack"}
+            </p>
           </div>
 
           <form className="gt-form" onSubmit={submit}>
+            {!isSetup && mode === "setup" ? (
+              <div className="gt-auth-note">
+                <strong>Compte en attente de confirmation</strong>
+                <span>Vous pourrez accéder à GapTrack après validation du lien reçu par e-mail.</span>
+              </div>
+            ) : null}
+
             {isSetup ? (
               <>
                 <Field label="Nom">
@@ -335,6 +348,19 @@ export function LoginAccessPage({
               <span>{isSetup ? "Créer le compte" : "Se connecter"}</span>
               {!busy ? <ArrowRight aria-hidden="true" /> : null}
             </button>
+
+            {mode === "setup" ? (
+              <button
+                type="button"
+                className="gt-auth-switch"
+                onClick={() => {
+                  setForceLogin((value) => !value);
+                  setPassword("");
+                }}
+              >
+                {isSetup ? "J’ai déjà confirmé mon e-mail" : "Créer un autre compte"}
+              </button>
+            ) : null}
           </form>
 
           <div className="gt-protection">
@@ -346,6 +372,30 @@ export function LoginAccessPage({
           </div>
         </section>
       </main>
+
+      {confirmationPopupOpen ? (
+        <div className="gt-confirm-overlay" role="dialog" aria-modal="true" aria-labelledby="gt-confirm-title">
+          <div className="gt-confirm-card">
+            <div className="gt-confirm-icon">
+              <Mail aria-hidden="true" />
+            </div>
+            <h3 id="gt-confirm-title">Confirmez votre adresse e-mail</h3>
+            <p>
+              Votre compte a bien été créé, mais vous ne pouvez pas encore accéder au contenu de GapTrack.
+            </p>
+            <p>
+              Cliquez sur le lien envoyé à <strong>{confirmationEmail}</strong>, puis revenez vous connecter.
+            </p>
+            <button
+              type="button"
+              className="gt-primary"
+              onClick={() => setConfirmationPopupOpen(false)}
+            >
+              J’ai compris
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -854,6 +854,44 @@
 }
 
 
+/* Bouton retour vers la page d'accueil depuis la connexion */
+.gt-back-home {
+  position: fixed;
+  top: 28px;
+  left: clamp(24px, 7vw, 140px);
+  z-index: 30;
+  height: 44px;
+  padding: 0 18px;
+  border-radius: 12px;
+  border: 1px solid rgba(155, 178, 215, 0.25);
+  background: rgba(11, 22, 45, 0.72);
+  color: #f8fbff;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 12px 30px rgba(0, 0, 0, 0.22);
+}
+
+.gt-back-home:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(120, 165, 255, 0.45);
+}
+
+@media (max-width: 780px) {
+  .gt-back-home {
+    top: 18px;
+    left: 18px;
+    height: 40px;
+    padding: 0 14px;
+    font-size: 13px;
+  }
+}
+
+
 /* Suppression définitive des contrôles langue/thème et SSO */
 .gt-top-actions,
 .gt-top-button,
@@ -868,7 +906,7 @@
 .gt-home-tab {
   position: fixed;
   top: 28px;
-  right: clamp(24px, 7vw, 140px);
+  left: clamp(24px, 7vw, 140px);
   z-index: 40;
   height: 44px;
   padding: 0 20px;
@@ -895,10 +933,138 @@
 @media (max-width: 780px) {
   .gt-home-tab {
     top: 18px;
-    right: 18px;
+    left: 18px;
     height: 40px;
     padding: 0 15px;
     font-size: 13px;
   }
+}
+
+
+/* Position du bouton Accueil à droite */
+.gt-home-tab,
+.gt-back-home {
+  left: auto !important;
+  right: clamp(24px, 7vw, 140px) !important;
+}
+
+@media (max-width: 780px) {
+  .gt-home-tab,
+  .gt-back-home {
+    left: auto !important;
+    right: 18px !important;
+  }
+}
+
+/* Confirmation e-mail Supabase */
+.gt-auth-note {
+  margin-bottom: 18px;
+  padding: 14px 16px;
+  border: 1px solid rgba(67, 210, 184, .22);
+  border-radius: 12px;
+  background: rgba(28, 172, 162, .10);
+  color: #d7fff6;
+}
+
+.gt-auth-note strong,
+.gt-auth-note span {
+  display: block;
+}
+
+.gt-auth-note strong {
+  font-size: 14px;
+  font-weight: 850;
+}
+
+.gt-auth-note span {
+  margin-top: 4px;
+  color: #b7d4dc;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.gt-auth-switch {
+  width: 100%;
+  margin-top: 16px;
+  border: 0;
+  background: transparent;
+  color: #6fa0ff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.gt-auth-switch:hover {
+  color: #9dbdff;
+}
+
+.gt-confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10020;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(1, 7, 18, .72);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.gt-confirm-card {
+  width: min(100%, 520px);
+  padding: 32px;
+  border: 1px solid rgba(173, 195, 232, .30);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 85% 0%, rgba(63, 124, 255, .18), transparent 34%),
+    linear-gradient(180deg, rgba(28, 43, 76, .96), rgba(10, 20, 42, .96));
+  box-shadow:
+    0 30px 90px rgba(0, 0, 0, .48),
+    inset 0 1px 0 rgba(255,255,255,.08);
+  text-align: center;
+  color: #f8fbff;
+}
+
+.gt-confirm-icon {
+  width: 58px;
+  height: 58px;
+  margin: 0 auto 18px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: #62e7cb;
+  background: rgba(28, 172, 162, .12);
+  border: 1px solid rgba(67, 210, 184, .22);
+}
+
+.gt-confirm-icon svg {
+  width: 28px;
+  height: 28px;
+}
+
+.gt-confirm-card h3 {
+  margin: 0 0 12px;
+  color: #fff;
+  font-size: 26px;
+  line-height: 1.1;
+  letter-spacing: -.6px;
+  font-weight: 850;
+}
+
+.gt-confirm-card p {
+  margin: 10px 0;
+  color: #c4ccdc;
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.gt-confirm-card strong {
+  color: #fff;
+}
+
+.gt-confirm-card .gt-primary {
+  margin-top: 18px;
+  min-width: 180px;
 }
 
