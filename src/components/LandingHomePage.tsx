@@ -77,8 +77,8 @@ export function LandingHomePage({
         </button>
       </header>
 
-      {page === "apropos" ? <AboutPage /> : <HomePage onAccess={onAccess} openPage={openPage} />}
-
+	  {page === "apropos" ? <AboutPage /> : <HomePage onAccess={onAccess} />}
+	  
       <footer className="gth-signature" aria-label="Crédits">
         Conçu et développé par Julien Messaoudi
       </footer>
@@ -88,10 +88,8 @@ export function LandingHomePage({
 
 function HomePage({
   onAccess,
-  openPage,
 }: {
   onAccess: () => void;
-  openPage: (page: LandingPageView) => void;
 }) {
   return (
     <>
