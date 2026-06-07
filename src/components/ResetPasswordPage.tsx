@@ -3,6 +3,7 @@ import type { FormEvent } from "react";
 import { Eye, EyeOff, Loader2, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "../lib/supabase";
+import { authErrorMessage } from "../lib/authErrorMessages";
 import "./LoginAccessPage.css";
 
 export function ResetPasswordPage() {
@@ -34,7 +35,7 @@ export function ResetPasswordPage() {
       });
 
       if (error) {
-        toast.error(error.message);
+        toast.error(authErrorMessage(error));
         return;
       }
 

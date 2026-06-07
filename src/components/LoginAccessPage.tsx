@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase, setRememberMe as persistRememberMe } from "../lib/supabase";
+import { authErrorMessage } from "../lib/authErrorMessages";
 import "./LoginAccessPage.css";
 
 type LangKey = "fr" | "en";
@@ -135,7 +136,7 @@ export function LoginAccessPage({
     });
 
     if (error) {
-      toast.error(error.message);
+      toast.error(authErrorMessage(error));
       return;
     }
 
@@ -184,7 +185,7 @@ export function LoginAccessPage({
             return;
           }
 
-          toast.error(error.message);
+          toast.error(authErrorMessage(error));
           return;
         }
 
@@ -232,7 +233,7 @@ export function LoginAccessPage({
       });
 
       if (error) {
-        toast.error(error.message);
+        toast.error(authErrorMessage(error));
         return;
       }
 
