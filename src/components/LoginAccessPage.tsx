@@ -104,9 +104,6 @@ function normalizeSubscriptionPlan(value: unknown): SubscriptionPlan {
   return value === "premium" ? "premium" : "free";
 }
 
-function planLabel(plan: SubscriptionPlan): string {
-  return plan === "premium" ? "Premium" : "Free";
-}
 
 function planDescription(plan: SubscriptionPlan): string {
   return plan === "premium"
