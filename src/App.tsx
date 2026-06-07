@@ -6,7 +6,7 @@ import { Input } from "./components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "./components/ui/select";
 import { Badge } from "./components/ui/badge";
 import { toast } from "sonner";
-import {Filter, Redo2, Search, Undo2, ArrowUp, Paperclip, Download, Plus, Copy, X, Trash2, AlertTriangle, Shield, ShieldCheck, Lightbulb, Info, Loader2, CheckCircle2, AlertCircle, Pencil, BarChart3, ListChecks, ListTodo, Users, LogOut, UserPlus, History, ClipboardCheck, FileClock, FileCheck2, FileX2, Clock3} from "lucide-react";
+import {Filter, Redo2, Search, Undo2, ArrowUp, Paperclip, Download, Plus, Copy, X, Trash2, AlertTriangle, Shield, ShieldCheck, Lightbulb, Info, Loader2, CheckCircle2, AlertCircle, Pencil, BarChart3, ListChecks, ListTodo, Users, LogOut, UserPlus, History, ClipboardCheck, FileClock, FileCheck2, FileX2, Clock3, Mail} from "lucide-react";
 import { ResponsiveContainer, Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Tooltip } from "recharts";
 import { LoginAccessPage } from "./components/LoginAccessPage";
 import { ResetPasswordPage } from "./components/ResetPasswordPage";
@@ -146,6 +146,61 @@ interface NewUserPayload {
 
 function normalizeSubscriptionPlan(value: unknown): SubscriptionPlan {
   return value === "premium" ? "premium" : "free";
+}
+
+const PREMIUM_CONTACT_EMAIL = "julien.messaoudi@edu.esiee.fr";
+const PREMIUM_ACTIVATIONS_KEY = "gaptrack_premium_activations_v1";
+
+function isPremiumPlan(plan: SubscriptionPlan | undefined): boolean {
+  return normalizeSubscriptionPlan(plan) === "premium";
+}
+
+function buildPremiumRequestMailto(params: { email?: string; name?: string; organization?: string; source?: string } = {}): string {
+  const subject = "Demande d’activation Premium GapTrack";
+  const body = [
+    "Bonjour Julien,",
+    "",
+    "Je souhaite demander l’activation de GapTrack Premium pour cette adresse e-mail :",
+    params.email ? `E-mail : ${params.email}` : "E-mail : ",
+    params.name ? `Nom : ${params.name}` : "Nom : ",
+    params.organization ? `Organisation : ${params.organization}` : "Organisation : ",
+    params.source ? `Origine : ${params.source}` : "Origine : GapTrack",
+    "",
+    "Merci.",
+  ].join("\n");
+
+  return `mailto:${PREMIUM_CONTACT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
+
+function loadPremiumActivations(): Record<string, true> {
+  try {
+    const raw = localStorage.getItem(PREMIUM_ACTIVATIONS_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function savePremiumActivations(map: Record<string, true>) {
+  try {
+    localStorage.setItem(PREMIUM_ACTIVATIONS_KEY, JSON.stringify(map));
+  } catch {}
+}
+
+function setPremiumActivationForEmail(email: string, plan: SubscriptionPlan) {
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) return;
+  const map = loadPremiumActivations();
+  if (plan === "premium") map[normalizedEmail] = true;
+  else delete map[normalizedEmail];
+  savePremiumActivations(map);
+}
+
+function isPremiumActivatedForEmail(email: string): boolean {
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) return false;
+  return Boolean(loadPremiumActivations()[normalizedEmail]);
 }
 
 function saveSelectedSubscriptionPlan(plan: SubscriptionPlan) {
@@ -1659,6 +1714,10 @@ function userCanManageUsers(user: AppUser | null | undefined): boolean {
   return normalizeUserRole(user?.role) === "admin";
 }
 
+function userCanManageSubscriptions(user: AppUser | null | undefined): boolean {
+  return normalizeEmail(user?.email || "") === normalizeEmail(PREMIUM_CONTACT_EMAIL);
+}
+
 function userCanEditAudit(user: AppUser | null | undefined): boolean {
   const role = normalizeUserRole(user?.role);
   return role === "admin" || role === "auditor" || role === "contributor";
@@ -2585,6 +2644,8 @@ function UserManagementDialog({
   onUpdateUser,
   onDeleteUser,
   onResetPassword,
+  onActivatePremiumByEmail,
+  canManageSubscriptions,
 }: {
   open: boolean;
   onClose: () => void;
@@ -2595,13 +2656,17 @@ function UserManagementDialog({
   onUpdateUser: (userId: string, patch: Partial<AppUser>) => void;
   onDeleteUser: (userId: string) => void;
   onResetPassword: (userId: string, password: string) => Promise<void>;
+  onActivatePremiumByEmail: (email: string) => void;
+  canManageSubscriptions: boolean;
 }) {
   useEffect(()=>{ document.body.style.overflow = open ? 'hidden' : ''; return () => { document.body.style.overflow = ''; }; }, [open]);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [organization, setOrganization] = useState(activeUser?.organization || "");
   const [role, setRole] = useState<UserRole>("contributor");
+  const [newUserPlan, setNewUserPlan] = useState<SubscriptionPlan>("free");
   const [password, setPassword] = useState("");
+  const [premiumEmail, setPremiumEmail] = useState("");
 
   useEffect(() => {
     if (open) {
@@ -2609,7 +2674,9 @@ function UserManagementDialog({
       setEmail("");
       setOrganization(activeUser?.organization || "");
       setRole("contributor");
+      setNewUserPlan("free");
       setPassword("");
+      setPremiumEmail("");
     }
   }, [open, activeUser?.organization]);
 
@@ -2620,12 +2687,20 @@ function UserManagementDialog({
 
   async function addUser() {
     if (!canManage) return;
-    const ok = await onAddUser({ name, email, password, role, organization });
+    const ok = await onAddUser({
+      name,
+      email,
+      password,
+      role,
+      organization,
+      subscriptionPlan: canManageSubscriptions ? newUserPlan : "free",
+    });
     if (ok) {
       setName("");
       setEmail("");
       setPassword("");
       setRole("contributor");
+      setNewUserPlan("free");
     }
   }
 
@@ -2652,6 +2727,9 @@ function UserManagementDialog({
               </div>
               <Badge variant="outline" className={userRoleBadgeClass(activeUser?.role)}>
                 {userRoleLabel(activeUser?.role, lang)}
+              </Badge>
+              <Badge variant="outline" className={subscriptionPlanBadgeClass(activeUser?.subscriptionPlan)}>
+                {subscriptionPlanLabel(activeUser?.subscriptionPlan)}
               </Badge>
             </div>
           </div>
@@ -2692,6 +2770,18 @@ function UserManagementDialog({
                     </SelectContent>
                   </Select>
                 </div>
+                {canManageSubscriptions && (
+                  <div>
+                    <label className="text-sm text-muted-foreground">{lang === "fr" ? "Offre" : "Plan"}</label>
+                    <Select value={newUserPlan} onValueChange={(v) => setNewUserPlan(normalizeSubscriptionPlan(v))}>
+                      <SelectTrigger>{subscriptionPlanLabel(newUserPlan)}</SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="free">Free</SelectItem>
+                        <SelectItem value="premium">Premium</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
                 <div className="md:col-span-2">
                   <label className="text-sm text-muted-foreground">{lang === "fr" ? "Mot de passe temporaire" : "Temporary password"}</label>
                   <Input value={password} onChange={(e) => setPassword(e.target.value)} type="password" />
@@ -2701,6 +2791,37 @@ function UserManagementDialog({
                 <UserPlus className="mr-2 h-4 w-4" />
                 {lang === "fr" ? "Créer l’utilisateur" : "Create user"}
               </Button>
+            </div>
+          )}
+
+          {canManage && canManageSubscriptions && (
+            <div className="rounded-2xl border border-cyan-500/30 bg-cyan-500/10 p-4">
+              <div className="mb-2 flex items-center gap-2 font-medium text-cyan-900 dark:text-cyan-100">
+                <ShieldCheck className="h-4 w-4" />
+                {lang === "fr" ? "Activation Premium par adresse e-mail" : "Premium activation by email"}
+              </div>
+              <p className="mb-3 text-sm text-cyan-900/80 dark:text-cyan-100/80">
+                {lang === "fr"
+                  ? "Saisissez l’adresse reçue par e-mail : elle sera autorisée en Premium lors de sa prochaine connexion sur cette instance GapTrack."
+                  : "Enter the address received by email: it will be allowed as Premium on the next sign-in on this GapTrack instance."}
+              </p>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Input
+                  value={premiumEmail}
+                  onChange={(e) => setPremiumEmail(e.target.value)}
+                  type="email"
+                  placeholder="client@entreprise.com"
+                />
+                <Button
+                  type="button"
+                  onClick={() => {
+                    onActivatePremiumByEmail(premiumEmail);
+                    setPremiumEmail("");
+                  }}
+                >
+                  {lang === "fr" ? "Activer Premium" : "Activate Premium"}
+                </Button>
+              </div>
             </div>
           )}
 
@@ -2721,6 +2842,24 @@ function UserManagementDialog({
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2">
+                      {canManageSubscriptions ? (
+                        <Select
+                          value={normalizeSubscriptionPlan(u.subscriptionPlan)}
+                          disabled={!canManage}
+                          onValueChange={(v) => onUpdateUser(u.id, { subscriptionPlan: normalizeSubscriptionPlan(v) })}
+                        >
+                          <SelectTrigger className="w-[150px]">{subscriptionPlanLabel(u.subscriptionPlan)}</SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="free">Free</SelectItem>
+                            <SelectItem value="premium">Premium</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <Badge variant="outline" className={subscriptionPlanBadgeClass(u.subscriptionPlan)}>
+                          {subscriptionPlanLabel(u.subscriptionPlan)}
+                        </Badge>
+                      )}
+
                       <Select
                         value={u.role}
                         disabled={!canManage || disablingLastAdmin}
@@ -3720,6 +3859,7 @@ function Toolbar({
   canManageAudits,
   canDeleteAudits,
   onOpenUsers,
+  onRequestPremium,
   onLogout
 }: {
   lang: LangKey;
@@ -3743,6 +3883,7 @@ function Toolbar({
   canManageAudits?: boolean;
   canDeleteAudits?: boolean;
   onOpenUsers?: () => void;
+  onRequestPremium?: () => void;
   onLogout?: () => void;
 }) {
   const t = I18N[lang];
@@ -3794,6 +3935,19 @@ function Toolbar({
                 <Badge variant="outline" className={"ml-1 " + subscriptionPlanBadgeClass(activeUser.subscriptionPlan)}>
                   {subscriptionPlanLabel(activeUser.subscriptionPlan)}
                 </Badge>
+              </Button>
+            )}
+
+            {activeUser && !isPremiumPlan(activeUser.subscriptionPlan) && onRequestPremium && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="hidden lg:flex"
+                onClick={onRequestPremium}
+                title={lang === "fr" ? "Demander l’activation Premium" : "Request Premium activation"}
+              >
+                <Mail className="h-4 w-4 mr-1" />
+                {lang === "fr" ? "Demander Premium" : "Request Premium"}
               </Button>
             )}
 
@@ -4002,7 +4156,7 @@ function useStickyShadow() {
   return { sentinelRef, isStuck };
 }
 
-function ListingView({ rows, setRows, lang, onOpenEvidence, evidenceCountFor, evidenceListFor, proofStatusFor, setProofStatusForRow, plans, openRequest, onOpenRequestConsumed }: { rows: ControlItem[]; setRows: (r: ControlItem[]) => void; lang: LangKey; theme: "dark" | "light"; onOpenEvidence: (control: ControlItem) => void; evidenceCountFor: (controlId: string) => number; evidenceListFor: (controlId: string) => EvidenceItem[]; proofStatusFor: (controlId: string) => EvidenceStatus; setProofStatusForRow: (controlId: string, status: EvidenceStatus) => void; plans: Record<string, PlanAction>; openRequest?: ListingOpenRequest | null; onOpenRequestConsumed?: () => void}) {
+function ListingView({ rows, setRows, lang, onOpenEvidence, evidenceCountFor, evidenceListFor, proofStatusFor, setProofStatusForRow, plans, openRequest, onOpenRequestConsumed, canExport = true, onPremiumRequired }: { rows: ControlItem[]; setRows: (r: ControlItem[]) => void; lang: LangKey; theme: "dark" | "light"; onOpenEvidence: (control: ControlItem) => void; evidenceCountFor: (controlId: string) => number; evidenceListFor: (controlId: string) => EvidenceItem[]; proofStatusFor: (controlId: string) => EvidenceStatus; setProofStatusForRow: (controlId: string, status: EvidenceStatus) => void; plans: Record<string, PlanAction>; openRequest?: ListingOpenRequest | null; onOpenRequestConsumed?: () => void; canExport?: boolean; onPremiumRequired?: (featureLabel?: string) => boolean}) {
   const t = I18N[lang];
 
   const { sentinelRef: listingSentinelRef, isStuck: listingStuck } = useStickyShadow();
@@ -4046,6 +4200,10 @@ function ListingView({ rows, setRows, lang, onOpenEvidence, evidenceCountFor, ev
 
   
   function exportCSV(rows: ControlItem[], lang: LangKey) {
+      if (!canExport) {
+        onPremiumRequired?.(lang === "fr" ? "L’export CSV du listing" : "Listing CSV export");
+        return;
+      }
 	  // Excel FR attend souvent ; (séparateur de liste) et UTF-8 avec BOM
 	  const delimiter = ";";
 	  const NEWLINE = "\r\n";
@@ -4620,8 +4778,13 @@ function ListingView({ rows, setRows, lang, onOpenEvidence, evidenceCountFor, ev
                 <X className="h-4 w-4" />
                 {lang === "fr" ? "Réinitialiser" : "Reset"}
               </Button>
-              <Button variant="outline" size="sm" onClick={() => exportCSV(sorted, lang)}>
-                {lang === "fr" ? "Exporter CSV" : "Export CSV"}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => exportCSV(sorted, lang)}
+                title={!canExport ? (lang === "fr" ? "Premium requis" : "Premium required") : undefined}
+              >
+                {lang === "fr" ? "Exporter CSV" : "Export CSV"}{!canExport ? " · Premium" : ""}
               </Button>
               <Button
                 onClick={() => bulkSet(1)}
@@ -5349,6 +5512,8 @@ function PlanView({
   proofStatusFor,
   setProofStatusForRow,
   onOpenEvidence,
+  canExport = true,
+  onPremiumRequired,
 }: {
   rows: ControlItem[];
   lang: LangKey;
@@ -5358,6 +5523,8 @@ function PlanView({
   proofStatusFor: (controlId: string) => EvidenceStatus;
   setProofStatusForRow: (controlId: string, status: EvidenceStatus) => void;
   onOpenEvidence: (control: ControlItem) => void;
+  canExport?: boolean;
+  onPremiumRequired?: (featureLabel?: string) => boolean;
 }) {
   const t = I18N[lang];
 
@@ -5641,6 +5808,10 @@ function PlanView({
   };
 
   const exportPlanCSV = () => {
+    if (!canExport) {
+      onPremiumRequired?.(lang === "fr" ? "L’export CSV du plan d’action" : "Action plan CSV export");
+      return;
+    }
     try {
       const delimiter = ";";
       const NEWLINE = "\r\n";
@@ -5700,6 +5871,10 @@ function PlanView({
   };
 
   const exportPlanPDF = () => {
+    if (!canExport) {
+      onPremiumRequired?.(lang === "fr" ? "L’export PDF du plan d’action" : "Action plan PDF export");
+      return;
+    }
     try {
       const escHtml = (v: any) =>
         String(v ?? "")
@@ -6000,11 +6175,21 @@ function PlanView({
             </div>
 
             <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2 border-t pt-3">
-              <Button variant="outline" size="sm" onClick={exportPlanCSV}>
-                {lang === "fr" ? "Exporter CSV (Plan)" : "Export CSV (Plan)"}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={exportPlanCSV}
+                title={!canExport ? (lang === "fr" ? "Premium requis" : "Premium required") : undefined}
+              >
+                {lang === "fr" ? "Exporter CSV (Plan)" : "Export CSV (Plan)"}{!canExport ? " · Premium" : ""}
               </Button>
-              <Button variant="outline" size="sm" onClick={exportPlanPDF}>
-                {lang === "fr" ? "Exporter PDF (Plan)" : "Export PDF (Plan)"}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={exportPlanPDF}
+                title={!canExport ? (lang === "fr" ? "Premium requis" : "Premium required") : undefined}
+              >
+                {lang === "fr" ? "Exporter PDF (Plan)" : "Export PDF (Plan)"}{!canExport ? " · Premium" : ""}
               </Button>
             </div>
           </div>
@@ -6279,6 +6464,7 @@ function DashboardView({
   lang,
   compareWith,
   onExport,
+  canExport = true,
   onOpenDomain,
   onOpenControl,
   proofStatusFor,
@@ -6288,6 +6474,7 @@ function DashboardView({
   lang: LangKey;
   compareWith?: ControlItem[] | null;
   onExport: () => void;
+  canExport?: boolean;
   onOpenDomain?: (domain: string) => void;
   onOpenControl?: (controlId: string, domain: string) => void;
   proofStatusFor: (controlId: string) => EvidenceStatus;
@@ -6558,9 +6745,14 @@ return (
               <BarChart3 className="h-4 w-4 mr-1" />
               {lang === "fr" ? "Voir les domaines" : "View domains"}
             </Button>
-            <Button variant="outline" size="sm" onClick={onExport}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onExport}
+              title={!canExport ? (lang === "fr" ? "Premium requis" : "Premium required") : undefined}
+            >
               <Download className="h-4 w-4 mr-1" />
-              {t.export}
+              {t.export}{!canExport ? " · Premium" : ""}
             </Button>
           </div>
         </div>
@@ -7437,7 +7629,7 @@ function RisksView({ rows, plans, lang, proofStatusFor, onOpenControl, onOpenPla
   );
 }
 
-function AuditLogView({ entries, lang, onExport, onClear, canClear }: { entries: AuditLogEntry[]; lang: LangKey; onExport: () => void; onClear: () => void; canClear: boolean }) {
+function AuditLogView({ entries, lang, onExport, onClear, canClear, canExport = true }: { entries: AuditLogEntry[]; lang: LangKey; onExport: () => void; onClear: () => void; canClear: boolean; canExport?: boolean }) {
   const [query, setQuery] = useState("");
   const [actionFilter, setActionFilter] = useState<"all" | AuditLogAction>("all");
 
@@ -7480,7 +7672,16 @@ function AuditLogView({ entries, lang, onExport, onClear, canClear }: { entries:
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button variant="outline" size="sm" onClick={onExport} disabled={entries.length === 0}><Download className="h-4 w-4 mr-1" />{lang === "fr" ? "Exporter CSV" : "Export CSV"}</Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onExport}
+                disabled={entries.length === 0}
+                title={!canExport ? (lang === "fr" ? "Premium requis" : "Premium required") : undefined}
+              >
+                <Download className="h-4 w-4 mr-1" />
+                {lang === "fr" ? "Exporter CSV" : "Export CSV"}{!canExport ? " · Premium" : ""}
+              </Button>
               {canClear && <Button variant="ghost" size="sm" onClick={onClear} disabled={entries.length === 0}><Trash2 className="h-4 w-4 mr-1" />{lang === "fr" ? "Vider" : "Clear"}</Button>}
             </div>
           </div>
@@ -8546,10 +8747,12 @@ function GapTrackApp({
   }, [activeUser, route, navigate]);
 
   const canManageUsersFlag = userCanManageUsers(activeUser);
+  const canManageSubscriptionsFlag = userCanManageSubscriptions(activeUser);
   const canEditAuditFlag = userCanEditAudit(activeUser);
   const canReviewEvidenceFlag = userCanReviewEvidence(activeUser);
   const canManageAuditsFlag = userCanManageAudits(activeUser);
   const canDeleteAuditsFlag = userCanDeleteAudits(activeUser);
+  const isPremiumUser = isPremiumPlan(activeUser?.subscriptionPlan);
 
   // Journal d’audit local, séparé de l’undo/redo pour rester traçable.
   const [auditLog, setAuditLog] = useState<AuditLogEntry[]>([]);
@@ -8618,13 +8821,39 @@ function GapTrackApp({
     return false;
   }, [canDeleteAuditsFlag, lang]);
 
+  const requestPremiumByEmail = React.useCallback((source?: string) => {
+    const href = buildPremiumRequestMailto({
+      email: activeUser?.email,
+      name: activeUser?.name,
+      organization: activeUser?.organization,
+      source: source || "Application GapTrack",
+    });
+    window.location.href = href;
+  }, [activeUser?.email, activeUser?.name, activeUser?.organization]);
+
+  const requirePremiumFeature = React.useCallback((featureLabel?: string) => {
+    if (isPremiumUser) return true;
+    toast.error(
+      lang === "fr"
+        ? `${featureLabel || "Cette fonctionnalité"} est réservée à l’offre Premium.`
+        : `${featureLabel || "This feature"} is reserved for the Premium plan.`,
+      {
+        action: {
+          label: lang === "fr" ? "Demander Premium" : "Request Premium",
+          onClick: () => requestPremiumByEmail(featureLabel),
+        },
+      }
+    );
+    return false;
+  }, [isPremiumUser, lang, requestPremiumByEmail]);
+
   const syncSupabaseAuthenticatedUser = React.useCallback((profile: { email: string; name?: string; organization?: string; role?: UserRole; subscriptionPlan?: SubscriptionPlan }) => {
     const email = normalizeEmail(profile.email);
 
     if (!email) return;
 
     const now = new Date().toISOString();
-    const subscriptionPlan = normalizeSubscriptionPlan(profile.subscriptionPlan);
+    const profilePlan = normalizeSubscriptionPlan(profile.subscriptionPlan);
 
     setUsers((prev) => {
       const existing = prev.find((u) => normalizeEmail(u.email) === email);
@@ -8632,6 +8861,9 @@ function GapTrackApp({
       let next: AppUser[];
 
       if (existing) {
+        const subscriptionPlan = isPremiumActivatedForEmail(email) || isPremiumPlan(existing.subscriptionPlan)
+          ? "premium"
+          : profilePlan;
         active = {
           ...existing,
           name: profile.name?.trim() || existing.name || email,
@@ -8643,6 +8875,7 @@ function GapTrackApp({
         };
         next = prev.map((u) => u.id === existing.id ? active : u);
       } else {
+        const subscriptionPlan = isPremiumActivatedForEmail(email) ? "premium" : profilePlan;
         active = {
           id: uuid(),
           name: profile.name?.trim() || email,
@@ -8720,7 +8953,7 @@ function GapTrackApp({
       email,
       role: "admin",
       organization: payload.organization?.trim() || undefined,
-      subscriptionPlan: normalizeSubscriptionPlan(payload.subscriptionPlan),
+      subscriptionPlan: "free",
       createdAt: new Date().toISOString(),
       lastLoginAt: new Date().toISOString(),
       active: true,
@@ -8788,21 +9021,26 @@ function GapTrackApp({
       email,
       role: normalizeUserRole(payload.role),
       organization: payload.organization?.trim() || activeUser?.organization || undefined,
-      subscriptionPlan: normalizeSubscriptionPlan(payload.subscriptionPlan || activeUser?.subscriptionPlan),
+      subscriptionPlan: canManageSubscriptionsFlag ? normalizeSubscriptionPlan(payload.subscriptionPlan) : "free",
       createdAt: new Date().toISOString(),
       active: true,
       passwordHash: await hashLocalPassword(payload.password, email),
     };
+    if (user.subscriptionPlan === "premium") setPremiumActivationForEmail(user.email, "premium");
     const next = [user, ...users];
     saveUsers(next);
     setUsers(next);
     toast.success(lang === "fr" ? "Utilisateur créé." : "User created.");
     return true;
-  }, [activeUser?.organization, activeUser?.subscriptionPlan, canManageUsersFlag, lang, users]);
+  }, [activeUser?.organization, canManageSubscriptionsFlag, canManageUsersFlag, lang, users]);
 
   const updateUser = React.useCallback((userId: string, patch: Partial<AppUser>) => {
     if (!canManageUsersFlag) {
       toast.error(lang === "fr" ? "Action réservée aux administrateurs." : "Administrators only.");
+      return;
+    }
+    if (patch.subscriptionPlan && !canManageSubscriptionsFlag) {
+      toast.error(lang === "fr" ? "Seul le propriétaire du service peut activer Premium." : "Only the service owner can activate Premium.");
       return;
     }
     setUsers((prev) => {
@@ -8812,11 +9050,41 @@ function GapTrackApp({
         toast.error(lang === "fr" ? "Impossible de retirer le dernier administrateur actif." : "Cannot remove the last active administrator.");
         return prev;
       }
-      const next = prev.map((u) => u.id === userId ? { ...u, ...patch, role: patch.role ? normalizeUserRole(patch.role) : u.role } : u);
+      if (target && patch.subscriptionPlan) {
+        setPremiumActivationForEmail(target.email, normalizeSubscriptionPlan(patch.subscriptionPlan));
+      }
+      const next = prev.map((u) => u.id === userId ? {
+        ...u,
+        ...patch,
+        role: patch.role ? normalizeUserRole(patch.role) : u.role,
+        subscriptionPlan: patch.subscriptionPlan ? normalizeSubscriptionPlan(patch.subscriptionPlan) : normalizeSubscriptionPlan(u.subscriptionPlan),
+      } : u);
       saveUsers(next);
       return next;
     });
-  }, [canManageUsersFlag, lang]);
+    if (patch.subscriptionPlan) {
+      toast.success(lang === "fr" ? "Offre mise à jour." : "Plan updated.");
+    }
+  }, [canManageSubscriptionsFlag, canManageUsersFlag, lang]);
+
+  const activatePremiumByEmail = React.useCallback((rawEmail: string) => {
+    if (!canManageSubscriptionsFlag) {
+      toast.error(lang === "fr" ? "Seul le propriétaire du service peut activer Premium." : "Only the service owner can activate Premium.");
+      return;
+    }
+    const email = normalizeEmail(rawEmail);
+    if (!email) {
+      toast.error(lang === "fr" ? "Adresse e-mail obligatoire." : "Email is required.");
+      return;
+    }
+    setPremiumActivationForEmail(email, "premium");
+    setUsers((prev) => {
+      const next = prev.map((u) => normalizeEmail(u.email) === email ? { ...u, subscriptionPlan: "premium" as SubscriptionPlan } : u);
+      saveUsers(next);
+      return next;
+    });
+    toast.success(lang === "fr" ? `Premium activé pour ${email}.` : `Premium activated for ${email}.`);
+  }, [canManageSubscriptionsFlag, lang]);
 
   const deleteUser = React.useCallback((userId: string) => {
     if (!canManageUsersFlag) {
@@ -9435,10 +9703,16 @@ function GapTrackApp({
     toast.error(
       lang === "fr"
         ? "Offre Free : 1 audit actif. Passez en Premium pour créer plusieurs audits."
-        : "Free plan: 1 active audit. Upgrade to Premium to create multiple audits."
+        : "Free plan: 1 active audit. Upgrade to Premium to create multiple audits.",
+      {
+        action: {
+          label: lang === "fr" ? "Demander Premium" : "Request Premium",
+          onClick: () => requestPremiumByEmail("Création de plusieurs audits"),
+        },
+      }
     );
     return false;
-  }, [activeUser?.subscriptionPlan, lang, sessions]);
+  }, [activeUser?.subscriptionPlan, lang, requestPremiumByEmail, sessions]);
 
   const createSessionFromRows = React.useCallback((session: Session, baseRows: ControlItem[]) => {
     if (!requireAuditManager()) return;
@@ -9638,6 +9912,7 @@ function GapTrackApp({
   }, [sessions, activeSessionId]);
 
   const handleExport = React.useCallback(() => {
+    if (!requirePremiumFeature(lang === "fr" ? "L’export PDF du rapport" : "PDF report export")) return;
     try {
       const src = document.querySelector('.print-only') as HTMLElement | null;
       if (!src) { toast.error(lang==='fr'?'Aucun contenu a imprimer':'Nothing to print'); return; }
@@ -9664,7 +9939,7 @@ function GapTrackApp({
       console.error(e);
       toast.error('Export error');
     }
-  }, [lang, sessions, activeSessionId]);
+  }, [activeSessionId, lang, requirePremiumFeature, sessions]);
 
   const t = I18N[lang];
   const delDesc = sessions.length <= 1
@@ -9742,6 +10017,7 @@ function GapTrackApp({
         canManageAudits={canManageAuditsFlag}
         canDeleteAudits={canDeleteAuditsFlag}
         onOpenUsers={() => setUsersDialogOpen(true)}
+        onRequestPremium={() => requestPremiumByEmail("Barre d’outils GapTrack")}
         onLogout={() => {
           logoutUser();
           navigate("home", true);
@@ -9773,6 +10049,8 @@ function GapTrackApp({
 				plans={plans}
 				openRequest={listingOpenRequest}
 				onOpenRequestConsumed={() => setListingOpenRequest(null)}
+					canExport={isPremiumUser}
+					onPremiumRequired={requirePremiumFeature}
               />
                 </motion.div>
               )}
@@ -9841,6 +10119,7 @@ function GapTrackApp({
 				lang={lang}
 				compareWith={compareRows || undefined}
 				onExport={handleExport}
+					canExport={isPremiumUser}
 				onOpenDomain={(domain) => {
 					openListingFromDashboard(domain);
 				}}
@@ -9869,9 +10148,13 @@ function GapTrackApp({
                   <AuditLogView
                     entries={auditLog}
                     lang={lang}
-                    onExport={() => exportAuditLogCSV(auditLog, lang)}
+                    onExport={() => {
+                      if (!requirePremiumFeature(lang === "fr" ? "L’export CSV du journal" : "Audit log CSV export")) return;
+                      exportAuditLogCSV(auditLog, lang);
+                    }}
                     onClear={clearAuditLog}
                     canClear={canDeleteAuditsFlag}
+                    canExport={isPremiumUser}
                   />
                 </motion.div>
               )}
@@ -9892,6 +10175,8 @@ function GapTrackApp({
 				proofStatusFor={proofStatusForRow}
 				setProofStatusForRow={setProofStatusForRow}
 				onOpenEvidence={openEvidence}
+					canExport={isPremiumUser}
+					onPremiumRequired={requirePremiumFeature}
 			  />
                 </motion.div>
               )}
@@ -9929,6 +10214,8 @@ function GapTrackApp({
         onUpdateUser={updateUser}
         onDeleteUser={deleteUser}
         onResetPassword={resetUserPassword}
+        onActivatePremiumByEmail={activatePremiumByEmail}
+        canManageSubscriptions={canManageSubscriptionsFlag}
       />
 
       <CreateAuditWizard

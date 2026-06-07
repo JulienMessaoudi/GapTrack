@@ -81,6 +81,24 @@ function isExistingAccountError(error: { message?: string; status?: number } | n
   );
 }
 
+const PREMIUM_CONTACT_EMAIL = "julien.messaoudi@edu.esiee.fr";
+
+function buildPremiumRequestMailto(params: { email?: string; name?: string; organization?: string; source?: string } = {}): string {
+  const subject = "Demande d’activation Premium GapTrack";
+  const body = [
+    "Bonjour Julien,",
+    "",
+    "Je souhaite demander l’activation de GapTrack Premium pour cette adresse e-mail :",
+    params.email ? `E-mail : ${params.email}` : "E-mail : ",
+    params.name ? `Nom : ${params.name}` : "Nom : ",
+    params.organization ? `Organisation : ${params.organization}` : "Organisation : ",
+    params.source ? `Origine : ${params.source}` : "Origine : Page d’inscription GapTrack",
+    "",
+    "Merci.",
+  ].join("\n");
+
+  return `mailto:${PREMIUM_CONTACT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
 
 function normalizeSubscriptionPlan(value: unknown): SubscriptionPlan {
   return value === "premium" ? "premium" : "free";
@@ -92,16 +110,14 @@ function planLabel(plan: SubscriptionPlan): string {
 
 function planDescription(plan: SubscriptionPlan): string {
   return plan === "premium"
-    ? "Audits illimités, collaboration avancée et reporting complet."
-    : "1 audit actif, preuves locales et export PDF standard.";
+    ? "Audits illimités, exports PDF/CSV et activation manuelle après demande."
+    : "1 audit actif, preuves locales et aucun export PDF/CSV.";
 }
 
 function readSelectedPlan(): SubscriptionPlan {
-  try {
-    return normalizeSubscriptionPlan(sessionStorage.getItem("gaptrack_selected_plan"));
-  } catch {
-    return "free";
-  }
+  // Le Premium ne peut plus être auto-sélectionné par un visiteur :
+  // il se demande par e-mail puis s’active manuellement par le propriétaire.
+  return "free";
 }
 
 export function LoginAccessPage({
@@ -158,6 +174,16 @@ export function LoginAccessPage({
     }
   }
 
+  function requestPremiumByEmail() {
+    window.location.href = buildPremiumRequestMailto({
+      email: cleanEmail(email),
+      name: name.trim(),
+      organization: organization.trim(),
+      source: "Page d’inscription GapTrack",
+    });
+    toast.info(lang === "fr" ? "Une demande Premium va être préparée par e-mail." : "A Premium request email will be prepared.");
+  }
+
   async function handleForgotPassword() {
     const targetEmail = cleanEmail(email);
 
@@ -206,7 +232,8 @@ export function LoginAccessPage({
               name: name.trim(),
               organization: organization.trim(),
               role: "admin",
-              subscriptionPlan: selectedPlan,
+              subscriptionPlan: "free",
+              premiumRequested: false,
             },
             emailRedirectTo: window.location.origin,
           },
@@ -345,7 +372,7 @@ export function LoginAccessPage({
             <h2>{isSetup ? "Créer un compte" : "Connexion"}</h2>
             <p>
               {isSetup
-                ? `Créez votre accès GapTrack ${planLabel(selectedPlan)}. Une confirmation e-mail sera obligatoire.`
+                ? `Créez votre accès GapTrack Free. Le Premium s’active ensuite manuellement après demande.`
                 : confirmationEmail
                   ? "Confirmez votre e-mail, puis connectez-vous à votre espace GapTrack"
                   : "Accédez à votre espace GapTrack"}
@@ -401,13 +428,13 @@ export function LoginAccessPage({
                 </button>
                 <button
                   type="button"
-                  className={selectedPlan === "premium" ? "gt-plan-option gt-plan-option-premium active" : "gt-plan-option gt-plan-option-premium"}
-                  onClick={() => setSelectedPlan("premium")}
-                  aria-pressed={selectedPlan === "premium"}
+                  className="gt-plan-option gt-plan-option-premium"
+                  onClick={requestPremiumByEmail}
+                  aria-pressed={false}
                 >
                   <span>Premium</span>
                   <strong>Sur devis</strong>
-                  <small>Équipes, rôles et audits illimités</small>
+                  <small>Demande par e-mail, activation manuelle</small>
                 </button>
               </div>
             ) : null}
@@ -417,10 +444,10 @@ export function LoginAccessPage({
                 <div className={`gt-selected-plan gt-selected-plan-${selectedPlan}`}>
                   <CheckCircle2 aria-hidden="true" />
                   <div>
-                    <span>Offre sélectionnée</span>
-                    <strong>{planLabel(selectedPlan)}</strong>
+                    <span>Offre activée à la création</span>
+                    <strong>Free</strong>
                   </div>
-                  <p>{planDescription(selectedPlan)}</p>
+                  <p>{planDescription("free")}</p>
                 </div>
 
                 <Field label="Nom">
@@ -475,7 +502,7 @@ export function LoginAccessPage({
 
             <button type="submit" className="gt-primary" disabled={busy}>
               {busy ? <Loader2 className="gt-spin" aria-hidden="true" /> : null}
-              <span>{isSetup ? `Créer le compte ${planLabel(selectedPlan)}` : "Se connecter"}</span>
+              <span>{isSetup ? "Créer le compte Free" : "Se connecter"}</span>
               {!busy ? <ArrowRight aria-hidden="true" /> : null}
             </button>
 
@@ -485,7 +512,7 @@ export function LoginAccessPage({
             <div className="gt-protection-icon"><ShieldCheck aria-hidden="true" /></div>
             <div>
               <h3>Vos données sont protégées</h3>
-              <p>Authentification Supabase, session protégée et offre choisie conservée dans le profil utilisateur.</p>
+              <p>Authentification Supabase, session protégée et activation Premium contrôlée par le propriétaire.</p>
             </div>
           </div>
         </section>
@@ -504,7 +531,7 @@ export function LoginAccessPage({
             <p>
               Cliquez sur le lien envoyé à <strong>{confirmationEmail}</strong>, puis revenez vous connecter.
             </p>
-            <p className="gt-confirm-plan">Offre sélectionnée : <strong>{planLabel(selectedPlan)}</strong></p>
+            <p className="gt-confirm-plan">Offre activée : <strong>Free</strong>. Le Premium s’active manuellement après validation.</p>
             <button
               type="button"
               className="gt-primary"

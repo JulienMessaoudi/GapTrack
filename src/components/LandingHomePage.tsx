@@ -24,6 +24,25 @@ import "./LandingHomePage.css";
 type LandingPageView = "plateforme" | "apropos";
 type SubscriptionPlan = "free" | "premium";
 
+const PREMIUM_CONTACT_EMAIL = "julien.messaoudi@edu.esiee.fr";
+
+function buildPremiumRequestMailto(source: string): string {
+  const subject = "Demande d’activation Premium GapTrack";
+  const body = [
+    "Bonjour Julien,",
+    "",
+    "Je souhaite demander l’activation de GapTrack Premium.",
+    "E-mail à activer : ",
+    "Nom : ",
+    "Organisation : ",
+    `Origine : ${source}`,
+    "",
+    "Merci.",
+  ].join("\n");
+
+  return `mailto:${PREMIUM_CONTACT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
+
 export function LandingHomePage({
   onAccess,
   initialPage = "plateforme",
@@ -144,12 +163,17 @@ function HomePage({
         </div>
       </section>
 
-      <PricingSection onSelectPlan={onAccess} />
+      <PricingSection
+        onSelectPlan={onAccess}
+        onRequestPremium={() => {
+          window.location.href = buildPremiumRequestMailto("Landing page GapTrack");
+        }}
+      />
     </>
   );
 }
 
-function PricingSection({ onSelectPlan }: { onSelectPlan: (plan: SubscriptionPlan) => void }) {
+function PricingSection({ onSelectPlan, onRequestPremium }: { onSelectPlan: (plan: SubscriptionPlan) => void; onRequestPremium: () => void }) {
   const plans = [
     {
       key: "free" as const,
@@ -157,8 +181,8 @@ function PricingSection({ onSelectPlan }: { onSelectPlan: (plan: SubscriptionPla
       badge: "Pour démarrer",
       price: "0€",
       period: "/ mois",
-      description: "Idéal pour tester GapTrack, préparer un premier audit et structurer vos preuves localement.",
-      features: ["1 audit actif", "Tableau de bord de maturité", "Preuves et notes locales", "Export PDF standard"],
+      description: "Idéal pour tester GapTrack, préparer un premier audit et structurer vos preuves localement, sans export.",
+      features: ["1 audit actif", "Tableau de bord consultable", "Preuves et notes locales", "Pas d’export PDF / CSV"],
       cta: "Commencer gratuitement",
     },
     {
@@ -167,9 +191,9 @@ function PricingSection({ onSelectPlan }: { onSelectPlan: (plan: SubscriptionPla
       badge: "Le plus complet",
       price: "Sur devis",
       period: "",
-      description: "Pensé pour les équipes, cabinets et organisations qui veulent collaborer et industrialiser leurs audits.",
-      features: ["Audits illimités", "Utilisateurs et rôles avancés", "Suivi des preuves à valider", "Reporting complet et accompagnement"],
-      cta: "Choisir Premium",
+      description: "Pensé pour les équipes, cabinets et organisations qui veulent collaborer, exporter leurs rapports et industrialiser leurs audits.",
+      features: ["Audits illimités", "Exports PDF / CSV", "Utilisateurs et rôles avancés", "Activation manuelle après demande"],
+      cta: "Demander Premium",
       highlighted: true,
     },
   ];
@@ -203,9 +227,13 @@ function PricingSection({ onSelectPlan }: { onSelectPlan: (plan: SubscriptionPla
                 <li key={feature}><CheckCircle2 aria-hidden="true" />{feature}</li>
               ))}
             </ul>
-            <button className={plan.highlighted ? "gth-primary" : "gth-secondary"} type="button" onClick={() => onSelectPlan(plan.key)}>
+            <button
+              className={plan.highlighted ? "gth-primary" : "gth-secondary"}
+              type="button"
+              onClick={() => plan.key === "premium" ? onRequestPremium() : onSelectPlan(plan.key)}
+            >
               {plan.cta}
-              <ArrowRight aria-hidden="true" />
+              {plan.key === "premium" ? <Mail aria-hidden="true" /> : <ArrowRight aria-hidden="true" />}
             </button>
           </article>
         ))}
