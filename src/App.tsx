@@ -9,7 +9,9 @@ import { toast } from "sonner";
 import {Filter, Redo2, Search, Undo2, ArrowUp, Paperclip, Download, Plus, Copy, X, Trash2, AlertTriangle, Shield, ShieldCheck, Lightbulb, Info, Loader2, CheckCircle2, AlertCircle, Pencil, BarChart3, ListChecks, ListTodo, Users, LogOut, UserPlus, History, ClipboardCheck, FileClock, FileCheck2, FileX2, Clock3} from "lucide-react";
 import { ResponsiveContainer, Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Tooltip } from "recharts";
 import { LoginAccessPage } from "./components/LoginAccessPage";
+import { ResetPasswordPage } from "./components/ResetPasswordPage";
 import { LandingHomePage } from "./components/LandingHomePage";
+import { supabase } from "./lib/supabase";
 
 
 // ==================
@@ -2544,6 +2546,7 @@ function UserAccessScreen(props: {
   users: AppUser[];
   onCreateAdmin: (payload: NewUserPayload) => Promise<void>;
   onLogin: (userId: string, password: string) => Promise<boolean>;
+  onSupabaseAuthenticated: (profile: { email: string; name?: string; organization?: string; role?: UserRole }) => void;
 }) {
   return <LoginAccessPage {...props} />;
 }
@@ -8397,6 +8400,10 @@ function PrintExecutive({
 }
 
 export default function App() {
+  if (window.location.pathname.startsWith("/reset-password")) {
+    return <ResetPasswordPage />;
+  }
+
   const [theme, setTheme] = useState<"light" | "dark">(() => {
     const savedTheme = loadSettings().theme;
     return savedTheme === "light" || savedTheme === "dark" ? savedTheme : "dark";
@@ -8511,6 +8518,97 @@ export default function App() {
     return false;
   }, [canDeleteAuditsFlag, lang]);
 
+  const syncSupabaseAuthenticatedUser = React.useCallback((profile: { email: string; name?: string; organization?: string; role?: UserRole }) => {
+    const email = normalizeEmail(profile.email);
+
+    if (!email) return;
+
+    const now = new Date().toISOString();
+
+    setUsers((prev) => {
+      const existing = prev.find((u) => normalizeEmail(u.email) === email);
+      let active: AppUser;
+      let next: AppUser[];
+
+      if (existing) {
+        active = {
+          ...existing,
+          name: profile.name?.trim() || existing.name || email,
+          organization: profile.organization?.trim() || existing.organization,
+          role: normalizeUserRole(profile.role || existing.role),
+          active: true,
+          lastLoginAt: now,
+        };
+        next = prev.map((u) => u.id === existing.id ? active : u);
+      } else {
+        active = {
+          id: uuid(),
+          name: profile.name?.trim() || email,
+          email,
+          role: normalizeUserRole(profile.role || (prev.length === 0 ? "admin" : "viewer")),
+          organization: profile.organization?.trim() || undefined,
+          createdAt: now,
+          lastLoginAt: now,
+          active: true,
+        };
+        next = [active, ...prev];
+      }
+
+      saveUsers(next);
+      saveActiveUserId(active.id);
+      setActiveUserId(active.id);
+      setLocalActorFromUser(active);
+      return next;
+    });
+
+    setShowAccessPage(false);
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+
+    supabase.auth.getSession().then(({ data }) => {
+      if (!mounted) return;
+      const user = data.session?.user;
+      if (!user?.email) return;
+
+      const meta = user.user_metadata || {};
+      syncSupabaseAuthenticatedUser({
+        email: user.email,
+        name: typeof meta.name === "string" ? meta.name : undefined,
+        organization: typeof meta.organization === "string" ? meta.organization : undefined,
+        role: meta.role === "admin" || meta.role === "auditor" || meta.role === "contributor" || meta.role === "viewer" ? meta.role : undefined,
+      });
+    }).catch(() => {});
+
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!mounted) return;
+
+      if (event === "SIGNED_OUT") {
+        clearActiveUserId();
+        setActiveUserId("");
+        setLocalActorFromUser(null);
+        return;
+      }
+
+      const user = session?.user;
+      if (!user?.email) return;
+
+      const meta = user.user_metadata || {};
+      syncSupabaseAuthenticatedUser({
+        email: user.email,
+        name: typeof meta.name === "string" ? meta.name : undefined,
+        organization: typeof meta.organization === "string" ? meta.organization : undefined,
+        role: meta.role === "admin" || meta.role === "auditor" || meta.role === "contributor" || meta.role === "viewer" ? meta.role : undefined,
+      });
+    });
+
+    return () => {
+      mounted = false;
+      listener.subscription.unsubscribe();
+    };
+  }, [syncSupabaseAuthenticatedUser]);
+
   const createAdminUser = React.useCallback(async (payload: NewUserPayload) => {
     const email = normalizeEmail(payload.email);
     const user: AppUser = {
@@ -8556,6 +8654,7 @@ export default function App() {
   }, [users, lang]);
 
   const logoutUser = React.useCallback(() => {
+    void supabase.auth.signOut();
     clearActiveUserId();
     setActiveUserId("");
     setLocalActorFromUser(null);
@@ -9470,6 +9569,7 @@ export default function App() {
           users={users}
           onCreateAdmin={createAdminUser}
           onLogin={loginUser}
+          onSupabaseAuthenticated={syncSupabaseAuthenticatedUser}
         />
       </MotionConfig>
     );

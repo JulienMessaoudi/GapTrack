@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   ArrowRight,
   Eye,
@@ -12,6 +12,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { supabase, setRememberMe as persistRememberMe } from "../lib/supabase";
 import "./LoginAccessPage.css";
 
 type LangKey = "fr" | "en";
@@ -38,6 +39,13 @@ interface NewUserPayload {
   organization?: string;
 }
 
+interface SupabaseAuthProfile {
+  email: string;
+  name?: string;
+  organization?: string;
+  role?: UserRole;
+}
+
 interface LoginAccessPageProps {
   mode: "setup" | "login";
   lang: LangKey;
@@ -47,6 +55,7 @@ interface LoginAccessPageProps {
   users: AppUser[];
   onCreateAdmin: (payload: NewUserPayload) => Promise<void>;
   onLogin: (userId: string, password: string) => Promise<boolean>;
+  onSupabaseAuthenticated?: (profile: SupabaseAuthProfile) => void;
   onBackHome?: () => void;
 }
 
@@ -57,18 +66,14 @@ function cleanEmail(value: string): string {
 export function LoginAccessPage({
   mode,
   lang,
-  users,
   onCreateAdmin,
-  onLogin,
+  onSupabaseAuthenticated,
   onBackHome,
 }: LoginAccessPageProps) {
-  const activeUsers = useMemo(() => users.filter((u) => u.active !== false), [users]);
-
   const [name, setName] = useState(lang === "fr" ? "Administrateur" : "Administrator");
   const [organization, setOrganization] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [selectedUserId, setSelectedUserId] = useState(activeUsers[0]?.id || "");
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -81,11 +86,6 @@ export function LoginAccessPage({
     };
   }, []);
 
-  useEffect(() => {
-    if (!selectedUserId && activeUsers[0]?.id) setSelectedUserId(activeUsers[0].id);
-  }, [selectedUserId, activeUsers]);
-
-  const selectedUser = activeUsers.find((u) => u.id === selectedUserId) || activeUsers[0] || null;
   const isSetup = mode === "setup";
 
   function goBackToHome() {
@@ -106,6 +106,26 @@ export function LoginAccessPage({
     }
   }
 
+  async function handleForgotPassword() {
+    const targetEmail = cleanEmail(email);
+
+    if (!targetEmail) {
+      toast.error(lang === "fr" ? "Saisissez votre adresse e-mail." : "Enter your email address.");
+      return;
+    }
+
+    const { error } = await supabase.auth.resetPasswordForEmail(targetEmail, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+
+    toast.success(lang === "fr" ? "E-mail de réinitialisation envoyé." : "Password reset email sent.");
+  }
+
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (busy) return;
@@ -123,18 +143,48 @@ export function LoginAccessPage({
           return;
         }
 
+        const targetEmail = cleanEmail(email);
+        persistRememberMe(true);
+
+        const { error } = await supabase.auth.signUp({
+          email: targetEmail,
+          password,
+          options: {
+            data: {
+              name: name.trim(),
+              organization: organization.trim(),
+              role: "admin",
+            },
+            emailRedirectTo: window.location.origin,
+          },
+        });
+
+        if (error) {
+          toast.error(error.message);
+          return;
+        }
+
         await onCreateAdmin({
           name: name.trim(),
-          email: cleanEmail(email),
+          email: targetEmail,
           password,
           role: "admin",
           organization: organization.trim(),
         });
+
+        onSupabaseAuthenticated?.({
+          email: targetEmail,
+          name: name.trim(),
+          organization: organization.trim(),
+          role: "admin",
+        });
         return;
       }
 
-      if (!selectedUserId) {
-        toast.error(lang === "fr" ? "Sélectionnez un utilisateur." : "Select a user.");
+      const targetEmail = cleanEmail(email);
+
+      if (!targetEmail) {
+        toast.error(lang === "fr" ? "Adresse e-mail obligatoire." : "Email is required.");
         return;
       }
 
@@ -143,7 +193,27 @@ export function LoginAccessPage({
         return;
       }
 
-      await onLogin(selectedUserId, password);
+      persistRememberMe(rememberMe);
+
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: targetEmail,
+        password,
+      });
+
+      if (error) {
+        toast.error(error.message);
+        return;
+      }
+
+      const profile = data.user?.user_metadata || {};
+      onSupabaseAuthenticated?.({
+        email: data.user?.email || targetEmail,
+        name: typeof profile.name === "string" ? profile.name : undefined,
+        organization: typeof profile.organization === "string" ? profile.organization : undefined,
+        role: profile.role === "admin" || profile.role === "auditor" || profile.role === "contributor" || profile.role === "viewer" ? profile.role : undefined,
+      });
+
+      toast.success(lang === "fr" ? "Connexion réussie." : "Signed in.");
     } finally {
       setBusy(false);
     }
@@ -223,18 +293,14 @@ export function LoginAccessPage({
                 </Field>
               </>
             ) : (
-              <Field label="Adresse e-mail" icon={<Mail />} selectField>
-                <select value={selectedUserId} onChange={(e) => setSelectedUserId(e.target.value)}>
-                  {activeUsers.length === 0 ? (
-                    <option value="">Aucun utilisateur</option>
-                  ) : (
-                    activeUsers.map((user) => (
-                      <option key={user.id} value={user.id}>
-                        {user.email || selectedUser?.email} · {user.name || "Utilisateur"}
-                      </option>
-                    ))
-                  )}
-                </select>
+              <Field label="Adresse e-mail" icon={<Mail />}>
+                <input
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  type="email"
+                  placeholder="admin@entreprise.com"
+                  autoComplete="email"
+                />
               </Field>
             )}
 
@@ -260,7 +326,7 @@ export function LoginAccessPage({
                   Se souvenir de moi
                 </label>
 
-                <button type="button" className="gt-link-button" onClick={() => toast.info("Fonction à connecter à ton backend plus tard.")}>Mot de passe oublié ?</button>
+                <button type="button" className="gt-link-button" onClick={handleForgotPassword}>Mot de passe oublié ?</button>
               </div>
             )}
 
@@ -275,7 +341,7 @@ export function LoginAccessPage({
             <div className="gt-protection-icon"><ShieldCheck aria-hidden="true" /></div>
             <div>
               <h3>Vos données sont protégées</h3>
-              <p>Connexion sécurisée, chiffrement local et accès maîtrisés pour vos audits, preuves et plans d’action.</p>
+              <p>Authentification Supabase, session protégée et accès maîtrisés pour vos audits, preuves et plans d’action.</p>
             </div>
           </div>
         </section>
