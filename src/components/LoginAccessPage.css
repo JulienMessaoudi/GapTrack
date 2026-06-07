@@ -854,44 +854,6 @@
 }
 
 
-/* Bouton retour vers la page d'accueil depuis la connexion */
-.gt-back-home {
-  position: fixed;
-  top: 28px;
-  left: clamp(24px, 7vw, 140px);
-  z-index: 30;
-  height: 44px;
-  padding: 0 18px;
-  border-radius: 12px;
-  border: 1px solid rgba(155, 178, 215, 0.25);
-  background: rgba(11, 22, 45, 0.72);
-  color: #f8fbff;
-  font-size: 14px;
-  font-weight: 800;
-  cursor: pointer;
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.06),
-    0 12px 30px rgba(0, 0, 0, 0.22);
-}
-
-.gt-back-home:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(120, 165, 255, 0.45);
-}
-
-@media (max-width: 780px) {
-  .gt-back-home {
-    top: 18px;
-    left: 18px;
-    height: 40px;
-    padding: 0 14px;
-    font-size: 13px;
-  }
-}
-
-
 /* Suppression définitive des contrôles langue/thème et SSO */
 .gt-top-actions,
 .gt-top-button,
@@ -906,7 +868,7 @@
 .gt-home-tab {
   position: fixed;
   top: 28px;
-  left: clamp(24px, 7vw, 140px);
+  right: clamp(24px, 7vw, 140px);
   z-index: 40;
   height: 44px;
   padding: 0 20px;
@@ -933,25 +895,10 @@
 @media (max-width: 780px) {
   .gt-home-tab {
     top: 18px;
-    left: 18px;
+    right: 18px;
     height: 40px;
     padding: 0 15px;
     font-size: 13px;
   }
 }
 
-
-/* Position du bouton Accueil à droite */
-.gt-home-tab,
-.gt-back-home {
-  left: auto !important;
-  right: clamp(24px, 7vw, 140px) !important;
-}
-
-@media (max-width: 780px) {
-  .gt-home-tab,
-  .gt-back-home {
-    left: auto !important;
-    right: 18px !important;
-  }
-}

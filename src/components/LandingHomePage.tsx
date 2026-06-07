@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import "./LandingHomePage.css";
 
-type LandingPageView = "plateforme" | "ressources" | "tarifs" | "apropos";
+type LandingPageView = "plateforme" | "apropos";
 
 export function LandingHomePage({ onAccess }: { onAccess: () => void }) {
   const [page, setPage] = useState<LandingPageView>("plateforme");
@@ -56,7 +56,7 @@ export function LandingHomePage({ onAccess }: { onAccess: () => void }) {
         </button>
       </header>
 
-      {page === "apropos" ? <AboutPage /> : <HomePage page={page} onAccess={onAccess} openPage={openPage} />}
+      {page === "apropos" ? <AboutPage /> : <HomePage onAccess={onAccess} openPage={openPage} />}
 
       <footer className="gth-signature" aria-label="Crédits">
         Conçu et développé par Julien Messaoudi
@@ -66,49 +66,26 @@ export function LandingHomePage({ onAccess }: { onAccess: () => void }) {
 }
 
 function HomePage({
-  page,
   onAccess,
   openPage,
 }: {
-  page: LandingPageView;
   onAccess: () => void;
   openPage: (page: LandingPageView) => void;
 }) {
-  const content = {
-    plateforme: {
-      kicker: "PLATEFORME SÉCURISÉE",
-      title: <>Centralisez vos preuves <br />et vos écarts <br /><span>dans un espace unique</span></>,
-      lead: "Une expérience fluide pour piloter vos audits, suivre les actions et partager les preuves avec les bonnes personnes.",
-    },
-    ressources: {
-      kicker: "RESSOURCES GRC/SSI",
-      title: <>Accélérez vos audits <br />avec des repères <br /><span>clairs et actionnables</span></>,
-      lead: "Référentiels, preuves, plans d’action et rapports sont pensés pour rendre la conformité plus lisible au quotidien.",
-    },
-    tarifs: {
-      kicker: "TARIFS SIMPLES",
-      title: <>Choisissez une offre <br />adaptée à votre <br /><span>niveau de maturité</span></>,
-      lead: "Démarrez simplement, puis ajoutez des audits, des utilisateurs et des capacités avancées quand votre organisation grandit.",
-    },
-    apropos: {
-      kicker: "À PROPOS DE GAPTRACK",
-      title: <>Une équipe engagée <br />pour simplifier l’audit <br /><span>et la conformité</span></>,
-      lead: "GapTrack a été conçu pour aider les équipes GRC/SSI à centraliser leurs audits, leurs preuves, leurs écarts et leurs plans d’action.",
-    },
-  }[page];
-
   return (
     <>
       <section className="gth-hero" id="top">
         <div className="gth-hero-copy">
           <div className="gth-kicker">
             <ShieldCheck aria-hidden="true" />
-            {content.kicker}
+            PLATEFORME SÉCURISÉE
           </div>
 
-          <h1>{content.title}</h1>
+          <h1>Centralisez vos preuves <br />et vos écarts <br /><span>dans un espace unique</span></h1>
 
-          <p className="gth-lead">{content.lead}</p>
+          <p className="gth-lead">
+            Une expérience fluide pour piloter vos audits, suivre les actions et partager les preuves avec les bonnes personnes.
+          </p>
 
           <div className="gth-benefits" aria-label="Bénéfices principaux">
             <Benefit icon={<ShieldCheck />} title="Centralisez vos audits et preuves" text="Toutes vos données au même endroit, accessibles et traçables." />
@@ -154,18 +131,18 @@ function AboutPage() {
           </div>
 
           <h1>
-            Une équipe engagée <br />
+            Un projet conçu <br />
             pour simplifier l’audit <br />
             <span>et la conformité</span>
           </h1>
 
           <p className="gth-lead gth-about-lead">
-            GapTrack a été conçu pour aider les équipes GRC/SSI à centraliser leurs audits, leurs preuves, leurs écarts et leurs plans d’action dans un outil plus simple, plus fiable et plus sécurisé.
+            GapTrack vise à aider les équipes GRC/SSI à centraliser leurs audits, leurs preuves, leurs écarts et leurs plans d’action dans un outil simple, fiable et sécurisé.
           </p>
 
           <div className="gth-hero-actions gth-about-actions">
-            <a className="gth-primary gth-about-contact-primary" href="mailto:contact@gaptrack.local">
-              Nous contacter
+            <a className="gth-primary gth-about-contact-primary" href="mailto:julien.messaoudi@edu.esiee.fr">
+              Contacter le créateur
               <Mail aria-hidden="true" />
             </a>
           </div>
@@ -175,50 +152,50 @@ function AboutPage() {
           <Principle
             icon={<Shield />}
             title="Mission"
-            text="Rendre la conformité plus simple, plus fiable et plus utile au quotidien pour les équipes."
+            text="Rendre la conformité plus simple, plus lisible et plus utile au quotidien pour les équipes."
             bullets={["Clarté opérationnelle", "Sécurité par conception"]}
             color="blue"
           />
           <Principle
             icon={<Eye />}
             title="Vision"
-            text="Devenir la plateforme de référence qui transforme la conformité en levier de confiance et de performance."
-            bullets={["Accompagnement durable", "Conformité pragmatique"]}
+            text="Proposer un outil capable de transformer la conformité en levier de confiance et de progression."
+            bullets={["Approche durable", "Conformité pragmatique"]}
             color="purple"
           />
           <Principle
             icon={<Users />}
             title="Engagement"
-            text="Placer la réussite de nos clients au cœur de tout ce que nous construisons."
-            bullets={["Écoute et proximité", "Transparence et éthique"]}
+            text="Garder une approche claire, transparente et centrée sur les besoins concrets des utilisateurs."
+            bullets={["Écoute et clarté", "Transparence et éthique"]}
             color="teal"
           />
         </div>
       </div>
 
       <div className="gth-about-section" id="gth-about-values">
-        <h2>Ce qui nous<br />anime</h2>
+        <h2>Ce qui anime<br />le projet</h2>
         <div className="gth-about-cards three">
-          <AboutValue icon={<Lightbulb />} title="Clarté" text="Nous rendons la conformité plus lisible et actionnable pour tous." tone="blue" />
-          <AboutValue icon={<ShieldCheck />} title="Fiabilité" text="Nous structurons les audits avec méthode, traçabilité et rigueur." tone="purple" />
-          <AboutValue icon={<Star />} title="Exigence" text="Nous allions simplicité, sécurité et qualité d’exécution." tone="teal" />
+          <AboutValue icon={<Lightbulb />} title="Clarté" text="GapTrack rend la conformité plus lisible et actionnable pour les équipes." tone="blue" />
+          <AboutValue icon={<ShieldCheck />} title="Fiabilité" text="Les audits sont structurés avec méthode, traçabilité et rigueur." tone="purple" />
+          <AboutValue icon={<Star />} title="Exigence" text="Le projet cherche à concilier simplicité, sécurité et qualité d’exécution." tone="teal" />
         </div>
       </div>
 
       <div className="gth-about-section gth-about-approach">
-        <h2>Notre<br />approche</h2>
+        <h2>Approche</h2>
         <div className="gth-about-flow">
-          <AboutValue icon={<Ear />} title="Comprendre" text="Nous écoutons les besoins terrain des équipes audit, risque et sécurité." tone="blue" />
+          <AboutValue icon={<Ear />} title="Comprendre" text="Partir des besoins terrain des équipes audit, risque et sécurité." tone="blue" />
           <span className="gth-flow-connector" />
-          <AboutValue icon={<Grid2X2 />} title="Structurer" text="Nous transformons la complexité réglementaire en workflows clairs." tone="purple" />
+          <AboutValue icon={<Grid2X2 />} title="Structurer" text="Transformer la complexité réglementaire en workflows clairs." tone="purple" />
           <span className="gth-flow-connector" />
-          <AboutValue icon={<Users />} title="Accompagner" text="Nous aidons les organisations à progresser durablement dans leur conformité." tone="teal" />
+          <AboutValue icon={<Users />} title="Accompagner" text="Aider les organisations à progresser durablement dans leur conformité." tone="teal" />
         </div>
       </div>
 
       <div className="gth-about-cta gth-about-cta-simple">
         <div className="gth-network" aria-hidden="true" />
-        <strong>Construisons une conformité plus simple, plus fiable et plus utile.</strong>
+        <strong>Un outil pensé pour une conformité plus simple, plus fiable et plus utile.</strong>
         <div className="gth-cta-shield" aria-hidden="true"><ShieldCheck /></div>
       </div>
     </section>
@@ -373,7 +350,6 @@ function DashboardMock() {
             <Meter label="ISO 27001" value="85%" />
             <Meter label="NIS2" value="78%" />
             <Meter label="RGPD" value="90%" />
-            <a href="#ressources">Voir tous les référentiels <ArrowRight /></a>
           </div>
         </div>
       </div>
