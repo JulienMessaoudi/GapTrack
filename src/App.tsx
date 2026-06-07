@@ -8399,11 +8399,41 @@ function PrintExecutive({
   );
 }
 
-export default function App() {
-  if (window.location.pathname.startsWith("/reset-password")) {
+type AppRoute = "main" | "reset-password";
+
+function getCurrentAppRoute(): AppRoute {
+  if (typeof window !== "undefined" && window.location.pathname.startsWith("/reset-password")) {
+    return "reset-password";
+  }
+
+  return "main";
+}
+
+function AppRouter() {
+  const [route, setRoute] = useState<AppRoute>(() => getCurrentAppRoute());
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const syncRoute = () => setRoute(getCurrentAppRoute());
+
+    window.addEventListener("popstate", syncRoute);
+
+    return () => {
+      window.removeEventListener("popstate", syncRoute);
+    };
+  }, []);
+
+  if (route === "reset-password") {
     return <ResetPasswordPage />;
   }
 
+  return <GapTrackApp />;
+}
+
+export default AppRouter;
+
+function GapTrackApp() {
   const [theme, setTheme] = useState<"light" | "dark">(() => {
     const savedTheme = loadSettings().theme;
     return savedTheme === "light" || savedTheme === "dark" ? savedTheme : "dark";
