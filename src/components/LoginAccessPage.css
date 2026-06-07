@@ -955,3 +955,66 @@
     max-width: none;
   }
 }
+
+/* Modèle d'accès Free / Premium sur la page d'authentification */
+.gt-plan-note,
+.gt-demo-callout {
+  margin-bottom: 18px;
+  padding: 14px 16px;
+  border: 1px solid rgba(90, 145, 255, .24);
+  border-radius: 12px;
+  background: rgba(48, 115, 255, .10);
+  color: #edf4ff;
+}
+
+.gt-plan-note strong,
+.gt-plan-note span,
+.gt-demo-callout strong,
+.gt-demo-callout span {
+  display: block;
+}
+
+.gt-plan-note strong,
+.gt-demo-callout strong {
+  color: #fff;
+  font-size: 14px;
+  font-weight: 850;
+}
+
+.gt-plan-note span,
+.gt-demo-callout span {
+  margin-top: 5px;
+  color: #b9c7dd;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.gt-demo-callout {
+  margin-top: 18px;
+  margin-bottom: 0;
+  border-color: rgba(67, 210, 184, .22);
+  background: rgba(28, 172, 162, .09);
+}
+
+.gt-demo-callout a {
+  display: inline-flex;
+  margin-top: 12px;
+  color: #7ea8ff;
+  font-size: 14px;
+  font-weight: 850;
+  text-decoration: none;
+}
+
+.gt-demo-callout a:hover {
+  color: #fff;
+}
+
+.gt-primary:focus-visible,
+.gt-auth-tab:focus-visible,
+.gt-home-tab:focus-visible,
+.gt-link-button:focus-visible,
+.gt-eye:focus-visible,
+.gt-demo-callout a:focus-visible {
+  outline: 3px solid rgba(84, 217, 255, .55);
+  outline-offset: 3px;
+}

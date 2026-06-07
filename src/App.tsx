@@ -120,6 +120,10 @@ type AuditCriticality = "low" | "medium" | "high";
 type AuditType = "initial" | "follow_up" | "internal" | "external";
 
 type UserRole = "admin" | "auditor" | "contributor" | "viewer";
+type UserPlan = "free" | "premium" | "enterprise";
+
+const FREE_AUDIT_LIMIT = 1;
+const DEMO_MAILTO = "mailto:julien.messaoudi@edu.esiee.fr?subject=Demande%20de%20d%C3%A9mo%20GapTrack&body=Bonjour%2C%0A%0AJe%20souhaite%20demander%20une%20d%C3%A9mo%20de%20GapTrack.%0A%0AOrganisation%20%3A%20%0ABesoin%20%3A%20%0A%0AMerci.";
 
 interface AppUser {
   id: string;
@@ -130,6 +134,7 @@ interface AppUser {
   createdAt: string;
   lastLoginAt?: string;
   active: boolean;
+  plan?: UserPlan;
   passwordHash?: string;
 }
 
@@ -339,6 +344,10 @@ function isBootstrapAuditSession(session: Session | null | undefined): boolean {
     !session.context?.trim() &&
     !session.templateId
   );
+}
+
+function countBillableAuditSessions(sessions: Session[]): number {
+  return sessions.filter((session) => !isBootstrapAuditSession(session)).length;
 }
 
 function removeLocalAuditData(sessionId: string | null | undefined) {
@@ -1579,6 +1588,29 @@ function userRoleBadgeClass(role: UserRole | undefined): string {
   return "border-muted-foreground/30 bg-muted/20 text-muted-foreground";
 }
 
+function normalizeUserPlan(plan: UserPlan | string | null | undefined): UserPlan {
+  if (plan === "premium" || plan === "enterprise") return plan;
+  return "free";
+}
+
+function userPlanLabel(plan: UserPlan | string | null | undefined, lang: LangKey): string {
+  const p = normalizeUserPlan(plan);
+  if (p === "enterprise") return lang === "fr" ? "Entreprise" : "Enterprise";
+  if (p === "premium") return "Premium";
+  return "Free";
+}
+
+function userPlanBadgeClass(plan: UserPlan | string | null | undefined): string {
+  const p = normalizeUserPlan(plan);
+  if (p === "enterprise") return "border-violet-500/40 bg-violet-500/10 text-violet-700 dark:text-violet-300";
+  if (p === "premium") return "border-sky-500/40 bg-sky-500/10 text-sky-700 dark:text-sky-300";
+  return "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300";
+}
+
+function userHasPaidPlan(user: AppUser | null | undefined): boolean {
+  return normalizeUserPlan(user?.plan) !== "free";
+}
+
 function loadUsers(): AppUser[] {
   const raw = localStorage.getItem(USERS_KEY);
   if (!raw || raw === "null" || raw === "undefined") return [];
@@ -1596,6 +1628,7 @@ function loadUsers(): AppUser[] {
         createdAt: u.createdAt ? String(u.createdAt) : new Date().toISOString(),
         lastLoginAt: u.lastLoginAt ? String(u.lastLoginAt) : undefined,
         active: u.active !== false,
+        plan: normalizeUserPlan(u.plan || u.subscriptionPlan),
         passwordHash: u.passwordHash ? String(u.passwordHash) : undefined,
       }))
       .filter((u: AppUser) => u.email);
@@ -2546,7 +2579,7 @@ function UserAccessScreen(props: {
   users: AppUser[];
   onCreateAdmin: (payload: NewUserPayload) => Promise<void>;
   onLogin: (userId: string, password: string) => Promise<boolean>;
-  onSupabaseAuthenticated: (profile: { email: string; name?: string; organization?: string; role?: UserRole }) => void;
+  onSupabaseAuthenticated: (profile: { email: string; name?: string; organization?: string; role?: UserRole; plan?: UserPlan }) => void;
   onBackHome?: () => void;
 }) {
   return <LoginAccessPage {...props} />;
@@ -3679,6 +3712,38 @@ function MobileNav({ current, onNavigate, lang }: { current: string; onNavigate:
 }
 
 
+function PlanLimitBanner({ user, sessions, lang }: { user: AppUser | null; sessions: Session[]; lang: LangKey }) {
+  if (!user || userHasPaidPlan(user)) return null;
+
+  const used = countBillableAuditSessions(sessions);
+  const remaining = Math.max(0, FREE_AUDIT_LIMIT - used);
+
+  return (
+    <Card className="mb-4 border-amber-500/30 bg-amber-500/5 no-print">
+      <CardContent className="flex flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between">
+        <div className="space-y-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="outline" className={userPlanBadgeClass(user.plan)}>
+              {userPlanLabel(user.plan, lang)}
+            </Badge>
+            <span className="text-sm font-semibold">
+              {lang === "fr" ? "Compte gratuit actif" : "Free account active"}
+            </span>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            {lang === "fr"
+              ? `Limite Free : ${FREE_AUDIT_LIMIT} audit actif. Il vous reste ${remaining} création d’audit. Les exports PDF, audits multiples et usages équipe sont réservés aux offres Premium / Entreprise.`
+              : `Free limit: ${FREE_AUDIT_LIMIT} active audit. You have ${remaining} audit creation left. PDF exports, multiple audits and team use are Premium / Enterprise features.`}
+          </p>
+        </div>
+        <a className="text-sm font-semibold text-primary hover:underline" href={DEMO_MAILTO}>
+          {lang === "fr" ? "Demander une démo" : "Request a demo"}
+        </a>
+      </CardContent>
+    </Card>
+  );
+}
+
 function Toolbar({
   lang,
   onUndo,
@@ -3767,6 +3832,9 @@ function Toolbar({
                 <span className="truncate">{activeUser.name}</span>
                 <Badge variant="outline" className={"ml-2 " + userRoleBadgeClass(activeUser.role)}>
                   {userRoleLabel(activeUser.role, lang)}
+                </Badge>
+                <Badge variant="outline" className={"ml-1 " + userPlanBadgeClass(activeUser.plan)}>
+                  {userPlanLabel(activeUser.plan, lang)}
                 </Badge>
               </Button>
             )}
@@ -8525,6 +8593,27 @@ function GapTrackApp({
   const canManageAuditsFlag = userCanManageAudits(activeUser);
   const canDeleteAuditsFlag = userCanDeleteAudits(activeUser);
 
+  const requirePremiumFeature = React.useCallback((feature: "export" | "multi_audit" | "team" = "multi_audit") => {
+    if (!activeUser || userHasPaidPlan(activeUser)) return true;
+
+    const message = lang === "fr"
+      ? feature === "export"
+        ? "L’export PDF est réservé aux offres Premium / Entreprise. Demandez une démo pour débloquer cet usage."
+        : "L’offre Free est limitée à un audit actif. Passez en Premium pour gérer plusieurs audits."
+      : feature === "export"
+        ? "PDF export is reserved for Premium / Enterprise plans. Request a demo to unlock it."
+        : "The Free plan is limited to one active audit. Upgrade to Premium to manage multiple audits.";
+
+    toast.info(message);
+    return false;
+  }, [activeUser, lang]);
+
+  const requireAuditSlot = React.useCallback(() => {
+    if (!activeUser || userHasPaidPlan(activeUser)) return true;
+    if (countBillableAuditSessions(sessions) < FREE_AUDIT_LIMIT) return true;
+    return requirePremiumFeature("multi_audit");
+  }, [activeUser, requirePremiumFeature, sessions]);
+
   // Journal d’audit local, séparé de l’undo/redo pour rester traçable.
   const [auditLog, setAuditLog] = useState<AuditLogEntry[]>([]);
   const auditLogRef = useRef<AuditLogEntry[]>([]);
@@ -8592,7 +8681,7 @@ function GapTrackApp({
     return false;
   }, [canDeleteAuditsFlag, lang]);
 
-  const syncSupabaseAuthenticatedUser = React.useCallback((profile: { email: string; name?: string; organization?: string; role?: UserRole }) => {
+  const syncSupabaseAuthenticatedUser = React.useCallback((profile: { email: string; name?: string; organization?: string; role?: UserRole; plan?: UserPlan }) => {
     const email = normalizeEmail(profile.email);
 
     if (!email) return;
@@ -8610,6 +8699,7 @@ function GapTrackApp({
           name: profile.name?.trim() || existing.name || email,
           organization: profile.organization?.trim() || existing.organization,
           role: normalizeUserRole(profile.role || existing.role),
+          plan: profile.plan ? normalizeUserPlan(profile.plan) : normalizeUserPlan(existing.plan),
           active: true,
           lastLoginAt: now,
         };
@@ -8620,6 +8710,7 @@ function GapTrackApp({
           name: profile.name?.trim() || email,
           email,
           role: normalizeUserRole(profile.role || (prev.length === 0 ? "admin" : "viewer")),
+          plan: normalizeUserPlan(profile.plan),
           organization: profile.organization?.trim() || undefined,
           createdAt: now,
           lastLoginAt: now,
@@ -8650,6 +8741,7 @@ function GapTrackApp({
         name: typeof meta.name === "string" ? meta.name : undefined,
         organization: typeof meta.organization === "string" ? meta.organization : undefined,
         role: meta.role === "admin" || meta.role === "auditor" || meta.role === "contributor" || meta.role === "viewer" ? meta.role : undefined,
+        plan: meta.plan === "free" || meta.plan === "premium" || meta.plan === "enterprise" ? meta.plan : undefined,
       });
     }).catch(() => {});
 
@@ -8672,6 +8764,7 @@ function GapTrackApp({
         name: typeof meta.name === "string" ? meta.name : undefined,
         organization: typeof meta.organization === "string" ? meta.organization : undefined,
         role: meta.role === "admin" || meta.role === "auditor" || meta.role === "contributor" || meta.role === "viewer" ? meta.role : undefined,
+        plan: meta.plan === "free" || meta.plan === "premium" || meta.plan === "enterprise" ? meta.plan : undefined,
       });
     });
 
@@ -8688,6 +8781,7 @@ function GapTrackApp({
       name: payload.name.trim() || email,
       email,
       role: "admin",
+      plan: "free",
       organization: payload.organization?.trim() || undefined,
       createdAt: new Date().toISOString(),
       lastLoginAt: new Date().toISOString(),
@@ -9395,6 +9489,7 @@ function GapTrackApp({
 
   const createSessionFromRows = React.useCallback((session: Session, baseRows: ControlItem[]) => {
     if (!requireAuditManager()) return;
+    if (!requireAuditSlot()) return;
     const bootstrap = sessions.length === 1 && isBootstrapAuditSession(sessions[0]) ? sessions[0] : null;
     const next = bootstrap ? [session] : [session, ...sessions];
 
@@ -9431,11 +9526,12 @@ function GapTrackApp({
 
     toast.success(lang === "fr" ? "Audit créé" : "Audit created");
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessions, lang, applySnapshot, resetHistory, requireAuditManager, activeUser?.name, activeUser?.email]);
+  }, [sessions, lang, applySnapshot, resetHistory, requireAuditManager, requireAuditSlot, activeUser?.name, activeUser?.email]);
 
   // Sessions API
   const createSession = () => {
     if (!requireAuditManager()) return;
+    if (!requireAuditSlot()) return;
     const s: Session = {
       id: uuid(),
       name: lang === "fr" ? `Audit ${sessions.length + 1}` : `Audit ${sessions.length + 1}`,
@@ -9483,6 +9579,7 @@ function GapTrackApp({
 
   const duplicateSession = () => {
     if (!requireAuditManager()) return;
+    if (!requireAuditSlot()) return;
     if(!activeSessionId){ createSession(); return; }
     const cur = sessions.find(s=>s.id===activeSessionId);
     const clone: Session = { ...(cur || {}), id: uuid(), name: (cur?.name || 'Audit') + ' (copy)', createdAt: new Date().toISOString() };
@@ -9588,6 +9685,8 @@ function GapTrackApp({
   }, [sessions, activeSessionId]);
 
   const handleExport = React.useCallback(() => {
+    if (!requirePremiumFeature("export")) return;
+
     try {
       const src = document.querySelector('.print-only') as HTMLElement | null;
       if (!src) { toast.error(lang==='fr'?'Aucun contenu a imprimer':'Nothing to print'); return; }
@@ -9614,7 +9713,7 @@ function GapTrackApp({
       console.error(e);
       toast.error('Export error');
     }
-  }, [lang, sessions, activeSessionId]);
+  }, [lang, sessions, activeSessionId, requirePremiumFeature]);
 
   const t = I18N[lang];
   const delDesc = sessions.length <= 1
@@ -9674,7 +9773,7 @@ function GapTrackApp({
         sessions={sessions}
         activeSessionId={activeSessionId}
         onChangeSession={(id)=>{ saveActiveSessionId(id); resetHistory(); setActiveSessionId(id); }}
-        onCreateSession={()=>setWizardOpen(true)}
+        onCreateSession={() => { if (requireAuditSlot()) setWizardOpen(true); }}
         onDuplicateSession={duplicateSession}
         onDeleteSession={deleteSession}
 		saveState={saveState}
@@ -9696,6 +9795,7 @@ function GapTrackApp({
         <div className="main-surface flex-1">
           <PageHeader tab={tab} lang={lang} rows={rows} />
           <AuditIdentityBanner session={currentSession} lang={lang} onEdit={() => setProfileOpen(true)} />
+          <PlanLimitBanner user={activeUser} sessions={sessions} lang={lang} />
             <AnimatePresence mode="wait">
               {tab === "listing" && (
                 <motion.div

@@ -19,6 +19,9 @@ import "./LoginAccessPage.css";
 type LangKey = "fr" | "en";
 type ThemeMode = "light" | "dark";
 type UserRole = "admin" | "auditor" | "contributor" | "viewer";
+type UserPlan = "free" | "premium" | "enterprise";
+
+const DEMO_MAILTO = "mailto:julien.messaoudi@edu.esiee.fr?subject=Demande%20de%20d%C3%A9mo%20GapTrack&body=Bonjour%2C%0A%0AJe%20souhaite%20demander%20une%20d%C3%A9mo%20de%20GapTrack.%0A%0AOrganisation%20%3A%20%0ABesoin%20%3A%20%0A%0AMerci.";
 
 interface AppUser {
   id: string;
@@ -29,6 +32,7 @@ interface AppUser {
   createdAt: string;
   lastLoginAt?: string;
   active: boolean;
+  plan?: UserPlan;
   passwordHash?: string;
 }
 
@@ -45,6 +49,7 @@ interface SupabaseAuthProfile {
   name?: string;
   organization?: string;
   role?: UserRole;
+  plan?: UserPlan;
 }
 
 interface LoginAccessPageProps {
@@ -74,6 +79,11 @@ function isExistingAccountError(error: { message?: string; status?: number } | n
     message.includes("user already") ||
     message.includes("email already")
   );
+}
+
+function normalizeUserPlan(value: unknown): UserPlan {
+  if (value === "premium" || value === "enterprise") return value;
+  return "free";
 }
 
 export function LoginAccessPage({
@@ -171,6 +181,7 @@ export function LoginAccessPage({
               name: name.trim(),
               organization: organization.trim(),
               role: "admin",
+              plan: "free",
             },
             emailRedirectTo: window.location.origin,
           },
@@ -243,6 +254,7 @@ export function LoginAccessPage({
         name: typeof profile.name === "string" ? profile.name : undefined,
         organization: typeof profile.organization === "string" ? profile.organization : undefined,
         role: profile.role === "admin" || profile.role === "auditor" || profile.role === "contributor" || profile.role === "viewer" ? profile.role : undefined,
+        plan: profile.plan === "free" || profile.plan === "premium" || profile.plan === "enterprise" ? normalizeUserPlan(profile.plan) : undefined,
       });
 
       toast.success(lang === "fr" ? "Connexion réussie." : "Signed in.");
@@ -274,7 +286,7 @@ export function LoginAccessPage({
           </h1>
 
           <p className="gt-subtitle">
-            GapTrack centralise vos audits, preuves et plans d’action pour renforcer votre conformité et votre résilience.
+            Créez un compte Free pour tester les workflows essentiels, ou demandez une démo pour un usage Premium / Entreprise.
           </p>
 
           <div className="gt-features">
@@ -301,14 +313,14 @@ export function LoginAccessPage({
         <section className="gt-login-card" aria-label={isSetup ? "Création du compte" : "Connexion"}>
           <div className="gt-secure-badge">
             <ShieldCheck aria-hidden="true" />
-            <span>{isSetup ? "Premier accès sécurisé" : "Accès sécurisé"}</span>
+            <span>{isSetup ? "Essai Free sécurisé" : "Accès sécurisé"}</span>
           </div>
 
           <div className="gt-login-heading">
-            <h2>{isSetup ? "Créer un compte" : "Connexion"}</h2>
+            <h2>{isSetup ? "Créer un compte gratuit" : "Connexion"}</h2>
             <p>
               {isSetup
-                ? "Créez votre accès GapTrack. Une confirmation e-mail sera obligatoire."
+                ? "L’offre Free permet de tester GapTrack sur un périmètre limité. Une confirmation e-mail sera obligatoire."
                 : confirmationEmail
                   ? "Confirmez votre e-mail, puis connectez-vous à votre espace GapTrack"
                   : "Accédez à votre espace GapTrack"}
@@ -338,11 +350,18 @@ export function LoginAccessPage({
                 setPassword("");
               }}
             >
-              Créer un compte
+              Essai gratuit
             </button>
           </div>
 
           <form className="gt-form" onSubmit={submit}>
+            {isSetup ? (
+              <div className="gt-plan-note">
+                <strong>Offre Free incluse</strong>
+                <span>1 audit actif pour tester. Les audits multiples, exports PDF et usages équipe passent en Premium.</span>
+              </div>
+            ) : null}
+
             {!isSetup && confirmationEmail ? (
               <div className="gt-auth-note">
                 <strong>Compte en attente de confirmation</strong>
@@ -404,9 +423,15 @@ export function LoginAccessPage({
 
             <button type="submit" className="gt-primary" disabled={busy}>
               {busy ? <Loader2 className="gt-spin" aria-hidden="true" /> : null}
-              <span>{isSetup ? "Créer le compte" : "Se connecter"}</span>
+              <span>{isSetup ? "Créer mon compte Free" : "Se connecter"}</span>
               {!busy ? <ArrowRight aria-hidden="true" /> : null}
             </button>
+
+            <div className="gt-demo-callout">
+              <strong>Besoin d’un accès Premium ou Entreprise ?</strong>
+              <span>Demandez une démo pour un usage réel : exports, audits multiples, équipe et cadrage sécurité.</span>
+              <a href={DEMO_MAILTO}>Demander une démo</a>
+            </div>
 
           </form>
 
@@ -414,7 +439,7 @@ export function LoginAccessPage({
             <div className="gt-protection-icon"><ShieldCheck aria-hidden="true" /></div>
             <div>
               <h3>Vos données sont protégées</h3>
-              <p>Authentification Supabase, session protégée et accès maîtrisés pour vos audits, preuves et plans d’action.</p>
+              <p>Authentification Supabase, confirmation e-mail et accès Free limité avant passage Premium ou Entreprise.</p>
             </div>
           </div>
         </section>
