@@ -12,6 +12,7 @@ import { LoginAccessPage } from "./components/LoginAccessPage";
 import { ResetPasswordPage } from "./components/ResetPasswordPage";
 import { LandingHomePage } from "./components/LandingHomePage";
 import { supabase } from "./lib/supabase";
+import { authErrorMessage } from "./lib/authErrorMessages";
 
 
 // ==================
@@ -133,6 +134,8 @@ interface AppUser {
   active: boolean;
   passwordHash?: string;
   subscriptionPlan?: SubscriptionPlan;
+  createdByUserId?: string;
+  createdByEmail?: string;
 }
 
 interface NewUserPayload {
@@ -142,6 +145,8 @@ interface NewUserPayload {
   role: UserRole;
   organization?: string;
   subscriptionPlan?: SubscriptionPlan;
+  createdByUserId?: string;
+  createdByEmail?: string;
 }
 
 function normalizeSubscriptionPlan(value: unknown): SubscriptionPlan {
@@ -1675,6 +1680,8 @@ function loadUsers(): AppUser[] {
         lastLoginAt: u.lastLoginAt ? String(u.lastLoginAt) : undefined,
         active: u.active !== false,
         subscriptionPlan: normalizeSubscriptionPlan(u.subscriptionPlan),
+        createdByUserId: u.createdByUserId ? String(u.createdByUserId) : undefined,
+        createdByEmail: u.createdByEmail ? normalizeEmail(u.createdByEmail) : undefined,
         passwordHash: u.passwordHash ? String(u.passwordHash) : undefined,
       }))
       .filter((u: AppUser) => u.email);
@@ -1723,8 +1730,41 @@ function isServiceOwnerEmail(email: string | null | undefined): boolean {
   return normalizeEmail(email || "") === normalizeEmail(PREMIUM_CONTACT_EMAIL);
 }
 
+function userWasCreatedBy(candidate: AppUser, creator: AppUser | null | undefined): boolean {
+  if (!creator) return false;
+  return (
+    Boolean(candidate.createdByUserId && candidate.createdByUserId === creator.id) ||
+    Boolean(candidate.createdByEmail && normalizeEmail(candidate.createdByEmail) === normalizeEmail(creator.email))
+  );
+}
+
+function userCanViewUserRecord(viewer: AppUser | null | undefined, candidate: AppUser): boolean {
+  if (!userCanManageUsers(viewer)) return false;
+  if (userCanManageSubscriptions(viewer)) return true;
+  if (isServiceOwnerEmail(candidate.email)) return false;
+  return userWasCreatedBy(candidate, viewer);
+}
+
+function userCanModifyUserRecord(editor: AppUser | null | undefined, candidate: AppUser): boolean {
+  if (!userCanManageUsers(editor)) return false;
+  if (userCanManageSubscriptions(editor)) return true;
+  if (isServiceOwnerEmail(candidate.email)) return false;
+  return userWasCreatedBy(candidate, editor);
+}
+
+function isExistingSupabaseAccountError(error: { message?: string; status?: number } | null | undefined): boolean {
+  const message = String(error?.message || "").toLowerCase();
+  return (
+    error?.status === 422 ||
+    message.includes("already registered") ||
+    message.includes("already exists") ||
+    message.includes("user already") ||
+    message.includes("email already")
+  );
+}
+
 function userCanCreateUsers(user: AppUser | null | undefined): boolean {
-  return userCanManageUsers(user) && isPremiumPlan(user?.subscriptionPlan);
+  return userCanManageUsers(user) && (isPremiumPlan(user?.subscriptionPlan) || userCanManageSubscriptions(user));
 }
 
 function userCanEditAudit(user: AppUser | null | undefined): boolean {
@@ -2637,7 +2677,7 @@ function UserAccessScreen(props: {
   users: AppUser[];
   onCreateAdmin: (payload: NewUserPayload) => Promise<void>;
   onLogin: (userId: string, password: string) => Promise<boolean>;
-  onSupabaseAuthenticated: (profile: { email: string; name?: string; organization?: string; role?: UserRole; subscriptionPlan?: SubscriptionPlan }) => void;
+  onSupabaseAuthenticated: (profile: { email: string; name?: string; organization?: string; role?: UserRole; subscriptionPlan?: SubscriptionPlan; createdByUserId?: string; createdByEmail?: string }) => void;
   onBackHome?: () => void;
 }) {
   return <LoginAccessPage {...props} />;
@@ -2696,7 +2736,7 @@ function UserManagementDialog({
   const admins = users.filter((u) => u.active !== false && u.role === "admin");
   const canManage = userCanManageUsers(activeUser);
   const canCreate = canCreateUsers;
-  const visibleUsers = canManageSubscriptions ? users : users.filter((u) => !isServiceOwnerEmail(u.email));
+  const visibleUsers = users.filter((u) => userCanViewUserRecord(activeUser, u));
 
   async function addUser() {
     if (!canCreate) return;
@@ -2707,6 +2747,8 @@ function UserManagementDialog({
       role,
       organization,
       subscriptionPlan: canManageSubscriptions ? newUserPlan : "free",
+      createdByUserId: activeUser?.id,
+      createdByEmail: activeUser?.email,
     });
     if (ok) {
       setName("");
@@ -2719,191 +2761,237 @@ function UserManagementDialog({
 
   return (
     <div className="modal-overlay no-print" role="dialog" aria-modal="true" onClick={onClose}>
-      <div className="modal max-w-5xl" onClick={(e) => e.stopPropagation()}>
+      <div className="modal w-[min(1280px,calc(100vw-32px))] max-w-none" onClick={(e) => e.stopPropagation()}>
         <header className="flex items-center justify-between gap-3">
           <span>{lang === "fr" ? "Gestion des utilisateurs" : "User management"}</span>
           <Button size="sm" variant="ghost" onClick={onClose}><X className="h-4 w-4" /></Button>
         </header>
-        <div className="body space-y-5">
-          <div className="rounded-2xl border bg-muted/20 p-4">
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="rounded-xl border bg-background p-2">
-                <Users className="h-5 w-5" />
-              </div>
-              <div>
-                <div className="font-medium">
-                  {activeUser?.name || "—"} · {activeUser?.email || "—"}
-                </div>
-                <div className="text-sm text-muted-foreground">
-                  {lang === "fr" ? "Rôle actif" : "Active role"} : {userRoleLabel(activeUser?.role, lang)}
-                </div>
-              </div>
-              <Badge variant="outline" className={userRoleBadgeClass(activeUser?.role)}>
-                {userRoleLabel(activeUser?.role, lang)}
-              </Badge>
-              <Badge variant="outline" className={subscriptionPlanBadgeClass(activeUser?.subscriptionPlan)}>
-                {subscriptionPlanLabel(activeUser?.subscriptionPlan)}
-              </Badge>
-            </div>
-          </div>
 
-          {!canManage && (
-            <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-800 dark:text-amber-200">
-              {lang === "fr" ? "Seul un administrateur peut modifier ou désactiver des utilisateurs." : "Only an administrator can edit or deactivate users."}
-            </div>
-          )}
-
-          {canManage && !canCreate && (
-            <div className="rounded-2xl border border-cyan-500/30 bg-cyan-500/10 p-4 text-sm text-cyan-900 dark:text-cyan-100">
-              {lang === "fr"
-                ? "La création d’utilisateurs est réservée aux comptes Premium. Passez ce compte en Premium pour inviter ou créer de nouveaux utilisateurs."
-                : "User creation is reserved for Premium accounts. Upgrade this account to Premium to invite or create new users."}
-            </div>
-          )}
-
-          {canCreate && (
-            <div className="rounded-2xl border p-4">
-              <div className="mb-3 flex items-center gap-2 font-medium">
-                <UserPlus className="h-4 w-4" />
-                {lang === "fr" ? "Inviter / créer un utilisateur" : "Invite / create user"}
-              </div>
-              <div className="grid gap-3 md:grid-cols-2">
-                <div>
-                  <label className="text-sm text-muted-foreground">{lang === "fr" ? "Nom" : "Name"}</label>
-                  <Input value={name} onChange={(e) => setName(e.target.value)} />
-                </div>
-                <div>
-                  <label className="text-sm text-muted-foreground">Email</label>
-                  <Input value={email} onChange={(e) => setEmail(e.target.value)} type="email" />
-                </div>
-                <div>
-                  <label className="text-sm text-muted-foreground">{lang === "fr" ? "Organisation" : "Organization"}</label>
-                  <Input value={organization} onChange={(e) => setOrganization(e.target.value)} />
-                </div>
-                <div>
-                  <label className="text-sm text-muted-foreground">{lang === "fr" ? "Rôle" : "Role"}</label>
-                  <Select value={role} onValueChange={(v) => setRole(v as UserRole)}>
-                    <SelectTrigger>{userRoleLabel(role, lang)}</SelectTrigger>
-                    <SelectContent>
-                      {(["admin", "auditor", "contributor", "viewer"] as UserRole[]).map((r) => (
-                        <SelectItem key={r} value={r}>{userRoleLabel(r, lang)}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                {canManageSubscriptions && (
-                  <div>
-                    <label className="text-sm text-muted-foreground">{lang === "fr" ? "Offre" : "Plan"}</label>
-                    <Select value={newUserPlan} onValueChange={(v) => setNewUserPlan(normalizeSubscriptionPlan(v))}>
-                      <SelectTrigger>{subscriptionPlanLabel(newUserPlan)}</SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="free">Free</SelectItem>
-                        <SelectItem value="premium">Premium</SelectItem>
-                      </SelectContent>
-                    </Select>
+        <div className="body max-h-[78vh] overflow-auto">
+          <div className="grid gap-5 xl:grid-cols-[400px_minmax(0,1fr)]">
+            <aside className="space-y-4">
+              <div className="rounded-2xl border bg-muted/20 p-4">
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="rounded-xl border bg-background p-2">
+                    <Users className="h-5 w-5" />
                   </div>
-                )}
-                <div className="md:col-span-2">
-                  <label className="text-sm text-muted-foreground">{lang === "fr" ? "Mot de passe temporaire" : "Temporary password"}</label>
-                  <Input value={password} onChange={(e) => setPassword(e.target.value)} type="password" />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate font-medium">
+                      {activeUser?.name || "—"} · {activeUser?.email || "—"}
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      {lang === "fr" ? "Rôle actif" : "Active role"} : {userRoleLabel(activeUser?.role, lang)}
+                    </div>
+                  </div>
+                  <Badge variant="outline" className={userRoleBadgeClass(activeUser?.role)}>
+                    {userRoleLabel(activeUser?.role, lang)}
+                  </Badge>
+                  <Badge variant="outline" className={subscriptionPlanBadgeClass(activeUser?.subscriptionPlan)}>
+                    {subscriptionPlanLabel(activeUser?.subscriptionPlan)}
+                  </Badge>
                 </div>
               </div>
-              <Button className="mt-4" onClick={addUser}>
-                <UserPlus className="mr-2 h-4 w-4" />
-                {lang === "fr" ? "Créer l’utilisateur" : "Create user"}
-              </Button>
-            </div>
-          )}
 
-          {canManage && canManageSubscriptions && (
-            <div className="rounded-2xl border border-cyan-500/30 bg-cyan-500/10 p-4">
-              <div className="mb-2 flex items-center gap-2 font-medium text-cyan-900 dark:text-cyan-100">
-                <ShieldCheck className="h-4 w-4" />
-                {lang === "fr" ? "Activation Premium par adresse e-mail" : "Premium activation by email"}
-              </div>
-              <p className="mb-3 text-sm text-cyan-900/80 dark:text-cyan-100/80">
-                {lang === "fr"
-                  ? "Saisissez l’adresse reçue par e-mail : elle sera autorisée en Premium lors de sa prochaine connexion sur cette instance GapTrack."
-                  : "Enter the address received by email: it will be allowed as Premium on the next sign-in on this GapTrack instance."}
-              </p>
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <Input
-                  value={premiumEmail}
-                  onChange={(e) => setPremiumEmail(e.target.value)}
-                  type="email"
-                  placeholder="client@entreprise.com"
-                />
-                <Button
-                  type="button"
-                  onClick={() => {
-                    onActivatePremiumByEmail(premiumEmail);
-                    setPremiumEmail("");
-                  }}
-                >
-                  {lang === "fr" ? "Activer Premium" : "Activate Premium"}
-                </Button>
-              </div>
-            </div>
-          )}
+              {!canManage && (
+                <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-800 dark:text-amber-200">
+                  {lang === "fr" ? "Seul un administrateur peut voir ou gérer les utilisateurs." : "Only administrators can view or manage users."}
+                </div>
+              )}
 
-          <div className="space-y-3">
-            <div className="font-medium">{lang === "fr" ? "Utilisateurs" : "Users"}</div>
-            {visibleUsers.map((u) => {
-              const isSelf = activeUser?.id === u.id;
-              const disablingLastAdmin = u.role === "admin" && admins.length <= 1 && u.active !== false;
-              return (
-                <div key={u.id} className={"rounded-2xl border p-4 " + (u.active === false ? "opacity-60" : "")}>
-                  <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              {canManage && !canCreate && (
+                <div className="rounded-2xl border border-cyan-500/30 bg-cyan-500/10 p-4 text-sm text-cyan-900 dark:text-cyan-100">
+                  {lang === "fr"
+                    ? "La création d’utilisateurs est réservée aux comptes administrateurs Premium."
+                    : "User creation is reserved for Premium administrator accounts."}
+                </div>
+              )}
+
+              {canManage && !canManageSubscriptions && (
+                <div className="rounded-2xl border bg-muted/20 p-4 text-sm text-muted-foreground">
+                  {lang === "fr"
+                    ? "Vous voyez uniquement les utilisateurs que vous avez créés. Les autres comptes et le compte propriétaire sont masqués."
+                    : "You only see users you created. Other accounts and the service-owner account are hidden."}
+                </div>
+              )}
+
+              {canCreate && (
+                <div className="rounded-2xl border p-4">
+                  <div className="mb-3 flex items-center gap-2 font-medium">
+                    <UserPlus className="h-4 w-4" />
+                    {lang === "fr" ? "Inviter / créer un utilisateur" : "Invite / create user"}
+                  </div>
+                  <p className="mb-4 text-sm text-muted-foreground">
+                    {lang === "fr"
+                      ? "Un e-mail de vérification sera envoyé. L’utilisateur pourra se connecter avec le mot de passe temporaire après confirmation de son adresse e-mail."
+                      : "A verification email will be sent. The user can sign in with the temporary password after confirming their email address."}
+                  </p>
+                  <div className="grid gap-3">
                     <div>
-                      <div className="font-medium">{u.name}</div>
-                      <div className="text-sm text-muted-foreground">{u.email}</div>
-                      <div className="mt-1 text-xs text-muted-foreground">
-                        {u.organization || "—"} · {lang === "fr" ? "Créé le" : "Created"} {new Date(u.createdAt).toLocaleDateString(lang === "fr" ? "fr-FR" : "en-US")}
-                      </div>
+                      <label className="text-sm text-muted-foreground">{lang === "fr" ? "Nom" : "Name"}</label>
+                      <Input value={name} onChange={(e) => setName(e.target.value)} />
                     </div>
-
-                    <div className="flex flex-wrap items-center gap-2">
-                      {canManageSubscriptions ? (
-                        <Select
-                          value={normalizeSubscriptionPlan(u.subscriptionPlan)}
-                          disabled={!canManage}
-                          onValueChange={(v) => onUpdateUser(u.id, { subscriptionPlan: normalizeSubscriptionPlan(v) })}
-                        >
-                          <SelectTrigger className="w-[150px]">{subscriptionPlanLabel(u.subscriptionPlan)}</SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="free">Free</SelectItem>
-                            <SelectItem value="premium">Premium</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      ) : (
-                        <Badge variant="outline" className={subscriptionPlanBadgeClass(u.subscriptionPlan)}>
-                          {subscriptionPlanLabel(u.subscriptionPlan)}
-                        </Badge>
-                      )}
-
-                      <Select
-                        value={u.role}
-                        disabled={!canManage || disablingLastAdmin}
-                        onValueChange={(v) => onUpdateUser(u.id, { role: v as UserRole })}
-                      >
-                        <SelectTrigger className="w-[170px]">{userRoleLabel(u.role, lang)}</SelectTrigger>
+                    <div>
+                      <label className="text-sm text-muted-foreground">Email</label>
+                      <Input value={email} onChange={(e) => setEmail(e.target.value)} type="email" />
+                    </div>
+                    <div>
+                      <label className="text-sm text-muted-foreground">{lang === "fr" ? "Organisation" : "Organization"}</label>
+                      <Input value={organization} onChange={(e) => setOrganization(e.target.value)} />
+                    </div>
+                    <div>
+                      <label className="text-sm text-muted-foreground">{lang === "fr" ? "Rôle" : "Role"}</label>
+                      <Select value={role} onValueChange={(v) => setRole(v as UserRole)}>
+                        <SelectTrigger>{userRoleLabel(role, lang)}</SelectTrigger>
                         <SelectContent>
                           {(["admin", "auditor", "contributor", "viewer"] as UserRole[]).map((r) => (
                             <SelectItem key={r} value={r}>{userRoleLabel(r, lang)}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
+                    </div>
+                    {canManageSubscriptions && (
+                      <div>
+                        <label className="text-sm text-muted-foreground">{lang === "fr" ? "Offre" : "Plan"}</label>
+                        <Select value={newUserPlan} onValueChange={(v) => setNewUserPlan(normalizeSubscriptionPlan(v))}>
+                          <SelectTrigger>{subscriptionPlanLabel(newUserPlan)}</SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="free">Free</SelectItem>
+                            <SelectItem value="premium">Premium</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                    <div>
+                      <label className="text-sm text-muted-foreground">{lang === "fr" ? "Mot de passe temporaire" : "Temporary password"}</label>
+                      <Input value={password} onChange={(e) => setPassword(e.target.value)} type="password" />
+                    </div>
+                  </div>
+                  <Button className="mt-4" onClick={addUser}>
+                    <UserPlus className="mr-2 h-4 w-4" />
+                    {lang === "fr" ? "Créer et envoyer l’e-mail" : "Create and send email"}
+                  </Button>
+                </div>
+              )}
 
-                      <Badge variant="outline" className={userRoleBadgeClass(u.role)}>
-                        {u.active === false ? (lang === "fr" ? "Inactif" : "Inactive") : userRoleLabel(u.role, lang)}
-                      </Badge>
+              {canManage && canManageSubscriptions && (
+                <div className="rounded-2xl border border-cyan-500/30 bg-cyan-500/10 p-4">
+                  <div className="mb-2 flex items-center gap-2 font-medium text-cyan-900 dark:text-cyan-100">
+                    <ShieldCheck className="h-4 w-4" />
+                    {lang === "fr" ? "Activation Premium par adresse e-mail" : "Premium activation by email"}
+                  </div>
+                  <p className="mb-3 text-sm text-cyan-900/80 dark:text-cyan-100/80">
+                    {lang === "fr"
+                      ? "Saisissez l’adresse reçue par e-mail : elle sera autorisée en Premium lors de sa prochaine connexion sur cette instance GapTrack."
+                      : "Enter the address received by email: it will be allowed as Premium on the next sign-in on this GapTrack instance."}
+                  </p>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <Input
+                      value={premiumEmail}
+                      onChange={(e) => setPremiumEmail(e.target.value)}
+                      type="email"
+                      placeholder="client@entreprise.com"
+                    />
+                    <Button
+                      type="button"
+                      onClick={() => {
+                        onActivatePremiumByEmail(premiumEmail);
+                        setPremiumEmail("");
+                      }}
+                    >
+                      {lang === "fr" ? "Activer Premium" : "Activate Premium"}
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </aside>
 
-                      {canManage && (
-                        <>
+            <section className="min-w-0 space-y-3">
+              <div className="flex flex-wrap items-end justify-between gap-3">
+                <div>
+                  <div className="font-medium">{lang === "fr" ? "Utilisateurs accessibles" : "Accessible users"}</div>
+                  <div className="text-sm text-muted-foreground">
+                    {canManageSubscriptions
+                      ? (lang === "fr" ? "Compte propriétaire : accès à tous les utilisateurs." : "Service owner: access to all users.")
+                      : (lang === "fr" ? "Vue limitée aux comptes que vous avez créés." : "View limited to accounts you created.")}
+                  </div>
+                </div>
+                <Badge variant="outline">{visibleUsers.length}</Badge>
+              </div>
+
+              <div className="overflow-x-auto rounded-2xl border">
+                <div className="min-w-[940px]">
+                  <div className="grid grid-cols-[minmax(220px,1.4fr)_130px_170px_110px_minmax(280px,1fr)] gap-3 border-b bg-muted/20 px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    <span>{lang === "fr" ? "Utilisateur" : "User"}</span>
+                    <span>{lang === "fr" ? "Offre" : "Plan"}</span>
+                    <span>{lang === "fr" ? "Rôle" : "Role"}</span>
+                    <span>{lang === "fr" ? "Statut" : "Status"}</span>
+                    <span>{lang === "fr" ? "Actions" : "Actions"}</span>
+                  </div>
+
+                  {visibleUsers.length === 0 ? (
+                    <div className="px-4 py-8 text-sm text-muted-foreground">
+                      {lang === "fr" ? "Aucun utilisateur accessible pour ce compte." : "No user is accessible for this account."}
+                    </div>
+                  ) : visibleUsers.map((u) => {
+                    const isSelf = activeUser?.id === u.id;
+                    const canEditTarget = canManage && userCanModifyUserRecord(activeUser, u);
+                    const disablingLastAdmin = u.role === "admin" && admins.length <= 1 && u.active !== false;
+                    return (
+                      <div key={u.id} className={"grid grid-cols-[minmax(220px,1.4fr)_130px_170px_110px_minmax(280px,1fr)] gap-3 border-b px-4 py-3 last:border-b-0 " + (u.active === false ? "opacity-60" : "")}>
+                        <div className="min-w-0">
+                          <div className="truncate font-medium">{u.name}</div>
+                          <div className="truncate text-sm text-muted-foreground">{u.email}</div>
+                          <div className="mt-1 truncate text-xs text-muted-foreground">
+                            {u.organization || "—"} · {lang === "fr" ? "Créé le" : "Created"} {new Date(u.createdAt).toLocaleDateString(lang === "fr" ? "fr-FR" : "en-US")}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center">
+                          {canManageSubscriptions ? (
+                            <Select
+                              value={normalizeSubscriptionPlan(u.subscriptionPlan)}
+                              disabled={!canEditTarget}
+                              onValueChange={(v) => onUpdateUser(u.id, { subscriptionPlan: normalizeSubscriptionPlan(v) })}
+                            >
+                              <SelectTrigger className="w-[120px]">{subscriptionPlanLabel(u.subscriptionPlan)}</SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="free">Free</SelectItem>
+                                <SelectItem value="premium">Premium</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <Badge variant="outline" className={subscriptionPlanBadgeClass(u.subscriptionPlan)}>
+                              {subscriptionPlanLabel(u.subscriptionPlan)}
+                            </Badge>
+                          )}
+                        </div>
+
+                        <div className="flex items-center">
+                          <Select
+                            value={u.role}
+                            disabled={!canEditTarget || disablingLastAdmin}
+                            onValueChange={(v) => onUpdateUser(u.id, { role: v as UserRole })}
+                          >
+                            <SelectTrigger className="w-[160px]">{userRoleLabel(u.role, lang)}</SelectTrigger>
+                            <SelectContent>
+                              {(["admin", "auditor", "contributor", "viewer"] as UserRole[]).map((r) => (
+                                <SelectItem key={r} value={r}>{userRoleLabel(r, lang)}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div className="flex items-center">
+                          <Badge variant="outline" className={userRoleBadgeClass(u.role)}>
+                            {u.active === false ? (lang === "fr" ? "Inactif" : "Inactive") : (lang === "fr" ? "Actif" : "Active")}
+                          </Badge>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2">
                           <Button
                             size="sm"
                             variant="outline"
-                            disabled={isSelf || disablingLastAdmin}
+                            disabled={!canEditTarget || isSelf || disablingLastAdmin}
                             onClick={() => onUpdateUser(u.id, { active: u.active === false })}
                           >
                             {u.active === false ? (lang === "fr" ? "Réactiver" : "Reactivate") : (lang === "fr" ? "Désactiver" : "Deactivate")}
@@ -2911,6 +2999,7 @@ function UserManagementDialog({
                           <Button
                             size="sm"
                             variant="outline"
+                            disabled={!canEditTarget}
                             onClick={() => {
                               const next = window.prompt(lang === "fr" ? "Nouveau mot de passe temporaire" : "New temporary password");
                               if (!next) return;
@@ -2922,21 +3011,22 @@ function UserManagementDialog({
                           <Button
                             size="sm"
                             variant="destructive"
-                            disabled={isSelf || disablingLastAdmin}
+                            disabled={!canEditTarget || isSelf || disablingLastAdmin}
                             onClick={() => onDeleteUser(u.id)}
                           >
                             <Trash2 className="mr-1 h-4 w-4" />
                             {lang === "fr" ? "Supprimer" : "Delete"}
                           </Button>
-                        </>
-                      )}
-                    </div>
-                  </div>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-              );
-            })}
+              </div>
+            </section>
           </div>
         </div>
+
         <footer>
           <Button onClick={onClose}>{lang === "fr" ? "Fermer" : "Close"}</Button>
         </footer>
@@ -8868,7 +8958,7 @@ function GapTrackApp({
     return false;
   }, [isPremiumUser, lang, requestPremiumByEmail]);
 
-  const syncSupabaseAuthenticatedUser = React.useCallback((profile: { email: string; name?: string; organization?: string; role?: UserRole; subscriptionPlan?: SubscriptionPlan }) => {
+  const syncSupabaseAuthenticatedUser = React.useCallback((profile: { email: string; name?: string; organization?: string; role?: UserRole; subscriptionPlan?: SubscriptionPlan; createdByUserId?: string; createdByEmail?: string }) => {
     const email = normalizeEmail(profile.email);
 
     if (!email) return;
@@ -8891,6 +8981,8 @@ function GapTrackApp({
           organization: profile.organization?.trim() || existing.organization,
           role: normalizeUserRole(profile.role || existing.role),
           subscriptionPlan,
+          createdByUserId: profile.createdByUserId || existing.createdByUserId,
+          createdByEmail: profile.createdByEmail ? normalizeEmail(profile.createdByEmail) : existing.createdByEmail,
           active: true,
           lastLoginAt: now,
         };
@@ -8904,6 +8996,8 @@ function GapTrackApp({
           role: normalizeUserRole(profile.role || (prev.length === 0 ? "admin" : "viewer")),
           subscriptionPlan,
           organization: profile.organization?.trim() || undefined,
+          createdByUserId: profile.createdByUserId || undefined,
+          createdByEmail: profile.createdByEmail ? normalizeEmail(profile.createdByEmail) : undefined,
           createdAt: now,
           lastLoginAt: now,
           active: true,
@@ -8934,6 +9028,8 @@ function GapTrackApp({
         organization: typeof meta.organization === "string" ? meta.organization : undefined,
         role: meta.role === "admin" || meta.role === "auditor" || meta.role === "contributor" || meta.role === "viewer" ? meta.role : undefined,
         subscriptionPlan: normalizeSubscriptionPlan(meta.subscriptionPlan),
+        createdByUserId: typeof meta.createdByUserId === "string" ? meta.createdByUserId : undefined,
+        createdByEmail: typeof meta.createdByEmail === "string" ? meta.createdByEmail : undefined,
       });
     }).catch(() => {});
 
@@ -8957,6 +9053,8 @@ function GapTrackApp({
         organization: typeof meta.organization === "string" ? meta.organization : undefined,
         role: meta.role === "admin" || meta.role === "auditor" || meta.role === "contributor" || meta.role === "viewer" ? meta.role : undefined,
         subscriptionPlan: normalizeSubscriptionPlan(meta.subscriptionPlan),
+        createdByUserId: typeof meta.createdByUserId === "string" ? meta.createdByUserId : undefined,
+        createdByEmail: typeof meta.createdByEmail === "string" ? meta.createdByEmail : undefined,
       });
     });
 
@@ -9028,7 +9126,7 @@ function GapTrackApp({
       toast.error(lang === "fr" ? "Nom et email obligatoires." : "Name and email are required.");
       return false;
     }
-    if (users.some((u) => u.email === email)) {
+    if (users.some((u) => normalizeEmail(u.email) === email)) {
       toast.error(lang === "fr" ? "Cet email existe déjà." : "This email already exists.");
       return false;
     }
@@ -9040,13 +9138,72 @@ function GapTrackApp({
       toast.error(lang === "fr" ? "Mot de passe : 8 caractères minimum." : "Password: at least 8 characters.");
       return false;
     }
+
+    const organization = payload.organization?.trim() || activeUser?.organization || undefined;
+    const subscriptionPlan = canManageSubscriptionsFlag ? normalizeSubscriptionPlan(payload.subscriptionPlan) : "free";
+    const createdByUserId = activeUser?.id;
+    const createdByEmail = activeUser?.email ? normalizeEmail(activeUser.email) : undefined;
+
+    try {
+      const previousSession = await supabase.auth.getSession().then(({ data }) => data.session).catch(() => null);
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password: payload.password,
+        options: {
+          data: {
+            name: payload.name.trim(),
+            organization,
+            role: normalizeUserRole(payload.role),
+            subscriptionPlan,
+            createdByUserId,
+            createdByEmail,
+          },
+          emailRedirectTo: window.location.origin,
+        },
+      });
+
+      if (data.session && previousSession?.access_token && previousSession?.refresh_token) {
+        await supabase.auth.setSession({
+          access_token: previousSession.access_token,
+          refresh_token: previousSession.refresh_token,
+        });
+      } else if (data.session && !previousSession) {
+        await supabase.auth.signOut();
+        if (activeUser) {
+          saveActiveUserId(activeUser.id);
+          setActiveUserId(activeUser.id);
+          setLocalActorFromUser(activeUser);
+        }
+      }
+
+      if (error) {
+        if (isExistingSupabaseAccountError(error)) {
+          toast.error(lang === "fr" ? "Un compte Supabase existe déjà avec cet e-mail." : "A Supabase account already exists with this email.");
+          return false;
+        }
+        toast.error(authErrorMessage(error));
+        return false;
+      }
+
+      if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+        toast.error(lang === "fr" ? "Un compte existe déjà avec cet e-mail." : "An account already exists with this email.");
+        return false;
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error(lang === "fr" ? "Impossible d’envoyer l’e-mail de vérification Supabase." : "Unable to send the Supabase verification email.");
+      return false;
+    }
+
     const user: AppUser = {
       id: uuid(),
       name: payload.name.trim(),
       email,
       role: normalizeUserRole(payload.role),
-      organization: payload.organization?.trim() || activeUser?.organization || undefined,
-      subscriptionPlan: canManageSubscriptionsFlag ? normalizeSubscriptionPlan(payload.subscriptionPlan) : "free",
+      organization,
+      subscriptionPlan,
+      createdByUserId,
+      createdByEmail,
       createdAt: new Date().toISOString(),
       active: true,
       passwordHash: await hashLocalPassword(payload.password, email),
@@ -9055,9 +9212,9 @@ function GapTrackApp({
     const next = [user, ...users];
     saveUsers(next);
     setUsers(next);
-    toast.success(lang === "fr" ? "Utilisateur créé." : "User created.");
+    toast.success(lang === "fr" ? "Utilisateur créé. Un e-mail de vérification lui a été envoyé." : "User created. A verification email has been sent.");
     return true;
-  }, [activeUser?.organization, canCreateUsersFlag, canManageSubscriptionsFlag, lang, users]);
+  }, [activeUser, canCreateUsersFlag, canManageSubscriptionsFlag, lang, users]);
 
   const updateUser = React.useCallback((userId: string, patch: Partial<AppUser>) => {
     if (!canManageUsersFlag) {
@@ -9071,6 +9228,10 @@ function GapTrackApp({
     setUsers((prev) => {
       const activeAdmins = prev.filter((u) => u.active !== false && u.role === "admin");
       const target = prev.find((u) => u.id === userId);
+      if (target && !userCanModifyUserRecord(activeUser, target)) {
+        toast.error(lang === "fr" ? "Vous pouvez modifier uniquement les utilisateurs que vous avez créés." : "You can only edit users you created.");
+        return prev;
+      }
       if (target && isServiceOwnerEmail(target.email) && !canManageSubscriptionsFlag) {
         toast.error(lang === "fr" ? "Ce compte propriétaire est protégé." : "This service-owner account is protected.");
         return prev;
@@ -9094,7 +9255,7 @@ function GapTrackApp({
     if (patch.subscriptionPlan) {
       toast.success(lang === "fr" ? "Offre mise à jour." : "Plan updated.");
     }
-  }, [canManageSubscriptionsFlag, canManageUsersFlag, lang]);
+  }, [activeUser, canManageSubscriptionsFlag, canManageUsersFlag, lang]);
 
   const activatePremiumByEmail = React.useCallback((rawEmail: string) => {
     if (!canManageSubscriptionsFlag) {
@@ -9127,6 +9288,10 @@ function GapTrackApp({
     setUsers((prev) => {
       const target = prev.find((u) => u.id === userId);
       const activeAdmins = prev.filter((u) => u.active !== false && u.role === "admin");
+      if (target && !userCanModifyUserRecord(activeUser, target)) {
+        toast.error(lang === "fr" ? "Vous pouvez supprimer uniquement les utilisateurs que vous avez créés." : "You can only delete users you created.");
+        return prev;
+      }
       if (target && isServiceOwnerEmail(target.email) && !canManageSubscriptionsFlag) {
         toast.error(lang === "fr" ? "Ce compte propriétaire est protégé." : "This service-owner account is protected.");
         return prev;
@@ -9139,7 +9304,7 @@ function GapTrackApp({
       saveUsers(next);
       return next;
     });
-  }, [activeUserId, canManageSubscriptionsFlag, canManageUsersFlag, lang]);
+  }, [activeUser, activeUserId, canManageSubscriptionsFlag, canManageUsersFlag, lang]);
 
   const resetUserPassword = React.useCallback(async (userId: string, password: string) => {
     if (!canManageUsersFlag) {
@@ -9152,6 +9317,10 @@ function GapTrackApp({
     }
     const target = users.find((u) => u.id === userId);
     if (!target) return;
+    if (!userCanModifyUserRecord(activeUser, target)) {
+      toast.error(lang === "fr" ? "Vous pouvez réinitialiser uniquement les utilisateurs que vous avez créés." : "You can only reset users you created.");
+      return;
+    }
     if (isServiceOwnerEmail(target.email) && !canManageSubscriptionsFlag) {
       toast.error(lang === "fr" ? "Ce compte propriétaire est protégé." : "This service-owner account is protected.");
       return;
@@ -9161,7 +9330,7 @@ function GapTrackApp({
     saveUsers(next);
     setUsers(next);
     toast.success(lang === "fr" ? "Mot de passe réinitialisé." : "Password reset.");
-  }, [canManageSubscriptionsFlag, canManageUsersFlag, lang, users]);
+  }, [activeUser, canManageSubscriptionsFlag, canManageUsersFlag, lang, users]);
 
   useEffect(() => {
     if (sessions.length <= 1) return;

@@ -50,6 +50,8 @@ interface SupabaseAuthProfile {
   organization?: string;
   role?: UserRole;
   subscriptionPlan?: SubscriptionPlan;
+  createdByUserId?: string;
+  createdByEmail?: string;
 }
 
 interface LoginAccessPageProps {
@@ -304,6 +306,8 @@ export function LoginAccessPage({
         organization: typeof profile.organization === "string" ? profile.organization : undefined,
         role: profile.role === "admin" || profile.role === "auditor" || profile.role === "contributor" || profile.role === "viewer" ? profile.role : undefined,
         subscriptionPlan: normalizeSubscriptionPlan(profile.subscriptionPlan),
+        createdByUserId: typeof profile.createdByUserId === "string" ? profile.createdByUserId : undefined,
+        createdByEmail: typeof profile.createdByEmail === "string" ? profile.createdByEmail : undefined,
       });
 
       toast.success(lang === "fr" ? "Connexion réussie." : "Signed in.");
