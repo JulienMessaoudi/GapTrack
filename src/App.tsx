@@ -593,6 +593,211 @@ async function deleteEvidenceFile(id: string): Promise<void> {
   }).finally(() => db.close());
 }
 
+const EVIDENCE_STORAGE_BUCKET = "gaptrack-evidence";
+
+function createEvidenceUuid(): string {
+  const randomUUID = (globalThis as any).crypto?.randomUUID;
+  if (typeof randomUUID === "function") return randomUUID.call((globalThis as any).crypto);
+
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (char) => {
+    const random = Math.floor(Math.random() * 16);
+    const value = char === "x" ? random : (random & 0x3) | 0x8;
+    return value.toString(16);
+  });
+}
+
+function safeStorageFilename(name: string): string {
+  const cleaned = String(name || "evidence")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9._-]/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "");
+
+  return cleaned || "evidence";
+}
+
+function evidenceItemFromBackendRow(row: any): { controlId: string; item: EvidenceItem } | null {
+  if (!row?.id || !row?.control_id || !row?.filename || !row?.storage_path) return null;
+
+  return {
+    controlId: String(row.control_id),
+    item: {
+      id: String(row.id),
+      filename: String(row.filename),
+      size: Number(row.size_bytes || 0),
+      mimeType: typeof row.mime_type === "string" ? row.mime_type : undefined,
+      addedAt: typeof row.created_at === "string" ? row.created_at : new Date().toISOString(),
+      addedBy: "Supabase",
+      storageKind: "backend",
+      storageKey: String(row.storage_path),
+      contentAvailable: true,
+    },
+  };
+}
+
+async function fetchBackendEvidenceMapForSession(auditSessionId: string): Promise<Record<string, EvidenceItem[]>> {
+  if (!auditSessionId) return {};
+
+  try {
+    const { data, error } = await supabase
+      .from("gaptrack_evidence_files")
+      .select("id, control_id, filename, mime_type, size_bytes, storage_path, created_at")
+      .eq("audit_session_id", auditSessionId)
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+
+    const map: Record<string, EvidenceItem[]> = {};
+    for (const row of data || []) {
+      const parsed = evidenceItemFromBackendRow(row);
+      if (!parsed) continue;
+      map[parsed.controlId] = [...(map[parsed.controlId] || []), parsed.item];
+    }
+
+    return map;
+  } catch (error) {
+    console.error("Unable to load evidence files from Supabase Storage metadata.", error);
+    return {};
+  }
+}
+
+function mergeEvidenceMaps(
+  localMap: Record<string, EvidenceItem[]>,
+  backendMap: Record<string, EvidenceItem[]>
+): Record<string, EvidenceItem[]> {
+  const out: Record<string, EvidenceItem[]> = {};
+  const controlIds = new Set([...Object.keys(localMap || {}), ...Object.keys(backendMap || {})]);
+
+  for (const controlId of controlIds) {
+    const seen = new Set<string>();
+    const merged: EvidenceItem[] = [];
+
+    for (const item of backendMap[controlId] || []) {
+      if (!item?.id || seen.has(item.id)) continue;
+      seen.add(item.id);
+      merged.push(item);
+    }
+
+    for (const item of localMap[controlId] || []) {
+      if (!item?.id || seen.has(item.id)) continue;
+      seen.add(item.id);
+      merged.push(item);
+    }
+
+    if (merged.length) out[controlId] = merged;
+  }
+
+  return out;
+}
+
+async function mergeEvidenceMapWithBackend(
+  auditSessionId: string,
+  localMap: Record<string, EvidenceItem[]>
+): Promise<Record<string, EvidenceItem[]>> {
+  const backendMap = await fetchBackendEvidenceMapForSession(auditSessionId);
+  return mergeEvidenceMaps(localMap || {}, backendMap);
+}
+
+async function uploadEvidenceFileToBackend(params: {
+  file: File;
+  auditSessionId: string;
+  controlId: string;
+  evidenceId: string;
+  addedAt: string;
+  addedBy: string;
+  sha256?: string;
+}): Promise<EvidenceItem> {
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+
+  if (authError || !authData.user) {
+    throw authError || new Error("Utilisateur non connecté.");
+  }
+
+  const userId = authData.user.id;
+  const mimeType = params.file.type || "application/octet-stream";
+  const storagePath = [
+    userId,
+    params.auditSessionId,
+    params.controlId,
+    `${params.evidenceId}-${safeStorageFilename(params.file.name)}`,
+  ].join("/");
+
+  const { error: uploadError } = await supabase.storage
+    .from(EVIDENCE_STORAGE_BUCKET)
+    .upload(storagePath, params.file, {
+      cacheControl: "3600",
+      contentType: mimeType,
+      upsert: false,
+    });
+
+  if (uploadError) throw uploadError;
+
+  const { data, error: insertError } = await supabase
+    .from("gaptrack_evidence_files")
+    .insert({
+      id: params.evidenceId,
+      owner_user_id: userId,
+      audit_session_id: params.auditSessionId,
+      control_id: params.controlId,
+      filename: params.file.name,
+      mime_type: mimeType,
+      size_bytes: params.file.size,
+      storage_bucket: EVIDENCE_STORAGE_BUCKET,
+      storage_path: storagePath,
+    })
+    .select("id, filename, mime_type, size_bytes, storage_path, created_at")
+    .single();
+
+  if (insertError) {
+    await supabase.storage.from(EVIDENCE_STORAGE_BUCKET).remove([storagePath]).catch(() => undefined);
+    throw insertError;
+  }
+
+  return {
+    id: String(data?.id || params.evidenceId),
+    filename: String(data?.filename || params.file.name),
+    size: Number(data?.size_bytes ?? params.file.size),
+    mimeType: typeof data?.mime_type === "string" ? data.mime_type : mimeType,
+    addedAt: typeof data?.created_at === "string" ? data.created_at : params.addedAt,
+    addedBy: params.addedBy,
+    storageKind: "backend",
+    storageKey: String(data?.storage_path || storagePath),
+    sha256: params.sha256,
+    contentAvailable: true,
+  };
+}
+
+async function openBackendEvidenceItem(item: EvidenceItem): Promise<void> {
+  if (!item.storageKey) throw new Error("Missing Supabase Storage path.");
+
+  const { data, error } = await supabase.storage
+    .from(EVIDENCE_STORAGE_BUCKET)
+    .createSignedUrl(item.storageKey, 60 * 5, { download: item.filename || true });
+
+  if (error) throw error;
+  if (!data?.signedUrl) throw new Error("Unable to create signed URL.");
+
+  window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+}
+
+async function deleteBackendEvidenceItem(item: EvidenceItem): Promise<void> {
+  if (!item.storageKey) throw new Error("Missing Supabase Storage path.");
+
+  const { error: fileError } = await supabase.storage
+    .from(EVIDENCE_STORAGE_BUCKET)
+    .remove([item.storageKey]);
+
+  if (fileError) throw fileError;
+
+  const { error: dbError } = await supabase
+    .from("gaptrack_evidence_files")
+    .delete()
+    .eq("id", item.id);
+
+  if (dbError) throw dbError;
+}
+
 async function sha256File(file: File): Promise<string | undefined> {
   try {
     if (typeof window === "undefined" || !window.crypto?.subtle) return undefined;
@@ -621,6 +826,20 @@ async function downloadEvidenceItem(item: EvidenceItem, lang: LangKey) {
     return;
   }
 
+  if (item.storageKind === "backend" && item.storageKey) {
+    try {
+      await openBackendEvidenceItem(item);
+    } catch (error) {
+      console.error("Unable to open backend evidence file.", error);
+      toast.error(
+        lang === "fr"
+          ? "Impossible d’ouvrir la preuve depuis le stockage sécurisé."
+          : "Unable to open the evidence from secure storage."
+      );
+    }
+    return;
+  }
+
   if (item.storageKind === "indexeddb" && item.storageKey) {
     const stored = await getEvidenceFile(item.storageKey);
     if (!stored) {
@@ -644,7 +863,7 @@ function evidenceStorageLabel(item: EvidenceItem, lang: LangKey): string {
     return lang === "fr" ? "Fichier stocké localement" : "File stored locally";
   }
   if (item.storageKind === "backend" && item.contentAvailable !== false) {
-    return lang === "fr" ? "Fichier stocké côté serveur" : "File stored server-side";
+    return lang === "fr" ? "Fichier stocké dans Supabase" : "File stored in Supabase";
   }
   return lang === "fr" ? "Référence seule" : "Reference only";
 }
@@ -8280,7 +8499,7 @@ function AuditLogView({ entries, lang, onExport, onClear, canClear, canExport = 
   );
 }
 
-function EvidenceDrawer({ open, onClose, control, evidenceMap, proofStatusMap, commitEvidenceChange, lang, canAddEvidence, canReviewEvidence, onAuditEvent }: { open: boolean; onClose: ()=>void; control: ControlItem | null; evidenceMap: Record<string, EvidenceItem[]>; proofStatusMap: EvidenceStatusMap; commitEvidenceChange: (nextEvidenceMap: Record<string, EvidenceItem[]>, nextProofStatusMap?: EvidenceStatusMap) => void; lang: LangKey; canAddEvidence: boolean; canReviewEvidence: boolean; onAuditEvent?: (entry: Omit<AuditLogEntry, "id" | "at" | "actor" | "actorEmail">) => void }){
+function EvidenceDrawer({ open, onClose, control, auditSessionId, evidenceMap, proofStatusMap, commitEvidenceChange, lang, canAddEvidence, canReviewEvidence, onAuditEvent }: { open: boolean; onClose: ()=>void; control: ControlItem | null; auditSessionId: string; evidenceMap: Record<string, EvidenceItem[]>; proofStatusMap: EvidenceStatusMap; commitEvidenceChange: (nextEvidenceMap: Record<string, EvidenceItem[]>, nextProofStatusMap?: EvidenceStatusMap) => void; lang: LangKey; canAddEvidence: boolean; canReviewEvidence: boolean; onAuditEvent?: (entry: Omit<AuditLogEntry, "id" | "at" | "actor" | "actorEmail">) => void }){
   const t = I18N[lang];
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [note, setNote] = useState("");
@@ -8360,59 +8579,43 @@ function EvidenceDrawer({ open, onClose, control, evidenceMap, proofStatusMap, c
       toast.error(lang === "fr" ? "Votre rôle ne permet pas d’ajouter une preuve." : "Your role cannot add evidence.");
       return;
     }
-    const id = uuid();
+
+    if (!auditSessionId) {
+      toast.error(lang === "fr" ? "Aucun audit actif pour rattacher cette preuve." : "No active audit to attach this evidence to.");
+      return;
+    }
+
+    const id = createEvidenceUuid();
     const addedAt = new Date().toISOString();
     const addedBy = currentEvidenceActor();
-    const mimeType = file.type || "application/octet-stream";
+
     let item: EvidenceItem;
 
     try {
       const sha256 = await sha256File(file);
-      await putEvidenceFile({
-        id,
-        blob: file,
-        filename: file.name,
-        mimeType,
-        size: file.size,
+      item = await uploadEvidenceFileToBackend({
+        file,
+        auditSessionId,
+        controlId: control.id,
+        evidenceId: id,
         addedAt,
+        addedBy,
         sha256,
       });
 
-      item = {
-        id,
-        filename: file.name,
-        size: file.size,
-        mimeType,
-        addedAt,
-        addedBy,
-        storageKind: "indexeddb",
-        storageKey: id,
-        sha256,
-        contentAvailable: true,
-      };
-
       toast.success(
         lang === "fr"
-          ? "Preuve stockée localement dans ce navigateur."
-          : "Evidence stored locally in this browser."
+          ? "Preuve envoyée dans le stockage sécurisé Supabase."
+          : "Evidence uploaded to secure Supabase storage."
       );
     } catch (error) {
-      item = {
-        id,
-        filename: file.name,
-        size: file.size,
-        mimeType,
-        addedAt,
-        addedBy,
-        storageKind: "metadata_only",
-        contentAvailable: false,
-      };
-
-      toast.warning(
+      console.error("Evidence upload error:", error);
+      toast.error(
         lang === "fr"
-          ? "Le fichier n’a pas pu être stocké : seule la référence est conservée."
-          : "The file could not be stored: only the reference was saved."
+          ? "Impossible d’envoyer la preuve dans le stockage sécurisé."
+          : "Unable to upload the evidence to secure storage."
       );
+      return;
     }
 
     const nextList = [item, ...list];
@@ -8452,15 +8655,30 @@ function EvidenceDrawer({ open, onClose, control, evidenceMap, proofStatusMap, c
     );
     setNote("");
   };
-  const remove = (id: string) => {
+  const remove = async (id: string) => {
     if (!canAddEvidence) {
       toast.error(lang === "fr" ? "Votre rôle ne permet pas de supprimer une preuve." : "Your role cannot delete evidence.");
       return;
     }
+
     const removed = (evidenceMap[control.id] || []).find(i => i.id === id);
-    if (removed?.storageKind === "indexeddb" && removed.storageKey) {
+
+    if (removed?.storageKind === "backend") {
+      try {
+        await deleteBackendEvidenceItem(removed);
+      } catch (error) {
+        console.error("Backend evidence delete error:", error);
+        toast.error(
+          lang === "fr"
+            ? "Impossible de supprimer la preuve du stockage sécurisé."
+            : "Unable to delete the evidence from secure storage."
+        );
+        return;
+      }
+    } else if (removed?.storageKind === "indexeddb" && removed.storageKey) {
       deleteEvidenceFile(removed.storageKey).catch(() => undefined);
     }
+
     const remaining = (evidenceMap[control.id] || []).filter(i => i.id !== id);
     const nextEvidenceMap = { ...evidenceMap, [control.id]: remaining };
     const nextStatus = coerceEvidenceStatusForCount(proofStatusMap[control.id], remaining.length);
@@ -8471,6 +8689,7 @@ function EvidenceDrawer({ open, onClose, control, evidenceMap, proofStatusMap, c
       { entityId: id, details: removed?.filename, before: evidenceStatusLabel(proofStatus, lang), after: evidenceStatusLabel(nextStatus, lang) }
     );
   };
+
 
   return (
     <>
@@ -8488,8 +8707,8 @@ function EvidenceDrawer({ open, onClose, control, evidenceMap, proofStatusMap, c
             <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-300" />
             <div>
               {lang === "fr"
-                ? "Les fichiers ajoutés ici sont réellement stockés en local dans IndexedDB, dans ce navigateur. Pour un audit partagé ou opposable, il faudra remplacer ce stockage local par un backend ou un stockage objet sécurisé."
-                : "Files added here are actually stored locally in IndexedDB, in this browser. For a shared or auditable audit, replace this local storage with a backend or secure object storage."}
+                ? "Les fichiers ajoutés ici sont envoyés dans un bucket privé Supabase Storage. L’accès se fait par URL signée temporaire et les droits sont contrôlés par les policies RLS."
+                : "Files added here are uploaded to a private Supabase Storage bucket. Access uses temporary signed URLs and permissions are controlled by RLS policies."}
             </div>
           </div>
 
@@ -8569,7 +8788,7 @@ function EvidenceDrawer({ open, onClose, control, evidenceMap, proofStatusMap, c
                       <Download className="h-4 w-4 mr-1" />
                       {lang==='fr'? 'Télécharger' : 'Download'}
                     </Button>
-                    <Button variant="ghost" size="sm" disabled={!canAddEvidence} onClick={()=>remove(it.id)}>{lang==='fr'? 'Supprimer' : 'Delete'}</Button>
+                    <Button variant="ghost" size="sm" disabled={!canAddEvidence} onClick={() => { void remove(it.id); }}>{lang==='fr'? 'Supprimer' : 'Delete'}</Button>
                   </div>
                 </div>
               ))}
@@ -9987,9 +10206,11 @@ function GapTrackApp({
 	  const snap = await apiGetSnapshot(sessionId);
 	  if (!snap) return false;
 
+	  const backendEvidenceMap = await mergeEvidenceMapWithBackend(sessionId, snap.evidenceMap || {});
+
 	  applySnapshot({
 		rows: snap.rows || [],
-		evidenceMap: snap.evidenceMap || {},
+		evidenceMap: backendEvidenceMap,
 		proofStatusMap: snap.proofStatusMap || {},
 		plans: snap.plans || {},
 	  });
@@ -10139,7 +10360,7 @@ function GapTrackApp({
 
       // 2) Sinon fallback localStorage (comme avant)
       const stored = loadRowsForSession(activeSessionId);
-      const loadedEvidenceMap = loadEvidencesForSession(activeSessionId);
+      const loadedEvidenceMap = await mergeEvidenceMapWithBackend(activeSessionId, loadEvidencesForSession(activeSessionId));
       const loadedProofStatusMap = loadProofStatusForSession(activeSessionId);
       const loadedPlans = loadPlansForSession(activeSessionId);
 
@@ -10901,6 +11122,7 @@ function GapTrackApp({
         open={drawerOpen}
         onClose={closeEvidence}
         control={drawerControl}
+        auditSessionId={activeSessionId}
         evidenceMap={evidenceMap}
         proofStatusMap={proofStatusMap}
         commitEvidenceChange={commitEvidenceChange}
