@@ -6,7 +6,7 @@ import { Input } from "./components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "./components/ui/select";
 import { Badge } from "./components/ui/badge";
 import { toast } from "sonner";
-import {Filter, Redo2, Search, Undo2, ArrowUp, Paperclip, Download, Plus, Copy, X, Trash2, AlertTriangle, Shield, ShieldCheck, Lightbulb, Info, Loader2, CheckCircle2, AlertCircle, Pencil, BarChart3, ListChecks, ListTodo, Users, LogOut, UserPlus, History, ClipboardCheck, FileClock, FileCheck2, FileX2, Clock3, Mail} from "lucide-react";
+import {Filter, Redo2, Search, Undo2, ArrowUp, Paperclip, Download, Plus, Copy, X, Trash2, AlertTriangle, Shield, ShieldCheck, Lightbulb, Info, Loader2, CheckCircle2, AlertCircle, Pencil, BarChart3, ListChecks, ListTodo, Users, LogOut, UserPlus, History, FileCheck2, Clock3, Mail} from "lucide-react";
 import { ResponsiveContainer, Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Tooltip } from "recharts";
 import { LoginAccessPage } from "./components/LoginAccessPage";
 import { ResetPasswordPage } from "./components/ResetPasswordPage";
@@ -5861,8 +5861,6 @@ function WeeklyPriorityView({
     return "";
   };
 
-  const [showWeeklySecondary, setShowWeeklySecondary] = useState(false);
-
   if (priorities.length === 0) {
     return (
       <div className="p-4">
@@ -5904,24 +5902,6 @@ function WeeklyPriorityView({
                 <Lightbulb className="h-4 w-4 mr-1" />
                 {lang === "fr" ? `Préparer ma semaine (${missingPlans})` : `Prepare my week (${missingPlans})`}
               </Button>
-              <Button
-                size="sm"
-                variant={showWeeklySecondary ? "default" : "outline"}
-                onClick={() => setShowWeeklySecondary((v) => !v)}
-                aria-expanded={showWeeklySecondary}
-              >
-                {lang === "fr" ? "Plus" : "More"}
-              </Button>
-              {showWeeklySecondary && (
-                <div className="flex flex-col sm:flex-row gap-2 rounded-xl border bg-background/60 p-2">
-                  <Button size="sm" variant="outline" onClick={() => generateWeeklyPlans(true)}>
-                    {lang === "fr" ? "Regénérer les actions" : "Regenerate actions"}
-                  </Button>
-                  <Button size="sm" variant="outline" onClick={() => onOpenPlan()}>
-                    {lang === "fr" ? "Voir le plan complet" : "View full plan"}
-                  </Button>
-                </div>
-              )}
             </div>
           </div>
 
@@ -8304,19 +8284,12 @@ function EvidenceDrawer({ open, onClose, control, evidenceMap, proofStatusMap, c
   const t = I18N[lang];
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [note, setNote] = useState("");
-  const [reviewComment, setReviewComment] = useState("");
 
-  useEffect(()=>{ if(!open){ setNote(""); setReviewComment(""); } }, [open]);
+  useEffect(()=>{ if(!open){ setNote(""); } }, [open]);
   if(!open || !control) return null;
 
   const list = evidenceMap[control.id] || [];
   const proofStatus = effectiveEvidenceStatus(control.id, evidenceMap, proofStatusMap);
-  const expectedProof = weeklyFocusForControl(control, lang).proof;
-  const workflowSteps: EvidenceStatus[] = list.length === 0
-    ? ["absent", "added", "to_validate", "validated"]
-    : ["added", "to_validate", proofStatus === "refused" ? "refused" : "validated"];
-  const currentStepIndex = Math.max(0, workflowSteps.indexOf(proofStatus));
-
   const emitEvidenceLog = (action: AuditLogAction, message: string, extra?: Partial<AuditLogEntry>) => {
     onAuditEvent?.({
       action,
@@ -8356,7 +8329,6 @@ function EvidenceDrawer({ open, onClose, control, evidenceMap, proofStatusMap, c
             reviewedAt,
             reviewedBy,
             reviewStatus: coerced as EvidenceReviewStatus,
-            reviewComment: reviewComment.trim() || item.reviewComment,
           })),
         }
       : evidenceMap;
@@ -8379,10 +8351,8 @@ function EvidenceDrawer({ open, onClose, control, evidenceMap, proofStatusMap, c
       {
         before: evidenceStatusLabel(proofStatus, lang),
         after: evidenceStatusLabel(coerced, lang),
-        details: reviewComment.trim() || undefined,
       }
     );
-    if (shouldReview) setReviewComment("");
   };
 
   const addFile = async (file: File) => {
@@ -8513,50 +8483,6 @@ function EvidenceDrawer({ open, onClose, control, evidenceMap, proofStatusMap, c
         <div className="body">
           <div className="text-sm text-muted-foreground">{control.description}</div>
 
-          <div className="rounded-2xl border bg-card/60 p-4 space-y-4">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <div className="text-sm font-semibold flex items-center gap-2"><ClipboardCheck className="h-4 w-4" />{lang === "fr" ? "Workflow de preuve" : "Evidence workflow"}</div>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {lang === "fr"
-                    ? "Collectez une preuve, envoyez-la en validation, puis conservez la décision de revue dans le journal."
-                    : "Collect evidence, submit it for review, then keep the review decision in the audit log."}
-                </p>
-              </div>
-              <Badge variant="outline" className={evidenceStatusClass(proofStatus)}>{evidenceStatusLabel(proofStatus, lang)}</Badge>
-            </div>
-
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
-              {workflowSteps.map((status, index) => {
-                const active = status === proofStatus;
-                const done = index < currentStepIndex || proofStatus === "validated";
-                const icon = status === "validated" ? <FileCheck2 className="h-4 w-4" /> : status === "refused" ? <FileX2 className="h-4 w-4" /> : status === "to_validate" ? <FileClock className="h-4 w-4" /> : <Paperclip className="h-4 w-4" />;
-                return (
-                  <div key={status} className={"rounded-xl border p-3 " + (active ? "border-primary/60 bg-primary/10" : done ? "border-emerald-500/30 bg-emerald-500/10" : "bg-muted/15") }>
-                    <div className="flex items-center gap-2 text-sm font-medium">{icon}{evidenceStatusLabel(status, lang)}</div>
-                    <div className="mt-1 text-xs text-muted-foreground">{lang === "fr" ? `Étape ${index + 1}` : `Step ${index + 1}`}</div>
-                  </div>
-                );
-              })}
-            </div>
-
-            <div className="rounded-xl border bg-muted/20 p-3 text-sm">
-              <div className="text-xs uppercase tracking-wide text-muted-foreground">{lang === "fr" ? "Preuve attendue" : "Expected evidence"}</div>
-              <div className="mt-1">{expectedProof}</div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-2 items-end">
-              <div className="space-y-1">
-                <label className="text-xs text-muted-foreground">{lang === "fr" ? "Commentaire de revue" : "Review comment"}</label>
-                <Input value={reviewComment} onChange={(e) => setReviewComment(e.target.value)} placeholder={lang === "fr" ? "Ex: preuve suffisante, périmètre incomplet, document à mettre à jour..." : "e.g., sufficient evidence, incomplete scope, document needs update..."} />
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button variant="outline" size="sm" disabled={list.length === 0 || proofStatus === "to_validate"} onClick={() => setProofStatus("to_validate")}><FileClock className="h-4 w-4 mr-1" />{lang === "fr" ? "Envoyer" : "Submit"}</Button>
-                <Button variant="outline" size="sm" disabled={list.length === 0 || !canReviewEvidence} onClick={() => setProofStatus("validated")}><FileCheck2 className="h-4 w-4 mr-1" />{lang === "fr" ? "Valider" : "Validate"}</Button>
-                <Button variant="outline" size="sm" disabled={list.length === 0 || !canReviewEvidence} onClick={() => setProofStatus("refused")}><FileX2 className="h-4 w-4 mr-1" />{lang === "fr" ? "Refuser" : "Reject"}</Button>
-              </div>
-            </div>
-          </div>
 
           <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-muted-foreground flex gap-2">
             <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-300" />
