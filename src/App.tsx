@@ -2417,6 +2417,67 @@ html,body{background:var(--background);color:var(--foreground);}
 .modal header{padding:1rem 1rem .5rem 1rem;font-weight:600}
 .modal .body{padding:0 .75rem 1rem .75rem;color:var(--muted-foreground)}
 .modal footer{display:flex;justify-content:flex-end;gap:.5rem;padding:0 1rem 1rem 1rem}
+
+/* User management dialog: keeps the window inside the viewport and gives the content its own clean scroll area. */
+.user-management-overlay{
+  padding:16px;
+  overflow:hidden;
+}
+.user-management-modal{
+  width:min(1120px, calc(100vw - 32px));
+  max-width:none;
+  max-height:calc(100dvh - 32px);
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+}
+.user-management-modal header{
+  flex:0 0 auto;
+  padding:1rem 1.25rem;
+  border-bottom:1px solid var(--border);
+}
+.user-management-body{
+  flex:1 1 auto;
+  min-height:0;
+  max-height:none!important;
+  padding:1rem 1.25rem!important;
+  overflow-y:auto;
+  overflow-x:hidden;
+  scrollbar-gutter:stable;
+}
+.user-management-modal footer{
+  flex:0 0 auto;
+  padding:.85rem 1.25rem!important;
+  border-top:1px solid var(--border);
+  background:linear-gradient(180deg, color-mix(in srgb, var(--card) 66%, transparent), color-mix(in srgb, var(--card) 86%, transparent));
+}
+.user-management-grid{
+  align-items:start;
+}
+@media (max-width: 1279px){
+  .user-management-grid{
+    grid-template-columns:1fr!important;
+  }
+}
+@media (max-width: 640px){
+  .user-management-overlay{
+    padding:8px;
+  }
+  .user-management-modal{
+    width:calc(100vw - 16px);
+    max-height:calc(100dvh - 16px);
+    border-radius:14px;
+  }
+  .user-management-modal header,
+  .user-management-body,
+  .user-management-modal footer{
+    padding-left:.85rem!important;
+    padding-right:.85rem!important;
+  }
+  .user-management-modal footer > button{
+    width:100%;
+  }
+}
 /* Print */
 .no-print{}
 .print-only{display:none}
@@ -2760,15 +2821,15 @@ function UserManagementDialog({
   }
 
   return (
-    <div className="modal-overlay no-print" role="dialog" aria-modal="true" onClick={onClose}>
-      <div className="modal w-[min(1280px,calc(100vw-32px))] max-w-none overflow-hidden" onClick={(e) => e.stopPropagation()}>
+    <div className="modal-overlay user-management-overlay no-print" role="dialog" aria-modal="true" onClick={onClose}>
+      <div className="modal user-management-modal" onClick={(e) => e.stopPropagation()}>
         <header className="flex items-center justify-between gap-3">
           <span>{lang === "fr" ? "Gestion des utilisateurs" : "User management"}</span>
           <Button size="sm" variant="ghost" onClick={onClose}><X className="h-4 w-4" /></Button>
         </header>
 
-        <div className="body max-h-[78vh] overflow-y-auto overflow-x-hidden">
-          <div className="grid min-w-0 gap-5 xl:grid-cols-[420px_minmax(0,1fr)]">
+        <div className="body user-management-body">
+          <div className="user-management-grid grid min-w-0 gap-5 xl:grid-cols-[420px_minmax(0,1fr)]">
             <aside className="min-w-0 space-y-4">
               <div className="rounded-2xl border bg-muted/20 p-4">
                 <div className="flex flex-wrap items-center gap-3">
