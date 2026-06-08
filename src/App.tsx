@@ -2840,8 +2840,9 @@ function UserManagementDialog({
   const admins = users.filter((u) => u.active !== false && u.role === "admin" && !isServiceOwnerEmail(u.email));
   const canManage = userCanManageUsers(activeUser);
   const canCreate = canCreateUsers;
-  const visibleUsers = users.filter((u) => userCanViewUserRecord(activeUser, u));
-  const countedVisibleUsers = visibleUsers.filter((u) => !isServiceOwnerEmail(u.email));
+  // Le compte propriétaire ne doit pas apparaître dans la gestion des comptes clients.
+  const visibleUsers = users.filter((u) => userCanViewUserRecord(activeUser, u) && !isServiceOwnerEmail(u.email));
+  const countedVisibleUsers = visibleUsers;
 
   async function addUser() {
     if (!canCreate) return;
@@ -3173,16 +3174,13 @@ function ServiceOwnerAdminConsole({
   const [planEmail, setPlanEmail] = useState("");
   const [directPlan, setDirectPlan] = useState<SubscriptionPlan>("premium");
 
+  // Le compte propriétaire sert uniquement à administrer GapTrack :
+  // il ne doit ni compter, ni apparaître dans la liste des comptes clients.
   const visibleUsers = useMemo(
-    () => users.filter((u) => userCanViewUserRecord(activeUser, u)),
+    () => users.filter((u) => userCanViewUserRecord(activeUser, u) && !isServiceOwnerEmail(u.email)),
     [users, activeUser]
   );
-  // Le compte propriétaire est visible pour information, mais ne compte pas
-  // comme un utilisateur de la plateforme/audit dans les statistiques.
-  const countedUsers = useMemo(
-    () => visibleUsers.filter((u) => !isServiceOwnerEmail(u.email)),
-    [visibleUsers]
-  );
+  const countedUsers = visibleUsers;
   const activeAdmins = countedUsers.filter((u) => u.active !== false && u.role === "admin");
   const premiumCount = countedUsers.filter((u) => normalizeSubscriptionPlan(u.subscriptionPlan) === "premium").length;
   const freeCount = countedUsers.length - premiumCount;
