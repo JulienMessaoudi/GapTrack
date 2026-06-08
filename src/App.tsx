@@ -1754,7 +1754,7 @@ function setLocalActorFromUser(user: AppUser | null) {
 }
 
 function userCanManageUsers(user: AppUser | null | undefined): boolean {
-  return normalizeUserRole(user?.role) === "admin";
+  return isServiceOwnerUser(user) || normalizeUserRole(user?.role) === "admin";
 }
 
 function userCanManageSubscriptions(user: AppUser | null | undefined): boolean {
@@ -1763,6 +1763,10 @@ function userCanManageSubscriptions(user: AppUser | null | undefined): boolean {
 
 function isServiceOwnerEmail(email: string | null | undefined): boolean {
   return normalizeEmail(email || "") === normalizeEmail(PREMIUM_CONTACT_EMAIL);
+}
+
+function isServiceOwnerUser(user: AppUser | null | undefined): boolean {
+  return isServiceOwnerEmail(user?.email);
 }
 
 function userWasCreatedBy(candidate: AppUser, creator: AppUser | null | undefined): boolean {
@@ -1803,21 +1807,25 @@ function userCanCreateUsers(user: AppUser | null | undefined): boolean {
 }
 
 function userCanEditAudit(user: AppUser | null | undefined): boolean {
+  if (isServiceOwnerUser(user)) return false;
   const role = normalizeUserRole(user?.role);
   return role === "admin" || role === "auditor" || role === "contributor";
 }
 
 function userCanReviewEvidence(user: AppUser | null | undefined): boolean {
+  if (isServiceOwnerUser(user)) return false;
   const role = normalizeUserRole(user?.role);
   return role === "admin" || role === "auditor";
 }
 
 function userCanManageAudits(user: AppUser | null | undefined): boolean {
+  if (isServiceOwnerUser(user)) return false;
   const role = normalizeUserRole(user?.role);
   return role === "admin" || role === "auditor";
 }
 
 function userCanDeleteAudits(user: AppUser | null | undefined): boolean {
+  if (isServiceOwnerUser(user)) return false;
   return normalizeUserRole(user?.role) === "admin";
 }
 
@@ -3015,6 +3023,7 @@ function UserManagementDialog({
                     <div className="grid gap-3">
                       {visibleUsers.map((u) => {
                         const isSelf = activeUser?.id === u.id;
+                        const isOwnerAccount = isServiceOwnerEmail(u.email);
                         const canEditTarget = canManage && userCanModifyUserRecord(activeUser, u);
                         const disablingLastAdmin = u.role === "admin" && admins.length <= 1 && u.active !== false;
                         return (
@@ -3043,7 +3052,7 @@ function UserManagementDialog({
                                 {canManageSubscriptions ? (
                                   <Select
                                     value={normalizeSubscriptionPlan(u.subscriptionPlan)}
-                                    disabled={!canEditTarget}
+                                    disabled={!canEditTarget || isOwnerAccount}
                                     onValueChange={(v) => onUpdateUser(u.id, { subscriptionPlan: normalizeSubscriptionPlan(v) })}
                                   >
                                     <SelectTrigger className="w-full">{subscriptionPlanLabel(u.subscriptionPlan)}</SelectTrigger>
@@ -3065,7 +3074,7 @@ function UserManagementDialog({
                                 <label className="text-xs text-muted-foreground">{lang === "fr" ? "Rôle" : "Role"}</label>
                                 <Select
                                   value={u.role}
-                                  disabled={!canEditTarget || disablingLastAdmin}
+                                  disabled={!canEditTarget || disablingLastAdmin || isOwnerAccount}
                                   onValueChange={(v) => onUpdateUser(u.id, { role: v as UserRole })}
                                 >
                                   <SelectTrigger className="w-full">{userRoleLabel(u.role, lang)}</SelectTrigger>
@@ -3083,7 +3092,7 @@ function UserManagementDialog({
                                   <Button
                                     size="sm"
                                     variant="outline"
-                                    disabled={!canEditTarget || isSelf || disablingLastAdmin}
+                                    disabled={!canEditTarget || isSelf || disablingLastAdmin || isOwnerAccount}
                                     onClick={() => onUpdateUser(u.id, { active: u.active === false })}
                                   >
                                     {u.active === false ? (lang === "fr" ? "Réactiver" : "Reactivate") : (lang === "fr" ? "Désactiver" : "Deactivate")}
@@ -3091,7 +3100,7 @@ function UserManagementDialog({
                                   <Button
                                     size="sm"
                                     variant="outline"
-                                    disabled={!canEditTarget}
+                                    disabled={!canEditTarget || isOwnerAccount}
                                     onClick={() => {
                                       const next = window.prompt(lang === "fr" ? "Nouveau mot de passe temporaire" : "New temporary password");
                                       if (!next) return;
@@ -3103,7 +3112,7 @@ function UserManagementDialog({
                                   <Button
                                     size="sm"
                                     variant="destructive"
-                                    disabled={!canEditTarget || isSelf || disablingLastAdmin}
+                                    disabled={!canEditTarget || isSelf || disablingLastAdmin || isOwnerAccount}
                                     onClick={() => onDeleteUser(u.id)}
                                   >
                                     <Trash2 className="mr-1 h-4 w-4" />
@@ -3127,6 +3136,341 @@ function UserManagementDialog({
           <Button onClick={onClose}>{lang === "fr" ? "Fermer" : "Close"}</Button>
         </footer>
       </div>
+    </div>
+  );
+}
+
+
+function ServiceOwnerAdminConsole({
+  lang,
+  users,
+  activeUser,
+  onAddUser,
+  onUpdateUser,
+  onDeleteUser,
+  onResetPassword,
+  onSetSubscriptionByEmail,
+  onLogout,
+}: {
+  lang: LangKey;
+  users: AppUser[];
+  activeUser: AppUser;
+  onAddUser: (payload: NewUserPayload) => Promise<boolean>;
+  onUpdateUser: (userId: string, patch: Partial<AppUser>) => void | Promise<void>;
+  onDeleteUser: (userId: string) => void;
+  onResetPassword: (userId: string, password: string) => Promise<void>;
+  onSetSubscriptionByEmail: (email: string, plan: SubscriptionPlan) => void | Promise<void>;
+  onLogout: () => void;
+}) {
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [organization, setOrganization] = useState(activeUser.organization || "");
+  const [role, setRole] = useState<UserRole>("contributor");
+  const [newUserPlan, setNewUserPlan] = useState<SubscriptionPlan>("free");
+  const [password, setPassword] = useState("");
+  const [planEmail, setPlanEmail] = useState("");
+  const [directPlan, setDirectPlan] = useState<SubscriptionPlan>("premium");
+
+  const visibleUsers = useMemo(
+    () => users.filter((u) => userCanViewUserRecord(activeUser, u)),
+    [users, activeUser]
+  );
+  const activeAdmins = visibleUsers.filter((u) => u.active !== false && u.role === "admin");
+  const premiumCount = visibleUsers.filter((u) => normalizeSubscriptionPlan(u.subscriptionPlan) === "premium").length;
+  const freeCount = visibleUsers.length - premiumCount;
+
+  async function addUser() {
+    const ok = await onAddUser({
+      name,
+      email,
+      password,
+      role,
+      organization,
+      subscriptionPlan: newUserPlan,
+      createdByUserId: activeUser.id,
+      createdByEmail: activeUser.email,
+    });
+
+    if (ok) {
+      setName("");
+      setEmail("");
+      setPassword("");
+      setRole("contributor");
+      setNewUserPlan("free");
+    }
+  }
+
+  return (
+    <div className="min-h-screen bg-background text-foreground app-shell">
+      <ThemeStyles />
+      <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 px-5 py-6 lg:px-8">
+        <header className="rounded-3xl border bg-muted/10 p-5 shadow-sm">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="min-w-0">
+              <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-3 py-1 text-sm text-cyan-900 dark:text-cyan-100">
+                <ShieldCheck className="h-4 w-4" />
+                {lang === "fr" ? "Console propriétaire" : "Owner console"}
+              </div>
+              <h1 className="text-2xl font-semibold tracking-tight lg:text-3xl">
+                {lang === "fr" ? "Administration GapTrack" : "GapTrack administration"}
+              </h1>
+              <p className="mt-2 text-sm text-muted-foreground">
+                {lang === "fr"
+                  ? "Ce compte ne donne pas accès aux audits : il sert uniquement à gérer les utilisateurs, les rôles et les offres Free/Premium."
+                  : "This account does not access audits: it is only used to manage users, roles and Free/Premium plans."}
+              </p>
+              <p className="mt-1 truncate text-xs text-muted-foreground">
+                {activeUser.name} · {activeUser.email}
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="outline" className={userRoleBadgeClass(activeUser.role)}>{userRoleLabel(activeUser.role, lang)}</Badge>
+              <Badge variant="outline" className={subscriptionPlanBadgeClass(activeUser.subscriptionPlan)}>
+                {subscriptionPlanLabel(activeUser.subscriptionPlan)}
+              </Badge>
+              <Button variant="outline" onClick={onLogout}>
+                <LogOut className="mr-2 h-4 w-4" />
+                {lang === "fr" ? "Déconnexion" : "Logout"}
+              </Button>
+            </div>
+          </div>
+        </header>
+
+        <section className="grid gap-4 md:grid-cols-3">
+          <div className="rounded-2xl border bg-muted/10 p-4">
+            <div className="text-sm text-muted-foreground">{lang === "fr" ? "Utilisateurs" : "Users"}</div>
+            <div className="mt-2 text-3xl font-semibold">{visibleUsers.length}</div>
+          </div>
+          <div className="rounded-2xl border border-cyan-500/30 bg-cyan-500/10 p-4">
+            <div className="text-sm text-cyan-900/80 dark:text-cyan-100/80">Premium</div>
+            <div className="mt-2 text-3xl font-semibold text-cyan-900 dark:text-cyan-100">{premiumCount}</div>
+          </div>
+          <div className="rounded-2xl border border-sky-500/30 bg-sky-500/10 p-4">
+            <div className="text-sm text-sky-900/80 dark:text-sky-100/80">Free</div>
+            <div className="mt-2 text-3xl font-semibold text-sky-900 dark:text-sky-100">{freeCount}</div>
+          </div>
+        </section>
+
+        <div className="grid min-w-0 gap-5 xl:grid-cols-[420px_minmax(0,1fr)]">
+          <aside className="min-w-0 space-y-5">
+            <section className="rounded-2xl border p-4">
+              <div className="mb-3 flex items-center gap-2 font-medium">
+                <UserPlus className="h-4 w-4" />
+                {lang === "fr" ? "Inviter / créer un utilisateur" : "Invite / create user"}
+              </div>
+              <p className="mb-4 text-sm text-muted-foreground">
+                {lang === "fr"
+                  ? "Le compte créé pourra faire des audits selon son rôle et son offre."
+                  : "The created account can perform audits depending on its role and plan."}
+              </p>
+              <div className="grid gap-3">
+                <div>
+                  <label className="text-sm text-muted-foreground">{lang === "fr" ? "Nom" : "Name"}</label>
+                  <Input value={name} onChange={(e) => setName(e.target.value)} />
+                </div>
+                <div>
+                  <label className="text-sm text-muted-foreground">Email</label>
+                  <Input value={email} onChange={(e) => setEmail(e.target.value)} type="email" />
+                </div>
+                <div>
+                  <label className="text-sm text-muted-foreground">{lang === "fr" ? "Organisation" : "Organization"}</label>
+                  <Input value={organization} onChange={(e) => setOrganization(e.target.value)} />
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className="text-sm text-muted-foreground">{lang === "fr" ? "Rôle" : "Role"}</label>
+                    <Select value={role} onValueChange={(v) => setRole(v as UserRole)}>
+                      <SelectTrigger>{userRoleLabel(role, lang)}</SelectTrigger>
+                      <SelectContent>
+                        {(["admin", "auditor", "contributor", "viewer"] as UserRole[]).map((r) => (
+                          <SelectItem key={r} value={r}>{userRoleLabel(r, lang)}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="text-sm text-muted-foreground">{lang === "fr" ? "Offre" : "Plan"}</label>
+                    <Select value={newUserPlan} onValueChange={(v) => setNewUserPlan(normalizeSubscriptionPlan(v))}>
+                      <SelectTrigger>{subscriptionPlanLabel(newUserPlan)}</SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="free">Free</SelectItem>
+                        <SelectItem value="premium">Premium</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-sm text-muted-foreground">{lang === "fr" ? "Mot de passe temporaire" : "Temporary password"}</label>
+                  <Input value={password} onChange={(e) => setPassword(e.target.value)} type="password" />
+                </div>
+              </div>
+              <Button className="mt-4 w-full" onClick={addUser}>
+                <UserPlus className="mr-2 h-4 w-4" />
+                {lang === "fr" ? "Créer et envoyer l’e-mail" : "Create and send email"}
+              </Button>
+            </section>
+
+            <section className="rounded-2xl border border-cyan-500/30 bg-cyan-500/10 p-4">
+              <div className="mb-2 flex items-center gap-2 font-medium text-cyan-900 dark:text-cyan-100">
+                <ShieldCheck className="h-4 w-4" />
+                {lang === "fr" ? "Changer une offre par e-mail" : "Change a plan by email"}
+              </div>
+              <p className="mb-3 text-sm text-cyan-900/80 dark:text-cyan-100/80">
+                {lang === "fr"
+                  ? "L’offre est mise à jour côté Supabase et sera valable sur tous les navigateurs et appareils."
+                  : "The plan is updated in Supabase and will apply on all browsers and devices."}
+              </p>
+              <div className="grid gap-2">
+                <Input value={planEmail} onChange={(e) => setPlanEmail(e.target.value)} type="email" placeholder="client@entreprise.com" />
+                <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                  <Select value={directPlan} onValueChange={(v) => setDirectPlan(normalizeSubscriptionPlan(v))}>
+                    <SelectTrigger>{subscriptionPlanLabel(directPlan)}</SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="free">Free</SelectItem>
+                      <SelectItem value="premium">Premium</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      onSetSubscriptionByEmail(planEmail, directPlan);
+                      setPlanEmail("");
+                    }}
+                  >
+                    {lang === "fr" ? "Appliquer" : "Apply"}
+                  </Button>
+                </div>
+              </div>
+            </section>
+          </aside>
+
+          <section className="min-w-0 rounded-2xl border p-4">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="font-medium">{lang === "fr" ? "Comptes utilisateurs" : "User accounts"}</div>
+                <div className="text-sm text-muted-foreground">
+                  {lang === "fr" ? "Gestion des rôles, accès et offres." : "Manage roles, access and plans."}
+                </div>
+              </div>
+              <Badge variant="outline">{visibleUsers.length}</Badge>
+            </div>
+
+            <div className="grid gap-3">
+              {visibleUsers.map((u) => {
+                const isSelf = activeUser.id === u.id;
+                const isOwnerAccount = isServiceOwnerEmail(u.email);
+                const canEditTarget = userCanModifyUserRecord(activeUser, u);
+                const disablingLastAdmin = u.role === "admin" && activeAdmins.length <= 1 && u.active !== false;
+
+                return (
+                  <article key={u.id} className={"rounded-2xl border bg-muted/10 p-4 " + (u.active === false ? "opacity-60" : "")}>
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="truncate font-medium">{u.name}</div>
+                          {isOwnerAccount ? (
+                            <Badge variant="outline" className="border-cyan-500/40 text-cyan-700 dark:text-cyan-300 bg-cyan-500/10">
+                              {lang === "fr" ? "Compte propriétaire" : "Owner account"}
+                            </Badge>
+                          ) : null}
+                        </div>
+                        <div className="truncate text-sm text-muted-foreground">{u.email}</div>
+                        <div className="mt-1 truncate text-xs text-muted-foreground">
+                          {u.organization || "—"} · {lang === "fr" ? "Créé le" : "Created"} {new Date(u.createdAt).toLocaleDateString(lang === "fr" ? "fr-FR" : "en-US")}
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant="outline" className={subscriptionPlanBadgeClass(u.subscriptionPlan)}>{subscriptionPlanLabel(u.subscriptionPlan)}</Badge>
+                        <Badge variant="outline" className={userRoleBadgeClass(u.role)}>{userRoleLabel(u.role, lang)}</Badge>
+                        <Badge variant="outline" className={u.active === false ? "border-rose-500/40 text-rose-700 dark:text-rose-300 bg-rose-500/10" : "border-emerald-500/40 text-emerald-700 dark:text-emerald-300 bg-emerald-500/10"}>
+                          {u.active === false ? (lang === "fr" ? "Inactif" : "Inactive") : (lang === "fr" ? "Actif" : "Active")}
+                        </Badge>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 grid min-w-0 gap-3 lg:grid-cols-[170px_190px_minmax(0,1fr)]">
+                      <div className="min-w-0">
+                        <label className="text-xs text-muted-foreground">{lang === "fr" ? "Offre" : "Plan"}</label>
+                        {isOwnerAccount ? (
+                          <div className="mt-2">
+                            <Badge variant="outline" className={subscriptionPlanBadgeClass(u.subscriptionPlan)}>{subscriptionPlanLabel(u.subscriptionPlan)}</Badge>
+                            <div className="mt-1 text-xs text-muted-foreground">
+                              {lang === "fr" ? "Offre verrouillée" : "Locked plan"}
+                            </div>
+                          </div>
+                        ) : (
+                          <Select
+                            value={normalizeSubscriptionPlan(u.subscriptionPlan)}
+                            disabled={!canEditTarget}
+                            onValueChange={(v) => onUpdateUser(u.id, { subscriptionPlan: normalizeSubscriptionPlan(v) })}
+                          >
+                            <SelectTrigger className="w-full">{subscriptionPlanLabel(u.subscriptionPlan)}</SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="free">Free</SelectItem>
+                              <SelectItem value="premium">Premium</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        )}
+                      </div>
+
+                      <div className="min-w-0">
+                        <label className="text-xs text-muted-foreground">{lang === "fr" ? "Rôle" : "Role"}</label>
+                        <Select
+                          value={u.role}
+                          disabled={!canEditTarget || disablingLastAdmin || isOwnerAccount}
+                          onValueChange={(v) => onUpdateUser(u.id, { role: v as UserRole })}
+                        >
+                          <SelectTrigger className="w-full">{userRoleLabel(u.role, lang)}</SelectTrigger>
+                          <SelectContent>
+                            {(["admin", "auditor", "contributor", "viewer"] as UserRole[]).map((r) => (
+                              <SelectItem key={r} value={r}>{userRoleLabel(r, lang)}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="min-w-0">
+                        <label className="text-xs text-muted-foreground">{lang === "fr" ? "Actions" : "Actions"}</label>
+                        <div className="mt-1 flex flex-wrap items-center gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={!canEditTarget || isSelf || disablingLastAdmin || isOwnerAccount}
+                            onClick={() => onUpdateUser(u.id, { active: u.active === false })}
+                          >
+                            {u.active === false ? (lang === "fr" ? "Réactiver" : "Reactivate") : (lang === "fr" ? "Désactiver" : "Deactivate")}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={!canEditTarget || isOwnerAccount}
+                            onClick={() => {
+                              const next = window.prompt(lang === "fr" ? "Nouveau mot de passe temporaire" : "New temporary password");
+                              if (!next) return;
+                              onResetPassword(u.id, next);
+                            }}
+                          >
+                            {lang === "fr" ? "Réinitialiser" : "Reset"}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            disabled={!canEditTarget || isSelf || disablingLastAdmin || isOwnerAccount}
+                            onClick={() => onDeleteUser(u.id)}
+                          >
+                            <Trash2 className="mr-1 h-4 w-4" />
+                            {lang === "fr" ? "Supprimer" : "Delete"}
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          </section>
+        </div>
+      </main>
     </div>
   );
 }
@@ -9329,6 +9673,16 @@ function GapTrackApp({
     const target = users.find((u) => u.id === userId);
     if (!target) return;
 
+    if (isServiceOwnerEmail(target.email) && patch.subscriptionPlan) {
+      toast.error(lang === "fr" ? "L’offre du compte propriétaire est verrouillée." : "The owner account plan is locked.");
+      return;
+    }
+
+    if (isServiceOwnerEmail(target.email) && (patch.role || patch.active === false)) {
+      toast.error(lang === "fr" ? "Le compte propriétaire est protégé." : "The owner account is protected.");
+      return;
+    }
+
     if (!userCanModifyUserRecord(activeUser, target)) {
       toast.error(lang === "fr" ? "Vous pouvez modifier uniquement les utilisateurs que vous avez créés." : "You can only edit users you created.");
       return;
@@ -9392,6 +9746,46 @@ function GapTrackApp({
     });
   }, [activeUser, canManageSubscriptionsFlag, canManageUsersFlag, lang, users]);
 
+  const setSubscriptionByEmail = React.useCallback(async (rawEmail: string, plan: SubscriptionPlan) => {
+    if (!canManageSubscriptionsFlag) {
+      toast.error(lang === "fr" ? "Seul le propriétaire du service peut modifier les offres." : "Only the service owner can change plans.");
+      return;
+    }
+
+    const email = normalizeEmail(rawEmail);
+    if (!email) {
+      toast.error(lang === "fr" ? "Adresse e-mail obligatoire." : "Email is required.");
+      return;
+    }
+
+    if (isServiceOwnerEmail(email)) {
+      toast.error(lang === "fr" ? "L’offre du compte propriétaire est verrouillée." : "The owner account plan is locked.");
+      return;
+    }
+
+    const nextPlan = normalizeSubscriptionPlan(plan);
+
+    try {
+      await updateSubscriptionPlanOnServer(email, nextPlan);
+    } catch (error) {
+      console.error(error);
+      toast.error(
+        lang === "fr"
+          ? "Impossible de mettre à jour l’offre dans Supabase."
+          : "Unable to update the plan in Supabase."
+      );
+      return;
+    }
+
+    setUsers((prev) => {
+      const next = prev.map((u) => normalizeEmail(u.email) === email ? { ...u, subscriptionPlan: nextPlan } : u);
+      saveUsers(next);
+      return next;
+    });
+
+    toast.success(lang === "fr" ? `Offre ${subscriptionPlanLabel(nextPlan)} appliquée pour ${email}.` : `${subscriptionPlanLabel(nextPlan)} applied for ${email}.`);
+  }, [canManageSubscriptionsFlag, lang]);
+
   const activatePremiumByEmail = React.useCallback(async (rawEmail: string) => {
     if (!canManageSubscriptionsFlag) {
       toast.error(lang === "fr" ? "Seul le propriétaire du service peut activer Premium." : "Only the service owner can activate Premium.");
@@ -9401,6 +9795,11 @@ function GapTrackApp({
     const email = normalizeEmail(rawEmail);
     if (!email) {
       toast.error(lang === "fr" ? "Adresse e-mail obligatoire." : "Email is required.");
+      return;
+    }
+
+    if (isServiceOwnerEmail(email)) {
+      toast.error(lang === "fr" ? "L’offre du compte propriétaire est verrouillée." : "The owner account plan is locked.");
       return;
     }
 
@@ -10337,6 +10736,27 @@ function GapTrackApp({
             navigate("login");
           }}
           onNavigate={(page) => navigate(page === "apropos" ? "about" : "home")}
+        />
+      </MotionConfig>
+    );
+  }
+
+  if (isServiceOwnerUser(activeUser)) {
+    return (
+      <MotionConfig transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }} reducedMotion="user">
+        <ServiceOwnerAdminConsole
+          lang={lang}
+          users={users}
+          activeUser={activeUser}
+          onAddUser={addUser}
+          onUpdateUser={updateUser}
+          onDeleteUser={deleteUser}
+          onResetPassword={resetUserPassword}
+          onSetSubscriptionByEmail={setSubscriptionByEmail}
+          onLogout={() => {
+            logoutUser();
+            navigate("home", true);
+          }}
         />
       </MotionConfig>
     );
