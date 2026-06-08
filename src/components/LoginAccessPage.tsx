@@ -106,6 +106,32 @@ function normalizeSubscriptionPlan(value: unknown): SubscriptionPlan {
   return value === "premium" ? "premium" : "free";
 }
 
+function normalizeUserRole(value: unknown): UserRole | undefined {
+  return value === "admin" || value === "auditor" || value === "contributor" || value === "viewer"
+    ? value
+    : undefined;
+}
+
+async function fetchGapTrackProfile(userId: string, fallbackEmail: string): Promise<SupabaseAuthProfile> {
+  const { data, error } = await supabase
+    .from("gaptrack_profiles")
+    .select("email, name, organization, role, subscription_plan")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  return {
+    email: typeof data?.email === "string" ? data.email : fallbackEmail,
+    name: typeof data?.name === "string" ? data.name : undefined,
+    organization: typeof data?.organization === "string" ? data.organization : undefined,
+    role: normalizeUserRole(data?.role),
+    subscriptionPlan: normalizeSubscriptionPlan(data?.subscription_plan),
+  };
+}
+
 
 function planDescription(plan: SubscriptionPlan): string {
   return plan === "premium"
@@ -299,15 +325,34 @@ export function LoginAccessPage({
         return;
       }
 
-      const profile = data.user?.user_metadata || {};
+      if (!data.user?.id) {
+        toast.error(lang === "fr" ? "Session Supabase invalide." : "Invalid Supabase session.");
+        return;
+      }
+
+      const profileMetadata = data.user.user_metadata || {};
+      let serverProfile: SupabaseAuthProfile;
+
+      try {
+        serverProfile = await fetchGapTrackProfile(data.user.id, data.user.email || targetEmail);
+      } catch (profileError) {
+        console.error("Unable to load GapTrack profile", profileError);
+        toast.error(
+          lang === "fr"
+            ? "Connexion impossible : le profil serveur GapTrack est indisponible."
+            : "Sign-in failed: the GapTrack server profile is unavailable."
+        );
+        return;
+      }
+
       onSupabaseAuthenticated?.({
-        email: data.user?.email || targetEmail,
-        name: typeof profile.name === "string" ? profile.name : undefined,
-        organization: typeof profile.organization === "string" ? profile.organization : undefined,
-        role: profile.role === "admin" || profile.role === "auditor" || profile.role === "contributor" || profile.role === "viewer" ? profile.role : undefined,
-        subscriptionPlan: normalizeSubscriptionPlan(profile.subscriptionPlan),
-        createdByUserId: typeof profile.createdByUserId === "string" ? profile.createdByUserId : undefined,
-        createdByEmail: typeof profile.createdByEmail === "string" ? profile.createdByEmail : undefined,
+        email: serverProfile.email,
+        name: serverProfile.name,
+        organization: serverProfile.organization,
+        role: serverProfile.role,
+        subscriptionPlan: serverProfile.subscriptionPlan,
+        createdByUserId: typeof profileMetadata.createdByUserId === "string" ? profileMetadata.createdByUserId : undefined,
+        createdByEmail: typeof profileMetadata.createdByEmail === "string" ? profileMetadata.createdByEmail : undefined,
       });
 
       toast.success(lang === "fr" ? "Connexion réussie." : "Signed in.");
