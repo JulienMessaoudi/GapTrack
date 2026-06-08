@@ -2733,38 +2733,10 @@ function UserManagementDialog({
 
   if (!open) return null;
 
-  const activeAdmins = users.filter((u) => u.active !== false && u.role === "admin");
+  const admins = users.filter((u) => u.active !== false && u.role === "admin");
   const canManage = userCanManageUsers(activeUser);
   const canCreate = canCreateUsers;
-  const isSuperUser = canManageSubscriptions;
   const visibleUsers = users.filter((u) => userCanViewUserRecord(activeUser, u));
-  const visibleAdmins = visibleUsers.filter((u) => u.role === "admin");
-  const activeVisibleUsers = visibleUsers.filter((u) => u.active !== false);
-
-  const adminCreators = isSuperUser
-    ? users
-        .filter((u) => u.role === "admin")
-        .sort((a, b) => {
-          if (isServiceOwnerEmail(a.email)) return -1;
-          if (isServiceOwnerEmail(b.email)) return 1;
-          return (a.name || a.email).localeCompare(b.name || b.email);
-        })
-    : [];
-
-  const groupedUserIds = new Set<string>();
-  const creatorGroups = adminCreators.map((admin) => {
-    groupedUserIds.add(admin.id);
-    const members = users
-      .filter((u) => u.id !== admin.id && userWasCreatedBy(u, admin))
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    members.forEach((u) => groupedUserIds.add(u.id));
-    return { admin, members };
-  });
-  const unassignedUsers = isSuperUser
-    ? users
-        .filter((u) => !isServiceOwnerEmail(u.email) && !groupedUserIds.has(u.id))
-        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-    : [];
 
   async function addUser() {
     if (!canCreate) return;
@@ -2787,143 +2759,19 @@ function UserManagementDialog({
     }
   }
 
-  function renderUserCard(u: AppUser, caption?: string) {
-    const isSelf = activeUser?.id === u.id;
-    const canEditTarget = canManage && userCanModifyUserRecord(activeUser, u);
-    const disablingLastAdmin = u.role === "admin" && activeAdmins.length <= 1 && u.active !== false;
-    const creator = users.find((candidate) => userWasCreatedBy(u, candidate));
-
-    return (
-      <div key={`${caption || "user"}-${u.id}`} className={"rounded-2xl border bg-background/55 p-4 shadow-sm " + (u.active === false ? "opacity-60" : "") }>
-        <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-          <div className="min-w-0">
-            {caption && <div className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">{caption}</div>}
-            <div className="truncate text-base font-semibold">{u.name}</div>
-            <div className="truncate text-sm text-muted-foreground">{u.email}</div>
-            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-              <span>{u.organization || "—"}</span>
-              <span>·</span>
-              <span>{lang === "fr" ? "Créé le" : "Created"} {new Date(u.createdAt).toLocaleDateString(lang === "fr" ? "fr-FR" : "en-US")}</span>
-              {isSuperUser && creator && !isServiceOwnerEmail(u.email) && (
-                <>
-                  <span>·</span>
-                  <span>{lang === "fr" ? "Créé par" : "Created by"} {creator.name || creator.email}</span>
-                </>
-              )}
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="outline" className={subscriptionPlanBadgeClass(u.subscriptionPlan)}>
-              {subscriptionPlanLabel(u.subscriptionPlan)}
-            </Badge>
-            <Badge variant="outline" className={userRoleBadgeClass(u.role)}>
-              {userRoleLabel(u.role, lang)}
-            </Badge>
-            <Badge variant="outline" className={u.active === false ? "border-rose-500/40 bg-rose-500/10 text-rose-700 dark:text-rose-300" : "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"}>
-              {u.active === false ? (lang === "fr" ? "Inactif" : "Inactive") : (lang === "fr" ? "Actif" : "Active")}
-            </Badge>
-          </div>
-        </div>
-
-        <div className="mt-4 grid min-w-0 gap-3 lg:grid-cols-[170px_190px_minmax(0,1fr)]">
-          <div className="min-w-0">
-            <label className="text-xs text-muted-foreground">{lang === "fr" ? "Offre" : "Plan"}</label>
-            {canManageSubscriptions ? (
-              <Select
-                value={normalizeSubscriptionPlan(u.subscriptionPlan)}
-                disabled={!canEditTarget}
-                onValueChange={(v) => onUpdateUser(u.id, { subscriptionPlan: normalizeSubscriptionPlan(v) })}
-              >
-                <SelectTrigger className="w-full">{subscriptionPlanLabel(u.subscriptionPlan)}</SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="free">Free</SelectItem>
-                  <SelectItem value="premium">Premium</SelectItem>
-                </SelectContent>
-              </Select>
-            ) : (
-              <div className="mt-2">
-                <Badge variant="outline" className={subscriptionPlanBadgeClass(u.subscriptionPlan)}>
-                  {subscriptionPlanLabel(u.subscriptionPlan)}
-                </Badge>
-              </div>
-            )}
-          </div>
-
-          <div className="min-w-0">
-            <label className="text-xs text-muted-foreground">{lang === "fr" ? "Rôle" : "Role"}</label>
-            <Select
-              value={u.role}
-              disabled={!canEditTarget || disablingLastAdmin}
-              onValueChange={(v) => onUpdateUser(u.id, { role: v as UserRole })}
-            >
-              <SelectTrigger className="w-full">{userRoleLabel(u.role, lang)}</SelectTrigger>
-              <SelectContent>
-                {(["admin", "auditor", "contributor", "viewer"] as UserRole[]).map((r) => (
-                  <SelectItem key={r} value={r}>{userRoleLabel(r, lang)}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="min-w-0">
-            <label className="text-xs text-muted-foreground">{lang === "fr" ? "Actions" : "Actions"}</label>
-            <div className="mt-1 flex flex-wrap items-center gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={!canEditTarget || isSelf || disablingLastAdmin}
-                onClick={() => onUpdateUser(u.id, { active: u.active === false })}
-              >
-                {u.active === false ? (lang === "fr" ? "Réactiver" : "Reactivate") : (lang === "fr" ? "Désactiver" : "Deactivate")}
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={!canEditTarget}
-                onClick={() => {
-                  const next = window.prompt(lang === "fr" ? "Nouveau mot de passe temporaire" : "New temporary password");
-                  if (!next) return;
-                  onResetPassword(u.id, next);
-                }}
-              >
-                {lang === "fr" ? "Réinitialiser" : "Reset"}
-              </Button>
-              <Button
-                size="sm"
-                variant="destructive"
-                disabled={!canEditTarget || isSelf || disablingLastAdmin}
-                onClick={() => onDeleteUser(u.id)}
-              >
-                <Trash2 className="mr-1 h-4 w-4" />
-                {lang === "fr" ? "Supprimer" : "Delete"}
-              </Button>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="modal-overlay no-print" role="dialog" aria-modal="true" onClick={onClose}>
-      <div className="modal w-[min(1480px,calc(100vw-24px))] max-w-none overflow-hidden" onClick={(e) => e.stopPropagation()}>
-        <header className="flex items-center justify-between gap-3 border-b pb-4">
-          <div className="min-w-0">
-            <span className="block truncate text-xl font-semibold">{lang === "fr" ? "Gestion des utilisateurs" : "User management"}</span>
-            <span className="mt-1 block text-sm text-muted-foreground">
-              {isSuperUser
-                ? (lang === "fr" ? "Vue globale par créateur, réservée au super user." : "Global creator-based view, reserved for the super user.")
-                : (lang === "fr" ? "Gestion des comptes rattachés à votre espace." : "Manage accounts attached to your workspace.")}
-            </span>
-          </div>
+      <div className="modal w-[min(1280px,calc(100vw-32px))] max-w-none overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        <header className="flex items-center justify-between gap-3">
+          <span>{lang === "fr" ? "Gestion des utilisateurs" : "User management"}</span>
           <Button size="sm" variant="ghost" onClick={onClose}><X className="h-4 w-4" /></Button>
         </header>
 
-        <div className="body max-h-[78vh] overflow-y-auto overflow-x-hidden pr-2">
-          <div className="space-y-5">
-            <section className="grid min-w-0 gap-3 lg:grid-cols-[minmax(0,1.3fr)_repeat(3,minmax(160px,0.7fr))]">
+        <div className="body max-h-[78vh] overflow-y-auto overflow-x-hidden">
+          <div className="grid min-w-0 gap-5 xl:grid-cols-[420px_minmax(0,1fr)]">
+            <aside className="min-w-0 space-y-4">
               <div className="rounded-2xl border bg-muted/20 p-4">
-                <div className="flex min-w-0 flex-wrap items-center gap-3">
+                <div className="flex flex-wrap items-center gap-3">
                   <div className="rounded-xl border bg-background p-2">
                     <Users className="h-5 w-5" />
                   </div>
@@ -2943,221 +2791,251 @@ function UserManagementDialog({
                   </Badge>
                 </div>
               </div>
-              <div className="rounded-2xl border bg-muted/10 p-4">
-                <div className="text-2xl font-semibold">{visibleUsers.length}</div>
-                <div className="text-sm text-muted-foreground">{lang === "fr" ? "Comptes visibles" : "Visible accounts"}</div>
-              </div>
-              <div className="rounded-2xl border bg-muted/10 p-4">
-                <div className="text-2xl font-semibold">{visibleAdmins.length}</div>
-                <div className="text-sm text-muted-foreground">Admins</div>
-              </div>
-              <div className="rounded-2xl border bg-muted/10 p-4">
-                <div className="text-2xl font-semibold">{activeVisibleUsers.length}</div>
-                <div className="text-sm text-muted-foreground">{lang === "fr" ? "Comptes actifs" : "Active accounts"}</div>
-              </div>
-            </section>
 
-            {!canManage && (
-              <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-800 dark:text-amber-200">
-                {lang === "fr" ? "Seul un administrateur peut voir ou gérer les utilisateurs." : "Only administrators can view or manage users."}
-              </div>
-            )}
+              {!canManage && (
+                <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-800 dark:text-amber-200">
+                  {lang === "fr" ? "Seul un administrateur peut voir ou gérer les utilisateurs." : "Only administrators can view or manage users."}
+                </div>
+              )}
+
+              {canManage && !canCreate && (
+                <div className="rounded-2xl border border-cyan-500/30 bg-cyan-500/10 p-4 text-sm text-cyan-900 dark:text-cyan-100">
+                  {lang === "fr"
+                    ? "La création d’utilisateurs est réservée aux comptes administrateurs Premium."
+                    : "User creation is reserved for Premium administrator accounts."}
+                </div>
+              )}
+
+              {canCreate && (
+                <div className="rounded-2xl border p-4">
+                  <div className="mb-3 flex items-center gap-2 font-medium">
+                    <UserPlus className="h-4 w-4" />
+                    {lang === "fr" ? "Inviter / créer un utilisateur" : "Invite / create user"}
+                  </div>
+                  <p className="mb-4 text-sm text-muted-foreground">
+                    {lang === "fr"
+                      ? "Un e-mail de vérification sera envoyé. L’utilisateur pourra se connecter avec le mot de passe temporaire après confirmation de son adresse e-mail."
+                      : "A verification email will be sent. The user can sign in with the temporary password after confirming their email address."}
+                  </p>
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+                    <div>
+                      <label className="text-sm text-muted-foreground">{lang === "fr" ? "Nom" : "Name"}</label>
+                      <Input value={name} onChange={(e) => setName(e.target.value)} />
+                    </div>
+                    <div>
+                      <label className="text-sm text-muted-foreground">Email</label>
+                      <Input value={email} onChange={(e) => setEmail(e.target.value)} type="email" />
+                    </div>
+                    <div>
+                      <label className="text-sm text-muted-foreground">{lang === "fr" ? "Organisation" : "Organization"}</label>
+                      <Input value={organization} onChange={(e) => setOrganization(e.target.value)} />
+                    </div>
+                    <div>
+                      <label className="text-sm text-muted-foreground">{lang === "fr" ? "Rôle" : "Role"}</label>
+                      <Select value={role} onValueChange={(v) => setRole(v as UserRole)}>
+                        <SelectTrigger>{userRoleLabel(role, lang)}</SelectTrigger>
+                        <SelectContent>
+                          {(["admin", "auditor", "contributor", "viewer"] as UserRole[]).map((r) => (
+                            <SelectItem key={r} value={r}>{userRoleLabel(r, lang)}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {canManageSubscriptions && (
+                      <div>
+                        <label className="text-sm text-muted-foreground">{lang === "fr" ? "Offre" : "Plan"}</label>
+                        <Select value={newUserPlan} onValueChange={(v) => setNewUserPlan(normalizeSubscriptionPlan(v))}>
+                          <SelectTrigger>{subscriptionPlanLabel(newUserPlan)}</SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="free">Free</SelectItem>
+                            <SelectItem value="premium">Premium</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                    <div>
+                      <label className="text-sm text-muted-foreground">{lang === "fr" ? "Mot de passe temporaire" : "Temporary password"}</label>
+                      <Input value={password} onChange={(e) => setPassword(e.target.value)} type="password" />
+                    </div>
+                  </div>
+                  <Button className="mt-4" onClick={addUser}>
+                    <UserPlus className="mr-2 h-4 w-4" />
+                    {lang === "fr" ? "Créer et envoyer l’e-mail" : "Create and send email"}
+                  </Button>
+                </div>
+              )}
+
+              {canManage && canManageSubscriptions && (
+                <div className="rounded-2xl border border-cyan-500/30 bg-cyan-500/10 p-4">
+                  <div className="mb-2 flex items-center gap-2 font-medium text-cyan-900 dark:text-cyan-100">
+                    <ShieldCheck className="h-4 w-4" />
+                    {lang === "fr" ? "Activation Premium par adresse e-mail" : "Premium activation by email"}
+                  </div>
+                  <p className="mb-3 text-sm text-cyan-900/80 dark:text-cyan-100/80">
+                    {lang === "fr"
+                      ? "Saisissez l’adresse reçue par e-mail : elle sera autorisée en Premium lors de sa prochaine connexion sur cette instance GapTrack."
+                      : "Enter the address received by email: it will be allowed as Premium on the next sign-in on this GapTrack instance."}
+                  </p>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <Input
+                      value={premiumEmail}
+                      onChange={(e) => setPremiumEmail(e.target.value)}
+                      type="email"
+                      placeholder="client@entreprise.com"
+                    />
+                    <Button
+                      type="button"
+                      onClick={() => {
+                        onActivatePremiumByEmail(premiumEmail);
+                        setPremiumEmail("");
+                      }}
+                    >
+                      {lang === "fr" ? "Activer Premium" : "Activate Premium"}
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </aside>
 
             {canManage && (
-              <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(340px,420px)_minmax(0,1fr)]">
-                <aside className="min-w-0 space-y-4">
-                  {canManage && !canCreate && (
-                    <div className="rounded-2xl border border-cyan-500/30 bg-cyan-500/10 p-4 text-sm text-cyan-900 dark:text-cyan-100">
-                      {lang === "fr"
-                        ? "La création d’utilisateurs est réservée aux comptes administrateurs Premium."
-                        : "User creation is reserved for Premium administrator accounts."}
-                    </div>
-                  )}
-
-                  {canCreate && (
-                    <div className="rounded-2xl border p-4">
-                      <div className="mb-3 flex items-center gap-2 font-medium">
-                        <UserPlus className="h-4 w-4" />
-                        {lang === "fr" ? "Créer un utilisateur" : "Create user"}
-                      </div>
-                      <p className="mb-4 text-sm text-muted-foreground">
-                        {lang === "fr"
-                          ? "Un e-mail de vérification sera envoyé. Le compte pourra se connecter avec le mot de passe temporaire après validation de l’e-mail."
-                          : "A verification email will be sent. The account can sign in with the temporary password after email confirmation."}
-                      </p>
-                      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-                        <div className="min-w-0">
-                          <label className="text-sm text-muted-foreground">{lang === "fr" ? "Nom" : "Name"}</label>
-                          <Input value={name} onChange={(e) => setName(e.target.value)} />
-                        </div>
-                        <div className="min-w-0">
-                          <label className="text-sm text-muted-foreground">Email</label>
-                          <Input value={email} onChange={(e) => setEmail(e.target.value)} type="email" />
-                        </div>
-                        <div className="min-w-0">
-                          <label className="text-sm text-muted-foreground">{lang === "fr" ? "Organisation" : "Organization"}</label>
-                          <Input value={organization} onChange={(e) => setOrganization(e.target.value)} />
-                        </div>
-                        <div className="min-w-0">
-                          <label className="text-sm text-muted-foreground">{lang === "fr" ? "Rôle" : "Role"}</label>
-                          <Select value={role} onValueChange={(v) => setRole(v as UserRole)}>
-                            <SelectTrigger>{userRoleLabel(role, lang)}</SelectTrigger>
-                            <SelectContent>
-                              {(["admin", "auditor", "contributor", "viewer"] as UserRole[]).map((r) => (
-                                <SelectItem key={r} value={r}>{userRoleLabel(r, lang)}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        {canManageSubscriptions && (
-                          <div className="min-w-0">
-                            <label className="text-sm text-muted-foreground">{lang === "fr" ? "Offre" : "Plan"}</label>
-                            <Select value={newUserPlan} onValueChange={(v) => setNewUserPlan(normalizeSubscriptionPlan(v))}>
-                              <SelectTrigger>{subscriptionPlanLabel(newUserPlan)}</SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="free">Free</SelectItem>
-                                <SelectItem value="premium">Premium</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        )}
-                        <div className="min-w-0">
-                          <label className="text-sm text-muted-foreground">{lang === "fr" ? "Mot de passe temporaire" : "Temporary password"}</label>
-                          <Input value={password} onChange={(e) => setPassword(e.target.value)} type="password" />
-                        </div>
-                      </div>
-                      <Button className="mt-4 w-full" onClick={addUser}>
-                        <UserPlus className="mr-2 h-4 w-4" />
-                        {lang === "fr" ? "Créer et envoyer l’e-mail" : "Create and send email"}
-                      </Button>
-                    </div>
-                  )}
-
-                  {canManage && canManageSubscriptions && (
-                    <div className="rounded-2xl border border-cyan-500/30 bg-cyan-500/10 p-4">
-                      <div className="mb-2 flex items-center gap-2 font-medium text-cyan-900 dark:text-cyan-100">
-                        <ShieldCheck className="h-4 w-4" />
-                        {lang === "fr" ? "Activation Premium" : "Premium activation"}
-                      </div>
-                      <p className="mb-3 text-sm text-cyan-900/80 dark:text-cyan-100/80">
-                        {lang === "fr"
-                          ? "Activez Premium pour l’adresse reçue par e-mail."
-                          : "Activate Premium for the address received by email."}
-                      </p>
-                      <div className="flex flex-col gap-2">
-                        <Input
-                          value={premiumEmail}
-                          onChange={(e) => setPremiumEmail(e.target.value)}
-                          type="email"
-                          placeholder="client@entreprise.com"
-                        />
-                        <Button
-                          type="button"
-                          onClick={() => {
-                            onActivatePremiumByEmail(premiumEmail);
-                            setPremiumEmail("");
-                          }}
-                        >
-                          {lang === "fr" ? "Activer Premium" : "Activate Premium"}
-                        </Button>
+              <section className="min-w-0 space-y-3">
+                <div className="rounded-2xl border p-4">
+                  <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="font-medium">
+                        {canManageSubscriptions
+                          ? (lang === "fr" ? "Comptes utilisateurs" : "User accounts")
+                          : (lang === "fr" ? "Comptes créés" : "Created accounts")}
                       </div>
                     </div>
-                  )}
-                </aside>
+                    <Badge variant="outline">{visibleUsers.length}</Badge>
+                  </div>
 
-                <section className="min-w-0 space-y-4">
-                  {isSuperUser ? (
-                    <div className="space-y-4">
-                      <div className="rounded-2xl border p-4">
-                        <div className="flex flex-wrap items-center justify-between gap-3">
-                          <div>
-                            <div className="font-medium">{lang === "fr" ? "Vision par créateur" : "Creator view"}</div>
-                            <div className="text-sm text-muted-foreground">
-                              {lang === "fr"
-                                ? "Chaque groupe montre un admin et les comptes qu’il a créés."
-                                : "Each group shows an admin and the accounts they created."}
-                            </div>
-                          </div>
-                          <Badge variant="outline">{creatorGroups.length} groupes</Badge>
-                        </div>
-                      </div>
-
-                      {creatorGroups.map(({ admin, members }) => (
-                        <div key={`group-${admin.id}`} className="rounded-2xl border bg-muted/10 p-4">
-                          <div className="mb-4 flex min-w-0 flex-col gap-3 border-b pb-4 lg:flex-row lg:items-center lg:justify-between">
-                            <div className="min-w-0">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <div className="truncate text-base font-semibold">
-                                  {isServiceOwnerEmail(admin.email) ? "Super user" : (lang === "fr" ? "Admin créateur" : "Creator admin")}
-                                </div>
-                                <Badge variant="outline" className={userRoleBadgeClass(admin.role)}>{userRoleLabel(admin.role, lang)}</Badge>
-                                <Badge variant="outline" className={subscriptionPlanBadgeClass(admin.subscriptionPlan)}>{subscriptionPlanLabel(admin.subscriptionPlan)}</Badge>
-                              </div>
-                              <div className="mt-1 truncate text-sm text-muted-foreground">{admin.name} · {admin.email}</div>
-                            </div>
-                            <Badge variant="outline">
-                              {members.length} {lang === "fr" ? "utilisateur(s) créé(s)" : "created user(s)"}
-                            </Badge>
-                          </div>
-
-                          <div className="grid gap-3">
-                            {renderUserCard(admin, lang === "fr" ? "Admin du groupe" : "Group admin")}
-                            {members.length === 0 ? (
-                              <div className="rounded-xl border bg-background/50 px-4 py-6 text-sm text-muted-foreground">
-                                {lang === "fr" ? "Aucun utilisateur créé par cet admin." : "No users created by this admin."}
-                              </div>
-                            ) : (
-                              members.map((member) => renderUserCard(member))
-                            )}
-                          </div>
-                        </div>
-                      ))}
-
-                      {unassignedUsers.length > 0 && (
-                        <div className="rounded-2xl border bg-muted/10 p-4">
-                          <div className="mb-4 border-b pb-4">
-                            <div className="font-medium">{lang === "fr" ? "Comptes sans créateur identifié" : "Accounts without identified creator"}</div>
-                            <div className="text-sm text-muted-foreground">
-                              {lang === "fr" ? "Comptes historiques ou importés avant le suivi des créateurs." : "Historical or imported accounts created before creator tracking."}
-                            </div>
-                          </div>
-                          <div className="grid gap-3">
-                            {unassignedUsers.map((u) => renderUserCard(u))}
-                          </div>
-                        </div>
-                      )}
+                  {visibleUsers.length === 0 ? (
+                    <div className="rounded-xl border bg-muted/20 px-4 py-8 text-sm text-muted-foreground">
+                      {lang === "fr" ? "Aucun compte créé pour le moment." : "No account created yet."}
                     </div>
                   ) : (
-                    <div className="rounded-2xl border p-4">
-                      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                        <div className="font-medium">{lang === "fr" ? "Comptes que vous avez créés" : "Accounts you created"}</div>
-                        <Badge variant="outline">{visibleUsers.length}</Badge>
-                      </div>
+                    <div className="grid gap-3">
+                      {visibleUsers.map((u) => {
+                        const isSelf = activeUser?.id === u.id;
+                        const canEditTarget = canManage && userCanModifyUserRecord(activeUser, u);
+                        const disablingLastAdmin = u.role === "admin" && admins.length <= 1 && u.active !== false;
+                        return (
+                          <div key={u.id} className={"rounded-2xl border bg-muted/10 p-4 " + (u.active === false ? "opacity-60" : "")}>
+                            <div className="flex flex-wrap items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="truncate font-medium">{u.name}</div>
+                                <div className="truncate text-sm text-muted-foreground">{u.email}</div>
+                                <div className="mt-1 truncate text-xs text-muted-foreground">
+                                  {u.organization || "—"} · {lang === "fr" ? "Créé le" : "Created"} {new Date(u.createdAt).toLocaleDateString(lang === "fr" ? "fr-FR" : "en-US")}
+                                </div>
+                              </div>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Badge variant="outline" className={subscriptionPlanBadgeClass(u.subscriptionPlan)}>
+                                  {subscriptionPlanLabel(u.subscriptionPlan)}
+                                </Badge>
+                                <Badge variant="outline" className={userRoleBadgeClass(u.role)}>
+                                  {u.active === false ? (lang === "fr" ? "Inactif" : "Inactive") : (lang === "fr" ? "Actif" : "Active")}
+                                </Badge>
+                              </div>
+                            </div>
 
-                      {visibleUsers.length === 0 ? (
-                        <div className="rounded-xl border bg-muted/20 px-4 py-8 text-sm text-muted-foreground">
-                          {lang === "fr" ? "Aucun compte créé pour le moment." : "No account created yet."}
-                        </div>
-                      ) : (
-                        <div className="grid gap-3">
-                          {visibleUsers.map((u) => renderUserCard(u))}
-                        </div>
-                      )}
+                            <div className="mt-4 grid min-w-0 gap-3 md:grid-cols-2 2xl:grid-cols-[160px_180px_minmax(0,1fr)]">
+                              <div className="min-w-0">
+                                <label className="text-xs text-muted-foreground">{lang === "fr" ? "Offre" : "Plan"}</label>
+                                {canManageSubscriptions ? (
+                                  <Select
+                                    value={normalizeSubscriptionPlan(u.subscriptionPlan)}
+                                    disabled={!canEditTarget}
+                                    onValueChange={(v) => onUpdateUser(u.id, { subscriptionPlan: normalizeSubscriptionPlan(v) })}
+                                  >
+                                    <SelectTrigger className="w-full">{subscriptionPlanLabel(u.subscriptionPlan)}</SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="free">Free</SelectItem>
+                                      <SelectItem value="premium">Premium</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                ) : (
+                                  <div className="mt-2">
+                                    <Badge variant="outline" className={subscriptionPlanBadgeClass(u.subscriptionPlan)}>
+                                      {subscriptionPlanLabel(u.subscriptionPlan)}
+                                    </Badge>
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="min-w-0">
+                                <label className="text-xs text-muted-foreground">{lang === "fr" ? "Rôle" : "Role"}</label>
+                                <Select
+                                  value={u.role}
+                                  disabled={!canEditTarget || disablingLastAdmin}
+                                  onValueChange={(v) => onUpdateUser(u.id, { role: v as UserRole })}
+                                >
+                                  <SelectTrigger className="w-full">{userRoleLabel(u.role, lang)}</SelectTrigger>
+                                  <SelectContent>
+                                    {(["admin", "auditor", "contributor", "viewer"] as UserRole[]).map((r) => (
+                                      <SelectItem key={r} value={r}>{userRoleLabel(r, lang)}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+
+                              <div className="min-w-0 md:col-span-2 2xl:col-span-1">
+                                <label className="text-xs text-muted-foreground">{lang === "fr" ? "Actions" : "Actions"}</label>
+                                <div className="mt-1 flex flex-wrap items-center gap-2">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    disabled={!canEditTarget || isSelf || disablingLastAdmin}
+                                    onClick={() => onUpdateUser(u.id, { active: u.active === false })}
+                                  >
+                                    {u.active === false ? (lang === "fr" ? "Réactiver" : "Reactivate") : (lang === "fr" ? "Désactiver" : "Deactivate")}
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    disabled={!canEditTarget}
+                                    onClick={() => {
+                                      const next = window.prompt(lang === "fr" ? "Nouveau mot de passe temporaire" : "New temporary password");
+                                      if (!next) return;
+                                      onResetPassword(u.id, next);
+                                    }}
+                                  >
+                                    {lang === "fr" ? "Réinitialiser" : "Reset"}
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="destructive"
+                                    disabled={!canEditTarget || isSelf || disablingLastAdmin}
+                                    onClick={() => onDeleteUser(u.id)}
+                                  >
+                                    <Trash2 className="mr-1 h-4 w-4" />
+                                    {lang === "fr" ? "Supprimer" : "Delete"}
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
-                </section>
-              </div>
+                </div>
+              </section>
             )}
           </div>
         </div>
 
-        <footer className="border-t pt-4">
+        <footer>
           <Button onClick={onClose}>{lang === "fr" ? "Fermer" : "Close"}</Button>
         </footer>
       </div>
     </div>
   );
 }
+
+
 
 function CreateAuditWizard({
   open,
