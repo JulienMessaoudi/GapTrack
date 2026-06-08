@@ -561,16 +561,6 @@ function openEvidenceFilesDb(): Promise<IDBDatabase> {
   });
 }
 
-async function putEvidenceFile(record: StoredEvidenceFile): Promise<void> {
-  const db = await openEvidenceFilesDb();
-  await new Promise<void>((resolve, reject) => {
-    const tx = db.transaction(EVIDENCE_FILES_STORE_NAME, "readwrite");
-    tx.objectStore(EVIDENCE_FILES_STORE_NAME).put(record);
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error || new Error("Unable to store evidence file."));
-  }).finally(() => db.close());
-}
-
 async function getEvidenceFile(id: string): Promise<StoredEvidenceFile | null> {
   const db = await openEvidenceFilesDb();
   return new Promise<StoredEvidenceFile | null>((resolve, reject) => {
