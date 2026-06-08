@@ -2817,7 +2817,7 @@ function UserManagementDialog({
   useEffect(()=>{ document.body.style.overflow = open ? 'hidden' : ''; return () => { document.body.style.overflow = ''; }; }, [open]);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [organization, setOrganization] = useState(activeUser?.organization || "");
+  const [organization, setOrganization] = useState("");
   const [role, setRole] = useState<UserRole>("contributor");
   const [newUserPlan, setNewUserPlan] = useState<SubscriptionPlan>("free");
   const [password, setPassword] = useState("");
@@ -2827,7 +2827,7 @@ function UserManagementDialog({
     if (open) {
       setName("");
       setEmail("");
-      setOrganization(activeUser?.organization || "");
+      setOrganization("");
       setRole("contributor");
       setNewUserPlan("free");
       setPassword("");
@@ -2857,6 +2857,7 @@ function UserManagementDialog({
     if (ok) {
       setName("");
       setEmail("");
+      setOrganization("");
       setPassword("");
       setRole("contributor");
       setNewUserPlan("free");
@@ -3164,7 +3165,7 @@ function ServiceOwnerAdminConsole({
 }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [organization, setOrganization] = useState(activeUser.organization || "");
+  const [organization, setOrganization] = useState("");
   const [role, setRole] = useState<UserRole>("contributor");
   const [newUserPlan, setNewUserPlan] = useState<SubscriptionPlan>("free");
   const [password, setPassword] = useState("");
@@ -3194,6 +3195,7 @@ function ServiceOwnerAdminConsole({
     if (ok) {
       setName("");
       setEmail("");
+      setOrganization("");
       setPassword("");
       setRole("contributor");
       setNewUserPlan("free");
@@ -9573,7 +9575,7 @@ function GapTrackApp({
       return false;
     }
 
-    const organization = payload.organization?.trim() || activeUser?.organization || undefined;
+    const organization = payload.organization?.trim() || undefined;
     const requestedSubscriptionPlan = canManageSubscriptionsFlag ? normalizeSubscriptionPlan(payload.subscriptionPlan) : "free";
     let subscriptionPlan = requestedSubscriptionPlan;
     const createdByUserId = activeUser?.id;
