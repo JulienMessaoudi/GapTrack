@@ -154,7 +154,73 @@ function normalizeSubscriptionPlan(value: unknown): SubscriptionPlan {
 }
 
 const PREMIUM_CONTACT_EMAIL = "julien.messaoudi@edu.esiee.fr";
-const PREMIUM_ACTIVATIONS_KEY = "gaptrack_premium_activations_v1";
+
+async function updateSubscriptionPlanOnServer(
+  email: string,
+  subscriptionPlan: SubscriptionPlan
+) {
+  const { data, error } = await supabase.rpc("gaptrack_set_subscription_plan", {
+    target_email: normalizeEmail(email),
+    next_plan: normalizeSubscriptionPlan(subscriptionPlan),
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+async function fetchGapTrackProfileOnServer(
+  userId: string,
+  fallback: {
+    email: string;
+    name?: string;
+    organization?: string;
+    role?: UserRole;
+    subscriptionPlan?: SubscriptionPlan;
+    createdByUserId?: string;
+    createdByEmail?: string;
+  }
+): Promise<{
+  email: string;
+  name?: string;
+  organization?: string;
+  role?: UserRole;
+  subscriptionPlan?: SubscriptionPlan;
+  createdByUserId?: string;
+  createdByEmail?: string;
+}> {
+  try {
+    const { data, error } = await supabase
+      .from("gaptrack_profiles")
+      .select("email, name, organization, role, subscription_plan")
+      .eq("id", userId)
+      .maybeSingle();
+
+    if (error) {
+      throw error;
+    }
+
+    if (!data) {
+      return fallback;
+    }
+
+    return {
+      ...fallback,
+      email: normalizeEmail(String(data.email || fallback.email)),
+      name: typeof data.name === "string" && data.name.trim() ? data.name : fallback.name,
+      organization: typeof data.organization === "string" && data.organization.trim() ? data.organization : fallback.organization,
+      role: data.role === "admin" || data.role === "auditor" || data.role === "contributor" || data.role === "viewer"
+        ? data.role
+        : fallback.role,
+      subscriptionPlan: normalizeSubscriptionPlan(data.subscription_plan),
+    };
+  } catch (error) {
+    console.error("Unable to fetch GapTrack profile from Supabase.", error);
+    return fallback;
+  }
+}
 
 function isPremiumPlan(plan: SubscriptionPlan | undefined): boolean {
   return normalizeSubscriptionPlan(plan) === "premium";
@@ -175,37 +241,6 @@ function buildPremiumRequestMailto(params: { email?: string; name?: string; orga
   ].join("\n");
 
   return `mailto:${PREMIUM_CONTACT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-}
-
-function loadPremiumActivations(): Record<string, true> {
-  try {
-    const raw = localStorage.getItem(PREMIUM_ACTIVATIONS_KEY);
-    const parsed = raw ? JSON.parse(raw) : {};
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-
-function savePremiumActivations(map: Record<string, true>) {
-  try {
-    localStorage.setItem(PREMIUM_ACTIVATIONS_KEY, JSON.stringify(map));
-  } catch {}
-}
-
-function setPremiumActivationForEmail(email: string, plan: SubscriptionPlan) {
-  const normalizedEmail = normalizeEmail(email);
-  if (!normalizedEmail) return;
-  const map = loadPremiumActivations();
-  if (plan === "premium") map[normalizedEmail] = true;
-  else delete map[normalizedEmail];
-  savePremiumActivations(map);
-}
-
-function isPremiumActivatedForEmail(email: string): boolean {
-  const normalizedEmail = normalizeEmail(email);
-  if (!normalizedEmail) return false;
-  return Boolean(loadPremiumActivations()[normalizedEmail]);
 }
 
 function saveSelectedSubscriptionPlan(plan: SubscriptionPlan) {
@@ -2764,10 +2799,10 @@ function UserManagementDialog({
   users: AppUser[];
   activeUser: AppUser | null;
   onAddUser: (payload: NewUserPayload) => Promise<boolean>;
-  onUpdateUser: (userId: string, patch: Partial<AppUser>) => void;
+  onUpdateUser: (userId: string, patch: Partial<AppUser>) => void | Promise<void>;
   onDeleteUser: (userId: string) => void;
   onResetPassword: (userId: string, password: string) => Promise<void>;
-  onActivatePremiumByEmail: (email: string) => void;
+  onActivatePremiumByEmail: (email: string) => void | Promise<void>;
   canManageSubscriptions: boolean;
   canCreateUsers: boolean;
 }) {
@@ -2934,8 +2969,8 @@ function UserManagementDialog({
                   </div>
                   <p className="mb-3 text-sm text-cyan-900/80 dark:text-cyan-100/80">
                     {lang === "fr"
-                      ? "Saisissez l’adresse reçue par e-mail : elle sera autorisée en Premium lors de sa prochaine connexion sur cette instance GapTrack."
-                      : "Enter the address received by email: it will be allowed as Premium on the next sign-in on this GapTrack instance."}
+                      ? "Saisissez l’adresse reçue par e-mail : l’offre Premium sera activée côté serveur pour tous ses navigateurs et appareils."
+                      : "Enter the address received by email: Premium will be enabled server-side across all browsers and devices."}
                   </p>
                   <div className="flex flex-col gap-2 sm:flex-row">
                     <Input
@@ -9033,9 +9068,7 @@ function GapTrackApp({
       let next: AppUser[];
 
       if (existing) {
-        const subscriptionPlan = isPremiumActivatedForEmail(email) || isPremiumPlan(existing.subscriptionPlan)
-          ? "premium"
-          : profilePlan;
+        const subscriptionPlan = profilePlan;
         active = {
           ...existing,
           name: profile.name?.trim() || existing.name || email,
@@ -9049,7 +9082,7 @@ function GapTrackApp({
         };
         next = prev.map((u) => u.id === existing.id ? active : u);
       } else {
-        const subscriptionPlan = isPremiumActivatedForEmail(email) ? "premium" : profilePlan;
+        const subscriptionPlan = profilePlan;
         active = {
           id: uuid(),
           name: profile.name?.trim() || email,
@@ -9077,13 +9110,11 @@ function GapTrackApp({
   useEffect(() => {
     let mounted = true;
 
-    supabase.auth.getSession().then(({ data }) => {
-      if (!mounted) return;
-      const user = data.session?.user;
+    async function syncAuthSessionUser(user: any) {
       if (!user?.email) return;
 
       const meta = user.user_metadata || {};
-      syncSupabaseAuthenticatedUser({
+      const fallbackProfile = {
         email: user.email,
         name: typeof meta.name === "string" ? meta.name : undefined,
         organization: typeof meta.organization === "string" ? meta.organization : undefined,
@@ -9091,7 +9122,17 @@ function GapTrackApp({
         subscriptionPlan: normalizeSubscriptionPlan(meta.subscriptionPlan),
         createdByUserId: typeof meta.createdByUserId === "string" ? meta.createdByUserId : undefined,
         createdByEmail: typeof meta.createdByEmail === "string" ? meta.createdByEmail : undefined,
-      });
+      };
+
+      const serverProfile = await fetchGapTrackProfileOnServer(user.id, fallbackProfile);
+      if (!mounted) return;
+
+      syncSupabaseAuthenticatedUser(serverProfile);
+    }
+
+    supabase.auth.getSession().then(({ data }) => {
+      if (!mounted) return;
+      void syncAuthSessionUser(data.session?.user);
     }).catch(() => {});
 
     const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
@@ -9104,19 +9145,7 @@ function GapTrackApp({
         return;
       }
 
-      const user = session?.user;
-      if (!user?.email) return;
-
-      const meta = user.user_metadata || {};
-      syncSupabaseAuthenticatedUser({
-        email: user.email,
-        name: typeof meta.name === "string" ? meta.name : undefined,
-        organization: typeof meta.organization === "string" ? meta.organization : undefined,
-        role: meta.role === "admin" || meta.role === "auditor" || meta.role === "contributor" || meta.role === "viewer" ? meta.role : undefined,
-        subscriptionPlan: normalizeSubscriptionPlan(meta.subscriptionPlan),
-        createdByUserId: typeof meta.createdByUserId === "string" ? meta.createdByUserId : undefined,
-        createdByEmail: typeof meta.createdByEmail === "string" ? meta.createdByEmail : undefined,
-      });
+      void syncAuthSessionUser(session?.user);
     });
 
     return () => {
@@ -9201,7 +9230,8 @@ function GapTrackApp({
     }
 
     const organization = payload.organization?.trim() || activeUser?.organization || undefined;
-    const subscriptionPlan = canManageSubscriptionsFlag ? normalizeSubscriptionPlan(payload.subscriptionPlan) : "free";
+    const requestedSubscriptionPlan = canManageSubscriptionsFlag ? normalizeSubscriptionPlan(payload.subscriptionPlan) : "free";
+    let subscriptionPlan = requestedSubscriptionPlan;
     const createdByUserId = activeUser?.id;
     const createdByEmail = activeUser?.email ? normalizeEmail(activeUser.email) : undefined;
 
@@ -9250,6 +9280,20 @@ function GapTrackApp({
         toast.error(lang === "fr" ? "Un compte existe déjà avec cet e-mail." : "An account already exists with this email.");
         return false;
       }
+
+      if (requestedSubscriptionPlan === "premium") {
+        try {
+          await updateSubscriptionPlanOnServer(email, "premium");
+        } catch (error) {
+          console.error(error);
+          subscriptionPlan = "free";
+          toast.error(
+            lang === "fr"
+              ? "Utilisateur créé, mais Premium n’a pas pu être activé côté serveur."
+              : "User created, but Premium could not be enabled on the server."
+          );
+        }
+      }
     } catch (error) {
       console.error(error);
       toast.error(lang === "fr" ? "Impossible d’envoyer l’e-mail de vérification Supabase." : "Unable to send the Supabase verification email.");
@@ -9269,7 +9313,6 @@ function GapTrackApp({
       active: true,
       passwordHash: await hashLocalPassword(payload.password, email),
     };
-    if (user.subscriptionPlan === "premium") setPremiumActivationForEmail(user.email, "premium");
     const next = [user, ...users];
     saveUsers(next);
     setUsers(next);
@@ -9277,63 +9320,108 @@ function GapTrackApp({
     return true;
   }, [activeUser, canCreateUsersFlag, canManageSubscriptionsFlag, lang, users]);
 
-  const updateUser = React.useCallback((userId: string, patch: Partial<AppUser>) => {
+  const updateUser = React.useCallback(async (userId: string, patch: Partial<AppUser>) => {
     if (!canManageUsersFlag) {
       toast.error(lang === "fr" ? "Action réservée aux administrateurs." : "Administrators only.");
       return;
     }
+
+    const target = users.find((u) => u.id === userId);
+    if (!target) return;
+
+    if (!userCanModifyUserRecord(activeUser, target)) {
+      toast.error(lang === "fr" ? "Vous pouvez modifier uniquement les utilisateurs que vous avez créés." : "You can only edit users you created.");
+      return;
+    }
+
+    if (isServiceOwnerEmail(target.email) && !canManageSubscriptionsFlag) {
+      toast.error(lang === "fr" ? "Ce compte propriétaire est protégé." : "This service-owner account is protected.");
+      return;
+    }
+
     if (patch.subscriptionPlan && !canManageSubscriptionsFlag) {
       toast.error(lang === "fr" ? "Seul le propriétaire du service peut activer Premium." : "Only the service owner can activate Premium.");
       return;
     }
+
+    const activeAdmins = users.filter((u) => u.active !== false && u.role === "admin");
+    if (target.role === "admin" && activeAdmins.length <= 1 && (patch.role || patch.active === false)) {
+      toast.error(lang === "fr" ? "Impossible de retirer le dernier administrateur actif." : "Cannot remove the last active administrator.");
+      return;
+    }
+
+    if (patch.subscriptionPlan) {
+      const nextPlan = normalizeSubscriptionPlan(patch.subscriptionPlan);
+
+      try {
+        await updateSubscriptionPlanOnServer(target.email, nextPlan);
+      } catch (error) {
+        console.error(error);
+        toast.error(
+          lang === "fr"
+            ? "Impossible de mettre à jour l’offre dans Supabase."
+            : "Unable to update the plan in Supabase."
+        );
+        return;
+      }
+
+      setUsers((prev) => {
+        const next = prev.map((u) => u.id === userId ? {
+          ...u,
+          ...patch,
+          role: patch.role ? normalizeUserRole(patch.role) : u.role,
+          subscriptionPlan: nextPlan,
+        } : u);
+        saveUsers(next);
+        return next;
+      });
+
+      toast.success(lang === "fr" ? "Offre mise à jour côté serveur." : "Plan updated on server.");
+      return;
+    }
+
     setUsers((prev) => {
-      const activeAdmins = prev.filter((u) => u.active !== false && u.role === "admin");
-      const target = prev.find((u) => u.id === userId);
-      if (target && !userCanModifyUserRecord(activeUser, target)) {
-        toast.error(lang === "fr" ? "Vous pouvez modifier uniquement les utilisateurs que vous avez créés." : "You can only edit users you created.");
-        return prev;
-      }
-      if (target && isServiceOwnerEmail(target.email) && !canManageSubscriptionsFlag) {
-        toast.error(lang === "fr" ? "Ce compte propriétaire est protégé." : "This service-owner account is protected.");
-        return prev;
-      }
-      if (target?.role === "admin" && activeAdmins.length <= 1 && (patch.role || patch.active === false)) {
-        toast.error(lang === "fr" ? "Impossible de retirer le dernier administrateur actif." : "Cannot remove the last active administrator.");
-        return prev;
-      }
-      if (target && patch.subscriptionPlan) {
-        setPremiumActivationForEmail(target.email, normalizeSubscriptionPlan(patch.subscriptionPlan));
-      }
       const next = prev.map((u) => u.id === userId ? {
         ...u,
         ...patch,
         role: patch.role ? normalizeUserRole(patch.role) : u.role,
-        subscriptionPlan: patch.subscriptionPlan ? normalizeSubscriptionPlan(patch.subscriptionPlan) : normalizeSubscriptionPlan(u.subscriptionPlan),
+        subscriptionPlan: normalizeSubscriptionPlan(u.subscriptionPlan),
       } : u);
       saveUsers(next);
       return next;
     });
-    if (patch.subscriptionPlan) {
-      toast.success(lang === "fr" ? "Offre mise à jour." : "Plan updated.");
-    }
-  }, [activeUser, canManageSubscriptionsFlag, canManageUsersFlag, lang]);
+  }, [activeUser, canManageSubscriptionsFlag, canManageUsersFlag, lang, users]);
 
-  const activatePremiumByEmail = React.useCallback((rawEmail: string) => {
+  const activatePremiumByEmail = React.useCallback(async (rawEmail: string) => {
     if (!canManageSubscriptionsFlag) {
       toast.error(lang === "fr" ? "Seul le propriétaire du service peut activer Premium." : "Only the service owner can activate Premium.");
       return;
     }
+
     const email = normalizeEmail(rawEmail);
     if (!email) {
       toast.error(lang === "fr" ? "Adresse e-mail obligatoire." : "Email is required.");
       return;
     }
-    setPremiumActivationForEmail(email, "premium");
+
+    try {
+      await updateSubscriptionPlanOnServer(email, "premium");
+    } catch (error) {
+      console.error(error);
+      toast.error(
+        lang === "fr"
+          ? "Impossible d’activer Premium dans Supabase."
+          : "Unable to activate Premium in Supabase."
+      );
+      return;
+    }
+
     setUsers((prev) => {
       const next = prev.map((u) => normalizeEmail(u.email) === email ? { ...u, subscriptionPlan: "premium" as SubscriptionPlan } : u);
       saveUsers(next);
       return next;
     });
+
     toast.success(lang === "fr" ? `Premium activé pour ${email}.` : `Premium activated for ${email}.`);
   }, [canManageSubscriptionsFlag, lang]);
 
