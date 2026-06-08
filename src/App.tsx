@@ -2837,10 +2837,11 @@ function UserManagementDialog({
 
   if (!open) return null;
 
-  const admins = users.filter((u) => u.active !== false && u.role === "admin");
+  const admins = users.filter((u) => u.active !== false && u.role === "admin" && !isServiceOwnerEmail(u.email));
   const canManage = userCanManageUsers(activeUser);
   const canCreate = canCreateUsers;
   const visibleUsers = users.filter((u) => userCanViewUserRecord(activeUser, u));
+  const countedVisibleUsers = visibleUsers.filter((u) => !isServiceOwnerEmail(u.email));
 
   async function addUser() {
     if (!canCreate) return;
@@ -3013,7 +3014,7 @@ function UserManagementDialog({
                           : (lang === "fr" ? "Comptes créés" : "Created accounts")}
                       </div>
                     </div>
-                    <Badge variant="outline">{visibleUsers.length}</Badge>
+                    <Badge variant="outline">{countedVisibleUsers.length}</Badge>
                   </div>
 
                   {visibleUsers.length === 0 ? (
@@ -3176,9 +3177,15 @@ function ServiceOwnerAdminConsole({
     () => users.filter((u) => userCanViewUserRecord(activeUser, u)),
     [users, activeUser]
   );
-  const activeAdmins = visibleUsers.filter((u) => u.active !== false && u.role === "admin");
-  const premiumCount = visibleUsers.filter((u) => normalizeSubscriptionPlan(u.subscriptionPlan) === "premium").length;
-  const freeCount = visibleUsers.length - premiumCount;
+  // Le compte propriétaire est visible pour information, mais ne compte pas
+  // comme un utilisateur de la plateforme/audit dans les statistiques.
+  const countedUsers = useMemo(
+    () => visibleUsers.filter((u) => !isServiceOwnerEmail(u.email)),
+    [visibleUsers]
+  );
+  const activeAdmins = countedUsers.filter((u) => u.active !== false && u.role === "admin");
+  const premiumCount = countedUsers.filter((u) => normalizeSubscriptionPlan(u.subscriptionPlan) === "premium").length;
+  const freeCount = countedUsers.length - premiumCount;
 
   async function addUser() {
     const ok = await onAddUser({
@@ -3241,7 +3248,7 @@ function ServiceOwnerAdminConsole({
         <section className="grid gap-4 md:grid-cols-3">
           <div className="rounded-2xl border bg-muted/10 p-4">
             <div className="text-sm text-muted-foreground">{lang === "fr" ? "Utilisateurs" : "Users"}</div>
-            <div className="mt-2 text-3xl font-semibold">{visibleUsers.length}</div>
+            <div className="mt-2 text-3xl font-semibold">{countedUsers.length}</div>
           </div>
           <div className="rounded-2xl border border-cyan-500/30 bg-cyan-500/10 p-4">
             <div className="text-sm text-cyan-900/80 dark:text-cyan-100/80">Premium</div>
@@ -3354,7 +3361,7 @@ function ServiceOwnerAdminConsole({
                   {lang === "fr" ? "Gestion des rôles, accès et offres." : "Manage roles, access and plans."}
                 </div>
               </div>
-              <Badge variant="outline">{visibleUsers.length}</Badge>
+              <Badge variant="outline">{countedUsers.length}</Badge>
             </div>
 
             <div className="grid gap-3">
