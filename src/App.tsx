@@ -461,13 +461,7 @@ function isBootstrapAuditSession(session: Session | null | undefined): boolean {
 
 function removeLocalAuditData(sessionId: string | null | undefined) {
   if (!sessionId) return;
-  try {
-    localStorage.removeItem(rowsKeyForSession(sessionId));
-    localStorage.removeItem(evidKeyForSession(sessionId));
-    localStorage.removeItem(proofStatusKeyForSession(sessionId));
-    localStorage.removeItem(planKeyForSession(sessionId));
-    localStorage.removeItem(auditLogKeyForSession(sessionId));
-  } catch {}
+  void deleteAuditSessionFromBackend(sessionId);
 }
 
 
@@ -495,9 +489,6 @@ interface ChecklistTemplate {
 // ==================
 const STORAGE_KEY = "grc_rssi_controls_v1"; // legacy (pre-sessions)
 const STORAGE_SETTINGS = "grc_rssi_settings_v1";
-const SESSIONS_KEY = "grc_rssi_sessions_v1";
-const ACTIVE_SESSION_KEY = "grc_rssi_session_active_v1";
-
 const USERS_KEY = "gaptrack_users_v1";
 const ACTIVE_USER_KEY = "gaptrack_active_user_v1";
 
@@ -505,9 +496,6 @@ const TEMPLATES_KEY = "grc_rssi_templates_v1";
 const LAST_TEMPLATE_BY_FRAMEWORK_KEY = "grc_rssi_last_template_by_framework_v1";
 
 
-function rowsKeyForSession(sessionId: string){ return `grc_rssi_rows__${sessionId}`; }
-function evidKeyForSession(sessionId: string){ return `grc_rssi_ev__${sessionId}`; }
-function proofStatusKeyForSession(sessionId: string){ return `grc_rssi_proof_status__${sessionId}`; }
 
 const EVIDENCE_FILES_DB_NAME = "grc_rssi_evidence_files_v1";
 const EVIDENCE_FILES_STORE_NAME = "evidence_files";
@@ -867,8 +855,6 @@ function isEvidenceContentAvailable(item: EvidenceItem): boolean {
 }
 
 
-function planKeyForSession(sessionId: string){ return `grc_rssi_plans__${sessionId}`; }
-function auditLogKeyForSession(sessionId: string){ return `grc_rssi_audit_log__${sessionId}`; }
 
 function auditLogActionLabel(action: AuditLogAction, lang: LangKey): string {
   const fr: Record<AuditLogAction, string> = {
@@ -914,37 +900,12 @@ function auditLogActionClass(action: AuditLogAction): string {
   return "border-muted-foreground/30 text-muted-foreground bg-muted/20";
 }
 
-function loadAuditLogForSession(sessionId: string): AuditLogEntry[] {
-  const raw = localStorage.getItem(auditLogKeyForSession(sessionId));
-  if (!raw || raw === "null" || raw === "undefined") return [];
-  try {
-    const val = JSON.parse(raw);
-    if (!Array.isArray(val)) return [];
-    return val
-      .filter((e: any) => e && typeof e.id === "string" && typeof e.at === "string" && typeof e.message === "string")
-      .map((e: any) => ({
-        id: String(e.id),
-        at: String(e.at),
-        actor: String(e.actor || "Utilisateur local"),
-        actorEmail: e.actorEmail ? String(e.actorEmail) : undefined,
-        action: (e.action || "user_event") as AuditLogAction,
-        entityType: (e.entityType || "audit") as AuditLogEntry["entityType"],
-        entityId: e.entityId ? String(e.entityId) : undefined,
-        controlId: e.controlId ? String(e.controlId) : undefined,
-        controlRef: e.controlRef ? String(e.controlRef) : undefined,
-        controlDomain: e.controlDomain ? String(e.controlDomain) : undefined,
-        message: String(e.message),
-        details: e.details ? String(e.details) : undefined,
-        before: e.before !== undefined ? String(e.before) : undefined,
-        after: e.after !== undefined ? String(e.after) : undefined,
-      }));
-  } catch {
-    return [];
-  }
+function loadAuditLogForSession(_sessionId: string): AuditLogEntry[] {
+  return [];
 }
 
-function saveAuditLogForSession(sessionId: string, entries: AuditLogEntry[]) {
-  localStorage.setItem(auditLogKeyForSession(sessionId), JSON.stringify(entries.slice(0, 800)));
+function saveAuditLogForSession(_sessionId: string, _entries: AuditLogEntry[]) {
+  // Le journal est inclus dans le snapshot Supabase par l’autosave React.
 }
 
 function exportAuditLogCSV(entries: AuditLogEntry[], lang: LangKey) {
@@ -972,23 +933,13 @@ function exportAuditLogCSV(entries: AuditLogEntry[], lang: LangKey) {
   downloadBlob(new Blob(["\uFEFF" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" }), `gaptrack-journal-${new Date().toISOString().slice(0, 10)}.csv`);
 }
 
-function loadPlansForSession(sessionId: string): Record<string, PlanAction> {
-  const raw = localStorage.getItem(planKeyForSession(sessionId));
-  if (!raw || raw === "null" || raw === "undefined") return {};
-  try {
-    const val = JSON.parse(raw);
-    if (val && typeof val === "object" && !Array.isArray(val)) {
-      return val as Record<string, PlanAction>;
-    }
-    return {};
-  } catch {
-    return {};
-  }
+function loadPlansForSession(_sessionId: string): Record<string, PlanAction> {
+  return {};
 }
 
 
-function savePlansForSession(sessionId: string, plans: Record<string, PlanAction>) {
-  localStorage.setItem(planKeyForSession(sessionId), JSON.stringify(plans));
+function savePlansForSession(_sessionId: string, _plans: Record<string, PlanAction>) {
+  // Les plans sont enregistrés dans public.gaptrack_audit_sessions.state via l’autosave Supabase.
 }
 
 function normalizeEvidenceStatus(value: any): EvidenceStatus | null {
@@ -1839,28 +1790,19 @@ function loadSettings() { try { const raw = localStorage.getItem(STORAGE_SETTING
 function saveSettings(s: any) { localStorage.setItem(STORAGE_SETTINGS, JSON.stringify(s)); }
 
 function loadSessions(): Session[] {
-  const raw = localStorage.getItem(SESSIONS_KEY);
-  if (!raw || raw === "null" || raw === "undefined") return [];
-  try {
-    const val = JSON.parse(raw);
-    if (!Array.isArray(val)) return [];
-    return val.filter((s: any) =>
-      s &&
-      typeof s.id === "string" &&
-      typeof s.name === "string" &&
-      typeof s.createdAt === "string"
-    ) as Session[];
-  } catch {
-    return [];
-  }
+  return [];
 }
 
 
 
 
-function saveSessions(arr: Session[]){ localStorage.setItem(SESSIONS_KEY, JSON.stringify(arr)); }
-function loadActiveSessionId(): string | null { try { return localStorage.getItem(ACTIVE_SESSION_KEY); } catch { return null; } }
-function saveActiveSessionId(id: string){ localStorage.setItem(ACTIVE_SESSION_KEY, id); }
+function saveSessions(arr: Session[]){
+  void saveSessionsToBackend(arr);
+}
+function loadActiveSessionId(): string | null { return null; }
+function saveActiveSessionId(_id: string){
+  // L’audit actif n’est plus persisté localement : au rechargement, le plus récent est ouvert.
+}
 
 function normalizeEmail(value: string): string {
   return String(value || "").trim().toLowerCase();
@@ -2314,112 +2256,126 @@ function templateModelJSON(frameworkId: FrameworkId, lang: LangKey): string {
 
 
 // ==================
-// Backend API (snapshot)
+// Backend Supabase (audits, snapshots, journal)
 // ==================
-// Par défaut, GapTrack fonctionne en mode local-first.
-// La synchronisation serveur ne démarre que si tu la configures explicitement,
-// ce qui évite d'afficher une erreur rouge quand aucun backend /api n'est branché.
-function readRuntimeConfig(key: string): string {
-  try {
-    return String((globalThis as any)?.[key] || localStorage.getItem(key) || "");
-  } catch {
-    return String((globalThis as any)?.[key] || "");
-  }
-}
-
-const API_URL = readRuntimeConfig("GAPTRACK_API_URL").replace(/\/$/, "");
-const BACKEND_SYNC_ENABLED =
-  Boolean(API_URL) ||
-  readRuntimeConfig("GAPTRACK_BACKEND_SYNC").toLowerCase() === "true" ||
-  readRuntimeConfig("GAPTRACK_BACKEND_SYNC") === "1";
-
-function isBackendSyncEnabled(): boolean {
-  return BACKEND_SYNC_ENABLED;
-}
-
-function buildApiUrl(path: string): string {
-  if (!API_URL) return path;
-  // Accepte aussi GAPTRACK_API_URL="/api" sans produire /api/api/....
-  if (API_URL.endsWith("/api") && path.startsWith("/api/")) {
-    return `${API_URL}${path.slice(4)}`;
-  }
-  return `${API_URL}${path}`;
-}
+const AUDIT_SESSIONS_TABLE = "gaptrack_audit_sessions";
 
 type SnapshotPayload = {
   rows: ControlItem[];
   evidenceMap: Record<string, EvidenceItem[]>;
   plans: Record<string, PlanAction>;
   proofStatusMap?: EvidenceStatusMap;
+  auditLog?: AuditLogEntry[];
 };
 
-async function apiJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const token = localStorage.getItem("API_TOKEN") || ""; // optionnel si tu utilises un token
-
-  const res = await fetch(buildApiUrl(path), {
-    credentials: "include", // IMPORTANT (cookies/session)
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}), // si ton backend attend un token
-      ...(init?.headers || {}),
-    },
-    ...init,
-  });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`${res.status} ${res.statusText} - ${text}`);
-  }
-  return res.json() as Promise<T>;
+function normalizeBackendSession(value: any): Session | null {
+  if (!value || typeof value !== "object") return null;
+  if (typeof value.id !== "string" || typeof value.name !== "string" || typeof value.createdAt !== "string") return null;
+  return {
+    id: value.id,
+    name: value.name,
+    createdAt: value.createdAt,
+    frameworkId: typeof value.frameworkId === "string" ? value.frameworkId : undefined,
+    scope: typeof value.scope === "string" ? value.scope : undefined,
+    criticality: value.criticality === "low" || value.criticality === "medium" || value.criticality === "high" ? value.criticality : undefined,
+    templateId: typeof value.templateId === "string" ? value.templateId : undefined,
+    organization: typeof value.organization === "string" ? value.organization : undefined,
+    auditor: typeof value.auditor === "string" ? value.auditor : undefined,
+    sponsor: typeof value.sponsor === "string" ? value.sponsor : undefined,
+    auditDate: typeof value.auditDate === "string" ? value.auditDate : undefined,
+    auditType: value.auditType === "initial" || value.auditType === "follow_up" || value.auditType === "internal" || value.auditType === "external" ? value.auditType : undefined,
+    objectives: typeof value.objectives === "string" ? value.objectives : undefined,
+    context: typeof value.context === "string" ? value.context : undefined,
+  };
 }
 
+async function getSupabaseUserId(): Promise<string> {
+  const { data, error } = await supabase.auth.getUser();
+  if (error || !data.user?.id) throw error || new Error("Utilisateur non connecté.");
+  return data.user.id;
+}
+
+async function loadSessionsFromBackend(): Promise<Session[]> {
+  const userId = await getSupabaseUserId();
+  const { data, error } = await supabase
+    .from(AUDIT_SESSIONS_TABLE)
+    .select("session")
+    .eq("owner_user_id", userId)
+    .order("updated_at", { ascending: false });
+
+  if (error) throw error;
+
+  return (data || [])
+    .map((row: any) => normalizeBackendSession(row.session))
+    .filter(Boolean) as Session[];
+}
+
+async function saveSessionsToBackend(sessions: Session[]): Promise<void> {
+  if (!sessions.length) return;
+  const userId = await getSupabaseUserId();
+  const now = new Date().toISOString();
+  const payload = sessions.map((session) => ({
+    id: session.id,
+    owner_user_id: userId,
+    session,
+    updated_at: now,
+  }));
+
+  const { error } = await supabase
+    .from(AUDIT_SESSIONS_TABLE)
+    .upsert(payload, { onConflict: "id" });
+
+  if (error) throw error;
+}
+
+async function deleteAuditSessionFromBackend(sessionId: string | null | undefined): Promise<void> {
+  if (!sessionId) return;
+  try {
+    const userId = await getSupabaseUserId();
+    const { error } = await supabase
+      .from(AUDIT_SESSIONS_TABLE)
+      .delete()
+      .eq("id", sessionId)
+      .eq("owner_user_id", userId);
+    if (error) throw error;
+  } catch (error) {
+    console.error("Unable to delete audit session from Supabase.", error);
+  }
+}
+
+function isBackendSyncEnabled(): boolean {
+  return true;
+}
 
 async function apiGetSnapshot(auditId: string): Promise<SnapshotPayload | null> {
-  if (!isBackendSyncEnabled()) return null;
-  try {
-    const res = await apiJson<{ audit: { state: any } }>(`/api/audits/${auditId}`);
-    return (res.audit?.state ?? null) as SnapshotPayload | null;
-  } catch {
-    return null;
-  }
+  const userId = await getSupabaseUserId();
+  const { data, error } = await supabase
+    .from(AUDIT_SESSIONS_TABLE)
+    .select("state")
+    .eq("id", auditId)
+    .eq("owner_user_id", userId)
+    .maybeSingle();
+
+  if (error) throw error;
+  return (data?.state ?? null) as SnapshotPayload | null;
 }
 
 async function apiPutSnapshot(auditId: string, payload: SnapshotPayload): Promise<void> {
-  if (!isBackendSyncEnabled()) return;
-  await apiJson(`/api/audits/${auditId}/state`, {
-    method: "PUT",
-    body: JSON.stringify({ state: payload }),
-  });
+  const userId = await getSupabaseUserId();
+  const { error } = await supabase
+    .from(AUDIT_SESSIONS_TABLE)
+    .upsert({
+      id: auditId,
+      owner_user_id: userId,
+      state: payload,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "id" });
+
+  if (error) throw error;
 }
 
-
-
-
-
-function loadRowsForSession(sessionId: string): ControlItem[] | null {
-  const raw = localStorage.getItem(rowsKeyForSession(sessionId));
-  if (!raw || raw === "null" || raw === "undefined") return null;
-  try {
-    const val = JSON.parse(raw);
-    if (!Array.isArray(val)) return null;
-
-    return val
-      .map((r: any) => {
-        const realized = normalizeControlStatus(r?.realized);
-        if (!r || realized === null) return null;
-        if (
-          typeof r.id !== "string" ||
-          typeof r.ref !== "string" ||
-          typeof r.domain !== "string" ||
-          typeof r.description !== "string" ||
-          !(r.impact === 1 || r.impact === 2 || r.impact === 3)
-        ) return null;
-        return { ...r, realized } as ControlItem;
-      })
-      .filter(Boolean) as ControlItem[];
-  } catch {
-    return null;
-  }
+function loadRowsForSession(_sessionId: string): ControlItem[] | null {
+  return null;
 }
 
 
@@ -2428,46 +2384,27 @@ function loadRowsForSession(sessionId: string): ControlItem[] | null {
 
 
 
-function saveRowsForSession(sessionId: string, rows: ControlItem[]){ localStorage.setItem(rowsKeyForSession(sessionId), JSON.stringify(rows)); }
+function saveRowsForSession(_sessionId: string, _rows: ControlItem[]){
+  // Les lignes d’audit sont enregistrées dans Supabase via l’autosave.
+}
 
 
-function loadEvidencesForSession(sessionId: string): Record<string, EvidenceItem[]> {
-  const raw = localStorage.getItem(evidKeyForSession(sessionId));
-  if (!raw || raw === "null" || raw === "undefined") return {};
-  try {
-    const val = JSON.parse(raw);
-    if (!val || typeof val !== "object" || Array.isArray(val)) return {};
-    return val as Record<string, EvidenceItem[]>;
-  } catch {
-    return {};
-  }
+function loadEvidencesForSession(_sessionId: string): Record<string, EvidenceItem[]> {
+  return {};
 }
 
 
 
-function saveEvidencesForSession(sessionId: string, map: Record<string, EvidenceItem[]>) {
-  localStorage.setItem(evidKeyForSession(sessionId), JSON.stringify(map));
+function saveEvidencesForSession(_sessionId: string, _map: Record<string, EvidenceItem[]>) {
+  // Les preuves sont chargées depuis Supabase Storage et public.gaptrack_evidence_files.
 }
 
-function loadProofStatusForSession(sessionId: string): EvidenceStatusMap {
-  const raw = localStorage.getItem(proofStatusKeyForSession(sessionId));
-  if (!raw || raw === "null" || raw === "undefined") return {};
-  try {
-    const val = JSON.parse(raw);
-    if (!val || typeof val !== "object" || Array.isArray(val)) return {};
-    const out: EvidenceStatusMap = {};
-    for (const [key, value] of Object.entries(val)) {
-      const normalized = normalizeEvidenceStatus(value);
-      if (normalized) out[key] = normalized;
-    }
-    return out;
-  } catch {
-    return {};
-  }
+function loadProofStatusForSession(_sessionId: string): EvidenceStatusMap {
+  return {};
 }
 
-function saveProofStatusForSession(sessionId: string, map: EvidenceStatusMap) {
-  localStorage.setItem(proofStatusKeyForSession(sessionId), JSON.stringify(map));
+function saveProofStatusForSession(_sessionId: string, _map: EvidenceStatusMap) {
+  // Les statuts de preuve sont enregistrés dans Supabase via l’autosave.
 }
 
 // Seed rows helper used when creating or resetting a session
@@ -10204,6 +10141,9 @@ function GapTrackApp({
 		proofStatusMap: snap.proofStatusMap || {},
 		plans: snap.plans || {},
 	  });
+	  const loadedLog = Array.isArray(snap.auditLog) ? snap.auditLog : [];
+	  auditLogRef.current = loadedLog;
+	  setAuditLog(loadedLog);
 	  resetHistory();
 	  return true;
   }, [applySnapshot, resetHistory]);
@@ -10213,6 +10153,7 @@ function GapTrackApp({
 	  evidenceMap: Record<string, EvidenceItem[]>;
 	  plans: Record<string, PlanAction>;
 	  proofStatusMap?: EvidenceStatusMap;
+	  auditLog?: AuditLogEntry[];
   }) => {
 	  await apiPutSnapshot(sessionId, payload);
   }, []);
@@ -10312,23 +10253,56 @@ function GapTrackApp({
 
 
 
-  // Init sessions if empty, and hydrate rows/evidences for active
+  // Init sessions from Supabase only. No audit data is persisted in the browser.
   useEffect(()=>{
-    let s = loadSessions();
-    let active = loadActiveSessionId();
-    if(s.length === 0){
-      const first: Session = { id: uuid(), name: lang==='fr'? 'Audit 1' : 'Audit 1', createdAt: new Date().toISOString(), auditDate: defaultAuditDate(), auditType: "initial", criticality: "medium" };
-      s = [first];
-      saveSessions(s);
-      active = first.id; saveActiveSessionId(active);
-      // Seed rows for first session using legacy or fixed or fallback later
-      const legacy = loadLegacyRows();
-      const seed = (legacy && legacy.length? legacy : FIXED_LISTING);
-      if(seed && seed.length){ saveRowsForSession(first.id, seed); }
+    let cancelled = false;
+
+    async function initBackendSessions() {
+      if (!activeUser) {
+        setSessions([]);
+        setActiveSessionId("");
+        return;
+      }
+
+      try {
+        const remoteSessions = await loadSessionsFromBackend();
+        if (cancelled) return;
+
+        if (remoteSessions.length > 0) {
+          setSessions(remoteSessions);
+          setActiveSessionId(remoteSessions[0].id);
+          return;
+        }
+
+        const first: Session = {
+          id: uuid(),
+          name: lang === "fr" ? "Audit 1" : "Audit 1",
+          createdAt: new Date().toISOString(),
+          auditDate: defaultAuditDate(),
+          auditType: "initial",
+          criticality: "medium",
+        };
+
+        await saveSessionsToBackend([first]);
+        if (cancelled) return;
+
+        setSessions([first]);
+        setActiveSessionId(first.id);
+      } catch (error) {
+        console.error("Unable to initialize Supabase audit sessions.", error);
+        if (!cancelled) {
+          setSaveState("sync_error");
+          toast.error(lang === "fr" ? "Impossible de charger les audits depuis Supabase." : "Unable to load audits from Supabase.");
+        }
+      }
     }
-    setSessions(s);
-    setActiveSessionId(active || s[0].id);
-  }, []);
+
+    void initBackendSessions();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeUser?.id, lang]);
 
   // Load rows/evidences whenever active session changes
   // Load rows/evidences whenever active session changes
@@ -10344,38 +10318,28 @@ function GapTrackApp({
     setAuditLog(loadedAuditLog);
 
     (async () => {
-      // 1) Essaie d’abord le backend
+      // 1) Essaie d’abord Supabase
       const ok = await hydrateFromBackend(activeSessionId);
       if (ok) return;
 
-      // 2) Sinon fallback localStorage (comme avant)
-      const stored = loadRowsForSession(activeSessionId);
-      const loadedEvidenceMap = await mergeEvidenceMapWithBackend(activeSessionId, loadEvidencesForSession(activeSessionId));
-      const loadedProofStatusMap = loadProofStatusForSession(activeSessionId);
-      const loadedPlans = loadPlansForSession(activeSessionId);
-
-      if (stored && stored.length > 0) {
-        applySnapshot({ rows: stored, evidenceMap: loadedEvidenceMap, proofStatusMap: loadedProofStatusMap, plans: loadedPlans });
-        resetHistory();
-      } else {
-        // 3) Sinon fallback listing.json
-        const url = "/listing.json";
-        fetch(url)
-          .then((r) => (r.ok ? r.text() : Promise.reject(r.status)))
-          .then((text) => {
-            try {
-              const arr = JSON.parse(text);
-              applySnapshot({ rows: Array.isArray(arr) ? (arr as ControlItem[]) : [], evidenceMap: loadedEvidenceMap, proofStatusMap: loadedProofStatusMap, plans: loadedPlans });
-            } catch {
-              applySnapshot({ rows: [], evidenceMap: loadedEvidenceMap, proofStatusMap: loadedProofStatusMap, plans: loadedPlans });
-            }
-            resetHistory();
-          })
-          .catch(() => {
-            applySnapshot({ rows: [], evidenceMap: loadedEvidenceMap, proofStatusMap: loadedProofStatusMap, plans: loadedPlans });
-            resetHistory();
-          });
-      }
+      // 2) Si l’audit existe mais n’a pas encore de snapshot, initialise depuis listing.json
+      const loadedEvidenceMap = await mergeEvidenceMapWithBackend(activeSessionId, {});
+      const url = "/listing.json";
+      fetch(url)
+        .then((r) => (r.ok ? r.text() : Promise.reject(r.status)))
+        .then((text) => {
+          try {
+            const arr = JSON.parse(text);
+            applySnapshot({ rows: Array.isArray(arr) ? (arr as ControlItem[]) : [], evidenceMap: loadedEvidenceMap, proofStatusMap: {}, plans: {} });
+          } catch {
+            applySnapshot({ rows: [], evidenceMap: loadedEvidenceMap, proofStatusMap: {}, plans: {} });
+          }
+          resetHistory();
+        })
+        .catch(() => {
+          applySnapshot({ rows: [], evidenceMap: loadedEvidenceMap, proofStatusMap: {}, plans: {} });
+          resetHistory();
+        });
     })();
   }, [activeSessionId, hydrateFromBackend, applySnapshot, resetHistory]);
 
@@ -10403,44 +10367,21 @@ function GapTrackApp({
     }
 
     saveTimerRef.current = window.setTimeout(async () => {
-      const payload = { rows, evidenceMap, plans, proofStatusMap };
+      const payload = { rows, evidenceMap, plans, proofStatusMap, auditLog };
 
       try {
-        // 1) Sauvegarde locale : c’est la garantie minimum pour l’utilisateur.
-        saveRowsForSession(activeSessionId, rows);
-        saveEvidencesForSession(activeSessionId, evidenceMap);
-        saveProofStatusForSession(activeSessionId, proofStatusMap);
-        savePlansForSession(activeSessionId, plans);
-
-        if (saveSeqRef.current !== saveSeq) return;
-        setLastSavedAt(Date.now());
-
-        if (!isBackendSyncEnabled()) {
-          setSaveState("local_only");
-          return;
-        }
-
+        // Sauvegarde Supabase uniquement : aucun snapshot d’audit n’est écrit dans le navigateur.
         setSaveState("syncing");
-      } catch (e) {
-        console.error("Local autosave error:", e);
-        if (saveSeqRef.current === saveSeq) {
-          setSaveState("error");
-        }
-        return;
-      }
-
-      try {
-        // 2) Synchronisation serveur : on attend vraiment la réponse avant d’afficher “Synchronisé”.
         await pushToBackend(activeSessionId, payload);
 
         if (saveSeqRef.current === saveSeq) {
+          setLastSavedAt(Date.now());
           setSaveState("saved");
         }
       } catch (e) {
         console.error("Backend sync error:", e);
 
         if (saveSeqRef.current === saveSeq) {
-          // Important : les données sont déjà en local, seule la synchro serveur a échoué.
           setSaveState("sync_error");
         }
       }
@@ -10449,7 +10390,7 @@ function GapTrackApp({
     return () => {
       if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
     };
-  }, [activeSessionId, rows, evidenceMap, proofStatusMap, plans, pushToBackend]);
+  }, [activeSessionId, rows, evidenceMap, proofStatusMap, plans, auditLog, pushToBackend]);
 
 
 
@@ -10458,21 +10399,12 @@ function GapTrackApp({
   const retryBackendSync = React.useCallback(async () => {
     if (!activeSessionId) return;
 
-    if (!isBackendSyncEnabled()) {
-      setSaveState("local_only");
-      toast.info(
-        lang === "fr"
-          ? "Mode local actif : configure GAPTRACK_API_URL ou GAPTRACK_BACKEND_SYNC pour activer la synchronisation serveur."
-          : "Local mode is active: configure GAPTRACK_API_URL or GAPTRACK_BACKEND_SYNC to enable server sync."
-      );
-      return;
-    }
-
     const payload = {
       rows: rowsRef.current,
       evidenceMap: evidenceMapRef.current,
       plans: plansRef.current,
       proofStatusMap: proofStatusMapRef.current,
+      auditLog: auditLogRef.current,
     };
 
     setSaveState("syncing");
@@ -10777,7 +10709,7 @@ function GapTrackApp({
       setAuditLog(nextLog);
       resetHistory();
     } else {
-      try { localStorage.removeItem(ACTIVE_SESSION_KEY); } catch {}
+      // Aucun identifiant d’audit actif n’est conservé dans le navigateur.
       setActiveSessionId('');
       auditLogRef.current = [];
       setAuditLog([]);
