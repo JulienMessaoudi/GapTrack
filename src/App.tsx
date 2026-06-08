@@ -2761,15 +2761,15 @@ function UserManagementDialog({
 
   return (
     <div className="modal-overlay no-print" role="dialog" aria-modal="true" onClick={onClose}>
-      <div className="modal w-[min(1280px,calc(100vw-32px))] max-w-none" onClick={(e) => e.stopPropagation()}>
+      <div className="modal w-[min(1280px,calc(100vw-32px))] max-w-none overflow-hidden" onClick={(e) => e.stopPropagation()}>
         <header className="flex items-center justify-between gap-3">
           <span>{lang === "fr" ? "Gestion des utilisateurs" : "User management"}</span>
           <Button size="sm" variant="ghost" onClick={onClose}><X className="h-4 w-4" /></Button>
         </header>
 
-        <div className="body max-h-[78vh] overflow-auto">
-          <div className="grid gap-5 xl:grid-cols-[400px_minmax(0,1fr)]">
-            <aside className="space-y-4">
+        <div className="body max-h-[78vh] overflow-y-auto overflow-x-hidden">
+          <div className="grid min-w-0 gap-5 xl:grid-cols-[420px_minmax(0,1fr)]">
+            <aside className="min-w-0 space-y-4">
               <div className="rounded-2xl border bg-muted/20 p-4">
                 <div className="flex flex-wrap items-center gap-3">
                   <div className="rounded-xl border bg-background p-2">
@@ -2806,14 +2806,6 @@ function UserManagementDialog({
                 </div>
               )}
 
-              {canManage && !canManageSubscriptions && (
-                <div className="rounded-2xl border bg-muted/20 p-4 text-sm text-muted-foreground">
-                  {lang === "fr"
-                    ? "Vous voyez uniquement les utilisateurs que vous avez créés. Les autres comptes et le compte propriétaire sont masqués."
-                    : "You only see users you created. Other accounts and the service-owner account are hidden."}
-                </div>
-              )}
-
               {canCreate && (
                 <div className="rounded-2xl border p-4">
                   <div className="mb-3 flex items-center gap-2 font-medium">
@@ -2825,7 +2817,7 @@ function UserManagementDialog({
                       ? "Un e-mail de vérification sera envoyé. L’utilisateur pourra se connecter avec le mot de passe temporaire après confirmation de son adresse e-mail."
                       : "A verification email will be sent. The user can sign in with the temporary password after confirming their email address."}
                   </p>
-                  <div className="grid gap-3">
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
                     <div>
                       <label className="text-sm text-muted-foreground">{lang === "fr" ? "Nom" : "Name"}</label>
                       <Input value={name} onChange={(e) => setName(e.target.value)} />
@@ -2905,125 +2897,133 @@ function UserManagementDialog({
               )}
             </aside>
 
-            <section className="min-w-0 space-y-3">
-              <div className="flex flex-wrap items-end justify-between gap-3">
-                <div>
-                  <div className="font-medium">{lang === "fr" ? "Utilisateurs accessibles" : "Accessible users"}</div>
-                  <div className="text-sm text-muted-foreground">
-                    {canManageSubscriptions
-                      ? (lang === "fr" ? "Compte propriétaire : accès à tous les utilisateurs." : "Service owner: access to all users.")
-                      : (lang === "fr" ? "Vue limitée aux comptes que vous avez créés." : "View limited to accounts you created.")}
-                  </div>
-                </div>
-                <Badge variant="outline">{visibleUsers.length}</Badge>
-              </div>
-
-              <div className="overflow-x-auto rounded-2xl border">
-                <div className="min-w-[940px]">
-                  <div className="grid grid-cols-[minmax(220px,1.4fr)_130px_170px_110px_minmax(280px,1fr)] gap-3 border-b bg-muted/20 px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    <span>{lang === "fr" ? "Utilisateur" : "User"}</span>
-                    <span>{lang === "fr" ? "Offre" : "Plan"}</span>
-                    <span>{lang === "fr" ? "Rôle" : "Role"}</span>
-                    <span>{lang === "fr" ? "Statut" : "Status"}</span>
-                    <span>{lang === "fr" ? "Actions" : "Actions"}</span>
+            {canManage && (
+              <section className="min-w-0 space-y-3">
+                <div className="rounded-2xl border p-4">
+                  <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="font-medium">
+                        {canManageSubscriptions
+                          ? (lang === "fr" ? "Comptes utilisateurs" : "User accounts")
+                          : (lang === "fr" ? "Comptes créés" : "Created accounts")}
+                      </div>
+                    </div>
+                    <Badge variant="outline">{visibleUsers.length}</Badge>
                   </div>
 
                   {visibleUsers.length === 0 ? (
-                    <div className="px-4 py-8 text-sm text-muted-foreground">
-                      {lang === "fr" ? "Aucun utilisateur accessible pour ce compte." : "No user is accessible for this account."}
+                    <div className="rounded-xl border bg-muted/20 px-4 py-8 text-sm text-muted-foreground">
+                      {lang === "fr" ? "Aucun compte créé pour le moment." : "No account created yet."}
                     </div>
-                  ) : visibleUsers.map((u) => {
-                    const isSelf = activeUser?.id === u.id;
-                    const canEditTarget = canManage && userCanModifyUserRecord(activeUser, u);
-                    const disablingLastAdmin = u.role === "admin" && admins.length <= 1 && u.active !== false;
-                    return (
-                      <div key={u.id} className={"grid grid-cols-[minmax(220px,1.4fr)_130px_170px_110px_minmax(280px,1fr)] gap-3 border-b px-4 py-3 last:border-b-0 " + (u.active === false ? "opacity-60" : "")}>
-                        <div className="min-w-0">
-                          <div className="truncate font-medium">{u.name}</div>
-                          <div className="truncate text-sm text-muted-foreground">{u.email}</div>
-                          <div className="mt-1 truncate text-xs text-muted-foreground">
-                            {u.organization || "—"} · {lang === "fr" ? "Créé le" : "Created"} {new Date(u.createdAt).toLocaleDateString(lang === "fr" ? "fr-FR" : "en-US")}
+                  ) : (
+                    <div className="grid gap-3">
+                      {visibleUsers.map((u) => {
+                        const isSelf = activeUser?.id === u.id;
+                        const canEditTarget = canManage && userCanModifyUserRecord(activeUser, u);
+                        const disablingLastAdmin = u.role === "admin" && admins.length <= 1 && u.active !== false;
+                        return (
+                          <div key={u.id} className={"rounded-2xl border bg-muted/10 p-4 " + (u.active === false ? "opacity-60" : "")}>
+                            <div className="flex flex-wrap items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="truncate font-medium">{u.name}</div>
+                                <div className="truncate text-sm text-muted-foreground">{u.email}</div>
+                                <div className="mt-1 truncate text-xs text-muted-foreground">
+                                  {u.organization || "—"} · {lang === "fr" ? "Créé le" : "Created"} {new Date(u.createdAt).toLocaleDateString(lang === "fr" ? "fr-FR" : "en-US")}
+                                </div>
+                              </div>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Badge variant="outline" className={subscriptionPlanBadgeClass(u.subscriptionPlan)}>
+                                  {subscriptionPlanLabel(u.subscriptionPlan)}
+                                </Badge>
+                                <Badge variant="outline" className={userRoleBadgeClass(u.role)}>
+                                  {u.active === false ? (lang === "fr" ? "Inactif" : "Inactive") : (lang === "fr" ? "Actif" : "Active")}
+                                </Badge>
+                              </div>
+                            </div>
+
+                            <div className="mt-4 grid min-w-0 gap-3 md:grid-cols-2 2xl:grid-cols-[160px_180px_minmax(0,1fr)]">
+                              <div className="min-w-0">
+                                <label className="text-xs text-muted-foreground">{lang === "fr" ? "Offre" : "Plan"}</label>
+                                {canManageSubscriptions ? (
+                                  <Select
+                                    value={normalizeSubscriptionPlan(u.subscriptionPlan)}
+                                    disabled={!canEditTarget}
+                                    onValueChange={(v) => onUpdateUser(u.id, { subscriptionPlan: normalizeSubscriptionPlan(v) })}
+                                  >
+                                    <SelectTrigger className="w-full">{subscriptionPlanLabel(u.subscriptionPlan)}</SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="free">Free</SelectItem>
+                                      <SelectItem value="premium">Premium</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                ) : (
+                                  <div className="mt-2">
+                                    <Badge variant="outline" className={subscriptionPlanBadgeClass(u.subscriptionPlan)}>
+                                      {subscriptionPlanLabel(u.subscriptionPlan)}
+                                    </Badge>
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="min-w-0">
+                                <label className="text-xs text-muted-foreground">{lang === "fr" ? "Rôle" : "Role"}</label>
+                                <Select
+                                  value={u.role}
+                                  disabled={!canEditTarget || disablingLastAdmin}
+                                  onValueChange={(v) => onUpdateUser(u.id, { role: v as UserRole })}
+                                >
+                                  <SelectTrigger className="w-full">{userRoleLabel(u.role, lang)}</SelectTrigger>
+                                  <SelectContent>
+                                    {(["admin", "auditor", "contributor", "viewer"] as UserRole[]).map((r) => (
+                                      <SelectItem key={r} value={r}>{userRoleLabel(r, lang)}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+
+                              <div className="min-w-0 md:col-span-2 2xl:col-span-1">
+                                <label className="text-xs text-muted-foreground">{lang === "fr" ? "Actions" : "Actions"}</label>
+                                <div className="mt-1 flex flex-wrap items-center gap-2">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    disabled={!canEditTarget || isSelf || disablingLastAdmin}
+                                    onClick={() => onUpdateUser(u.id, { active: u.active === false })}
+                                  >
+                                    {u.active === false ? (lang === "fr" ? "Réactiver" : "Reactivate") : (lang === "fr" ? "Désactiver" : "Deactivate")}
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    disabled={!canEditTarget}
+                                    onClick={() => {
+                                      const next = window.prompt(lang === "fr" ? "Nouveau mot de passe temporaire" : "New temporary password");
+                                      if (!next) return;
+                                      onResetPassword(u.id, next);
+                                    }}
+                                  >
+                                    {lang === "fr" ? "Réinitialiser" : "Reset"}
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="destructive"
+                                    disabled={!canEditTarget || isSelf || disablingLastAdmin}
+                                    onClick={() => onDeleteUser(u.id)}
+                                  >
+                                    <Trash2 className="mr-1 h-4 w-4" />
+                                    {lang === "fr" ? "Supprimer" : "Delete"}
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
                           </div>
-                        </div>
-
-                        <div className="flex items-center">
-                          {canManageSubscriptions ? (
-                            <Select
-                              value={normalizeSubscriptionPlan(u.subscriptionPlan)}
-                              disabled={!canEditTarget}
-                              onValueChange={(v) => onUpdateUser(u.id, { subscriptionPlan: normalizeSubscriptionPlan(v) })}
-                            >
-                              <SelectTrigger className="w-[120px]">{subscriptionPlanLabel(u.subscriptionPlan)}</SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="free">Free</SelectItem>
-                                <SelectItem value="premium">Premium</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          ) : (
-                            <Badge variant="outline" className={subscriptionPlanBadgeClass(u.subscriptionPlan)}>
-                              {subscriptionPlanLabel(u.subscriptionPlan)}
-                            </Badge>
-                          )}
-                        </div>
-
-                        <div className="flex items-center">
-                          <Select
-                            value={u.role}
-                            disabled={!canEditTarget || disablingLastAdmin}
-                            onValueChange={(v) => onUpdateUser(u.id, { role: v as UserRole })}
-                          >
-                            <SelectTrigger className="w-[160px]">{userRoleLabel(u.role, lang)}</SelectTrigger>
-                            <SelectContent>
-                              {(["admin", "auditor", "contributor", "viewer"] as UserRole[]).map((r) => (
-                                <SelectItem key={r} value={r}>{userRoleLabel(r, lang)}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-
-                        <div className="flex items-center">
-                          <Badge variant="outline" className={userRoleBadgeClass(u.role)}>
-                            {u.active === false ? (lang === "fr" ? "Inactif" : "Inactive") : (lang === "fr" ? "Actif" : "Active")}
-                          </Badge>
-                        </div>
-
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={!canEditTarget || isSelf || disablingLastAdmin}
-                            onClick={() => onUpdateUser(u.id, { active: u.active === false })}
-                          >
-                            {u.active === false ? (lang === "fr" ? "Réactiver" : "Reactivate") : (lang === "fr" ? "Désactiver" : "Deactivate")}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={!canEditTarget}
-                            onClick={() => {
-                              const next = window.prompt(lang === "fr" ? "Nouveau mot de passe temporaire" : "New temporary password");
-                              if (!next) return;
-                              onResetPassword(u.id, next);
-                            }}
-                          >
-                            {lang === "fr" ? "Réinitialiser" : "Reset"}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            disabled={!canEditTarget || isSelf || disablingLastAdmin}
-                            onClick={() => onDeleteUser(u.id)}
-                          >
-                            <Trash2 className="mr-1 h-4 w-4" />
-                            {lang === "fr" ? "Supprimer" : "Delete"}
-                          </Button>
-                        </div>
-                      </div>
-                    );
-                  })}
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
-              </div>
-            </section>
+              </section>
+            )}
           </div>
         </div>
 
