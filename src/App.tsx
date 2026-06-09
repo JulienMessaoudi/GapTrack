@@ -4948,13 +4948,11 @@ function SettingsProfileView({
   const [organization, setOrganization] = useState(activeUser?.organization || "");
   const [saving, setSaving] = useState(false);
   const [securityAction, setSecurityAction] = useState<"password" | "logout" | null>(null);
-  const [privacyAction, setPrivacyAction] = useState<"export" | "deletion-email" | null>(null);
-  const [deleteConfirmationEmail, setDeleteConfirmationEmail] = useState("");
+  const [privacyAction, setPrivacyAction] = useState<"export" | "deletion" | null>(null);
 
   useEffect(() => {
     setName(activeUser?.name || "");
     setOrganization(activeUser?.organization || "");
-    setDeleteConfirmationEmail("");
   }, [activeUser?.id, activeUser?.name, activeUser?.organization]);
 
   const initials = React.useMemo(() => {
@@ -5124,53 +5122,45 @@ function SettingsProfileView({
     }
   }
 
-  async function requestAccountDeletionValidationEmail() {
+  async function requestAccountDeletionByMagicLink() {
     if (privacyAction) return;
 
-    const expectedEmail = normalizeEmail(accountEmail);
-    const typedEmail = normalizeEmail(deleteConfirmationEmail);
-
-    if (!expectedEmail) {
-      toast.error(lang === "fr" ? "Adresse e-mail du compte introuvable." : "Account email not found.");
-      return;
-    }
-
-    if (typedEmail !== expectedEmail) {
-      toast.error(
+    const typedEmail = normalizeEmail(
+      window.prompt(
         lang === "fr"
-          ? "Pour confirmer, saisissez exactement l’e-mail de votre compte."
-          : "To confirm, type your account email exactly."
-      );
+          ? `Pour recevoir le lien de validation, retapez votre e-mail : ${accountEmail}`
+          : `To receive the validation link, retype your email: ${accountEmail}`
+      ) || ""
+    );
+
+    if (!typedEmail) return;
+
+    if (typedEmail !== normalizeEmail(accountEmail)) {
+      toast.error(lang === "fr" ? "L’e-mail saisi ne correspond pas au compte connecté." : "The email you entered does not match the signed-in account.");
       return;
     }
 
-    const confirmed = window.confirm(
-      lang === "fr"
-        ? "Un e-mail de validation va être envoyé. Le compte sera supprimé uniquement après clic sur le lien reçu. Continuer ?"
-        : "A validation email will be sent. The account will be deleted only after clicking the received link. Continue?"
-    );
-    if (!confirmed) return;
-
-    setPrivacyAction("deletion-email");
+    setPrivacyAction("deletion");
     try {
-      const { error } = await supabase.functions.invoke("gaptrack-request-account-deletion", {
-        body: { email: expectedEmail },
+      const redirectTo = `${window.location.origin}/app?gaptrack_delete_confirm=1`;
+      const { error } = await supabase.auth.signInWithOtp({
+        email: accountEmail,
+        options: {
+          emailRedirectTo: redirectTo,
+          shouldCreateUser: false,
+        },
       });
 
       if (error) throw error;
 
       toast.success(
         lang === "fr"
-          ? `E-mail de validation envoyé à ${expectedEmail}.`
-          : `Validation email sent to ${expectedEmail}.`
+          ? "E-mail de validation envoyé. Cliquez sur le lien reçu pour confirmer la suppression."
+          : "Validation email sent. Click the link you received to confirm deletion."
       );
     } catch (error) {
-      console.error("Unable to request account deletion validation email.", error);
-      toast.error(
-        lang === "fr"
-          ? "Impossible d’envoyer l’e-mail de validation de suppression. Vérifiez la fonction Supabase."
-          : "Unable to send the account deletion validation email. Check the Supabase function."
-      );
+      console.error("Unable to send account deletion magic link.", error);
+      toast.error(authErrorMessage(error));
     } finally {
       setPrivacyAction(null);
     }
@@ -5664,36 +5654,18 @@ function SettingsProfileView({
               </Button>
             </div>
 
-            <div className="rounded-2xl border border-rose-500/30 bg-rose-500/5 p-4">
+            <div className="rounded-2xl border bg-muted/10 p-4">
               <h3 className="text-sm font-semibold">
-                {lang === "fr" ? "Supprimer définitivement mon compte" : "Permanently delete my account"}
+                {lang === "fr" ? "Demander la suppression du compte" : "Request account deletion"}
               </h3>
               <p className="mt-1 text-sm text-muted-foreground">
                 {lang === "fr"
-                  ? "La suppression est demandée par l’utilisateur connecté, puis validée par e-mail. Le compte et les données serveur sont supprimés uniquement après clic sur le lien reçu."
-                  : "Deletion is requested by the signed-in user, then validated by email. The account and server data are deleted only after clicking the received link."}
+                  ? "Envoie un lien Supabase Auth au compte connecté. Après clic sur le lien, l’utilisateur devra confirmer une dernière fois avant suppression serveur."
+                  : "Sends a Supabase Auth link to the signed-in account. After clicking the link, the user must confirm once more before server-side deletion."}
               </p>
-              <div className="mt-4 space-y-2">
-                <label className="text-xs font-medium text-muted-foreground" htmlFor="settings-delete-email-confirmation">
-                  {lang === "fr" ? "Retapez votre e-mail pour confirmer" : "Retype your email to confirm"}
-                </label>
-                <Input
-                  id="settings-delete-email-confirmation"
-                  value={deleteConfirmationEmail}
-                  onChange={(event) => setDeleteConfirmationEmail(event.target.value)}
-                  placeholder={accountEmail}
-                  autoComplete="email"
-                />
-              </div>
-              <Button
-                type="button"
-                variant="destructive"
-                className="mt-4"
-                onClick={requestAccountDeletionValidationEmail}
-                disabled={privacyAction !== null || normalizeEmail(deleteConfirmationEmail) !== normalizeEmail(accountEmail)}
-              >
-                {privacyAction === "deletion-email" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Mail className="mr-2 h-4 w-4" />}
-                {lang === "fr" ? "Envoyer l’e-mail de validation" : "Send validation email"}
+              <Button type="button" variant="outline" className="mt-4" onClick={requestAccountDeletionByMagicLink} disabled={privacyAction !== null}>
+                {privacyAction === "deletion" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Mail className="mr-2 h-4 w-4" />}
+                {lang === "fr" ? "Demander la suppression" : "Request deletion"}
               </Button>
             </div>
           </div>
@@ -5707,8 +5679,8 @@ function SettingsProfileView({
                 </h3>
                 <p className="text-sm text-sky-900/80 dark:text-sky-100/80">
                   {lang === "fr"
-                    ? "La suppression définitive est exécutée côté Supabase par Edge Function avec un lien de validation envoyé à l’e-mail du compte. Aucune clé service_role ne doit être exposée dans le navigateur."
-                    : "Permanent deletion runs server-side in Supabase through an Edge Function with a validation link sent to the account email. No service_role key must be exposed in the browser."}
+                    ? "La suppression définitive passe par Supabase Auth : lien de validation envoyé par e-mail, confirmation finale dans l’application, puis Edge Function sécurisée côté serveur. Aucun service e-mail externe n’est nécessaire."
+                    : "Permanent deletion goes through Supabase Auth: validation link by email, final confirmation in the app, then a secured server-side Edge Function. No external email provider is required."}
                 </p>
               </div>
             </div>
@@ -10321,12 +10293,88 @@ function GapTrackApp({
     () => users.find((u) => u.id === activeUserId && u.active !== false) || null,
     [users, activeUserId]
   );
+  const accountDeletionConfirmationHandledRef = useRef(false);
 
   useEffect(() => {
     if (activeUser && route !== "app") {
       navigate("app", true);
     }
   }, [activeUser, route, navigate]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("gaptrack_delete_confirm") !== "1") return;
+    if (accountDeletionConfirmationHandledRef.current) return;
+    if (!activeUser) return;
+
+    accountDeletionConfirmationHandledRef.current = true;
+
+    const cleanDeletionQuery = () => {
+      const nextUrl = new URL(window.location.href);
+      nextUrl.searchParams.delete("gaptrack_delete_confirm");
+      window.history.replaceState({}, "", `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`);
+    };
+
+    async function confirmAndDeleteAccount() {
+      try {
+        const firstConfirmation = window.confirm(
+          lang === "fr"
+            ? `Le lien e-mail a été validé. Voulez-vous supprimer définitivement le compte ${activeUser.email} et ses données serveur ?`
+            : `The email link was validated. Do you want to permanently delete the account ${activeUser.email} and its server data?`
+        );
+
+        if (!firstConfirmation) {
+          toast.info(lang === "fr" ? "Suppression du compte annulée." : "Account deletion cancelled.");
+          return;
+        }
+
+        const typedEmail = normalizeEmail(
+          window.prompt(
+            lang === "fr"
+              ? `Dernière confirmation : retapez votre e-mail (${activeUser.email}) pour supprimer le compte.`
+              : `Final confirmation: retype your email (${activeUser.email}) to delete the account.`
+          ) || ""
+        );
+
+        if (typedEmail !== normalizeEmail(activeUser.email)) {
+          toast.error(lang === "fr" ? "E-mail incorrect. Suppression annulée." : "Incorrect email. Deletion cancelled.");
+          return;
+        }
+
+        const { error } = await supabase.functions.invoke("gaptrack-delete-own-account", {
+          body: { confirmEmail: activeUser.email },
+        });
+
+        if (error) throw error;
+
+        toast.success(lang === "fr" ? "Compte supprimé définitivement." : "Account permanently deleted.");
+        await supabase.auth.signOut().catch(() => undefined);
+        clearActiveUserId();
+        setActiveUserId("");
+        setUsers((prev) => {
+          const next = prev.filter((user) => user.id !== activeUser.id && normalizeEmail(user.email) !== normalizeEmail(activeUser.email));
+          saveUsers(next);
+          return next;
+        });
+        setLocalActorFromUser(null);
+        navigate("home", true);
+      } catch (error) {
+        console.error("Unable to delete own account after email confirmation.", error);
+        const message = error instanceof Error ? error.message : "";
+        toast.error(
+          lang === "fr"
+            ? `Impossible de supprimer le compte côté serveur${message ? ` : ${message}` : "."}`
+            : `Unable to delete the server-side account${message ? `: ${message}` : "."}`
+        );
+      } finally {
+        cleanDeletionQuery();
+      }
+    }
+
+    void confirmAndDeleteAccount();
+  }, [activeUser, lang, navigate]);
 
   const canManageUsersFlag = userCanManageUsers(activeUser);
   const canCreateUsersFlag = userCanCreateUsers(activeUser);
@@ -10336,58 +10384,6 @@ function GapTrackApp({
   const canManageAuditsFlag = userCanManageAudits(activeUser);
   const canDeleteAuditsFlag = userCanDeleteAudits(activeUser);
   const isPremiumUser = isPremiumPlan(activeUser?.subscriptionPlan);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    const url = new URL(window.location.href);
-    const deletionToken = url.searchParams.get("gaptrack_delete_token") || url.searchParams.get("delete_account_token");
-    if (!deletionToken) return;
-
-    let cancelled = false;
-
-    async function confirmAccountDeletionFromEmail() {
-      try {
-        const { data, error } = await supabase.functions.invoke("gaptrack-confirm-account-deletion", {
-          body: { token: deletionToken },
-        });
-
-        if (error) throw error;
-        if (cancelled) return;
-
-        const deletedEmail = normalizeEmail(String((data as any)?.email || ""));
-        if (deletedEmail) {
-          setUsers((prev) => prev.filter((user) => normalizeEmail(user.email) !== deletedEmail));
-        }
-        setActiveUserId("");
-        try { localStorage.removeItem(ACTIVE_USER_KEY); } catch {}
-        await supabase.auth.signOut().catch(() => undefined);
-
-        window.history.replaceState({}, "", pathForRoute("home"));
-        navigate("home", true);
-        toast.success(
-          lang === "fr"
-            ? "Votre compte a été supprimé après validation par e-mail."
-            : "Your account has been deleted after email validation."
-        );
-      } catch (error) {
-        console.error("Unable to confirm account deletion.", error);
-        const cleanUrl = `${window.location.pathname}${window.location.hash || ""}`;
-        window.history.replaceState({}, "", cleanUrl || pathForRoute("home"));
-        toast.error(
-          lang === "fr"
-            ? "Lien de suppression invalide, expiré ou déjà utilisé."
-            : "The deletion link is invalid, expired, or already used."
-        );
-      }
-    }
-
-    void confirmAccountDeletionFromEmail();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [lang, navigate]);
 
   // Journal d’audit local, séparé de l’undo/redo pour rester traçable.
   const [auditLog, setAuditLog] = useState<AuditLogEntry[]>([]);
