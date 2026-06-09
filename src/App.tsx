@@ -10716,7 +10716,7 @@ function GapTrackApp({
     const requestedSubscriptionPlan = canManageSubscriptionsFlag ? normalizeSubscriptionPlan(payload.subscriptionPlan) : "free";
     let subscriptionPlan = requestedSubscriptionPlan;
     const createdByUserId = activeUser?.id;
-    const createdByEmail = activeUser?.email ? deletionUserEmail : undefined;
+    const createdByEmail = activeUser?.email ? normalizeEmail(activeUser.email) : undefined;
 
     try {
       const previousSession = await supabase.auth.getSession().then(({ data }) => data.session).catch(() => null);
