@@ -6,7 +6,7 @@ import { Input } from "./components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "./components/ui/select";
 import { Badge } from "./components/ui/badge";
 import { toast } from "sonner";
-import {Filter, Redo2, Search, Undo2, ArrowUp, Paperclip, Download, Plus, Copy, X, Trash2, AlertTriangle, Shield, ShieldCheck, Lightbulb, Info, Loader2, CheckCircle2, AlertCircle, Pencil, BarChart3, ListChecks, ListTodo, Users, LogOut, UserPlus, History, FileCheck2, Clock3, Mail} from "lucide-react";
+import {Filter, Redo2, Search, Undo2, ArrowUp, Paperclip, Download, Plus, Copy, X, Trash2, AlertTriangle, Shield, ShieldCheck, Lightbulb, Info, Loader2, CheckCircle2, AlertCircle, Pencil, BarChart3, ListChecks, ListTodo, Users, LogOut, UserPlus, History, FileCheck2, Clock3, Mail, Settings} from "lucide-react";
 import { ResponsiveContainer, Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Tooltip } from "recharts";
 import { LoginAccessPage } from "./components/LoginAccessPage";
 import { ResetPasswordPage } from "./components/ResetPasswordPage";
@@ -4527,6 +4527,7 @@ function Sidebar({ current, onNavigate, lang }: { current: string; onNavigate: (
     { key: "risks", label: lang === "fr" ? "Risques" : "Risks", icon: <AlertTriangle className="h-5 w-5" /> },
     { key: "dashboard", label: t.dashboard, icon: <BarChart3 className="h-5 w-5" /> },
     { key: "journal", label: lang === "fr" ? "Journal d’audit" : "Audit log", icon: <History className="h-5 w-5" /> },
+    { key: "settings", label: lang === "fr" ? "Paramètres" : "Settings", icon: <Settings className="h-5 w-5" /> },
   ];
 
   return (
@@ -4632,6 +4633,7 @@ function MobileNav({ current, onNavigate, lang }: { current: string; onNavigate:
     { key: "risks", label: lang === "fr" ? "Risques" : "Risks", icon: <AlertTriangle className="h-5 w-5" /> },
     { key: "dashboard", label: t.dashboard, icon: <BarChart3 className="h-5 w-5" /> },
     { key: "journal", label: lang === "fr" ? "Journal" : "Log", icon: <History className="h-5 w-5" /> },
+    { key: "settings", label: lang === "fr" ? "Param." : "Settings", icon: <Settings className="h-5 w-5" /> },
   ] as const;
 
   return (
@@ -4891,6 +4893,206 @@ function Toolbar({
 }
 
 
+
+function SettingsProfileView({
+  activeUser,
+  lang,
+  onSaveProfile,
+}: {
+  activeUser: AppUser | null;
+  lang: LangKey;
+  onSaveProfile: (patch: { name: string; organization?: string }) => Promise<boolean>;
+}) {
+  const [name, setName] = useState(activeUser?.name || "");
+  const [organization, setOrganization] = useState(activeUser?.organization || "");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setName(activeUser?.name || "");
+    setOrganization(activeUser?.organization || "");
+  }, [activeUser?.id, activeUser?.name, activeUser?.organization]);
+
+  const initials = React.useMemo(() => {
+    const source = (activeUser?.name || activeUser?.email || "GT").trim();
+    const parts = source.split(/[\s._-]+/).filter(Boolean);
+    const letters = parts.length >= 2 ? `${parts[0][0]}${parts[1][0]}` : source.slice(0, 2);
+    return letters.toUpperCase();
+  }, [activeUser?.email, activeUser?.name]);
+
+  const locale = lang === "fr" ? "fr-FR" : "en-US";
+  const formatAccountDate = (value?: string) => {
+    if (!value) return lang === "fr" ? "Non disponible" : "Unavailable";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return date.toLocaleString(locale);
+  };
+
+  if (!activeUser) {
+    return (
+      <div className="p-4">
+        <Card className="glass-card">
+          <CardContent className="p-6 text-sm text-muted-foreground">
+            {lang === "fr" ? "Aucun utilisateur connecté." : "No signed-in user."}
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  const trimmedName = name.trim();
+  const trimmedOrganization = organization.trim();
+  const originalOrganization = activeUser.organization || "";
+  const hasChanges = trimmedName !== activeUser.name || trimmedOrganization !== originalOrganization;
+  const canSave = Boolean(trimmedName) && hasChanges && !saving;
+
+  async function saveProfile() {
+    if (!trimmedName) {
+      toast.error(lang === "fr" ? "Le nom est obligatoire." : "Name is required.");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const ok = await onSaveProfile({
+        name: trimmedName,
+        organization: trimmedOrganization || undefined,
+      });
+      if (ok) {
+        setName(trimmedName);
+        setOrganization(trimmedOrganization);
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="p-4 space-y-4">
+      <Card className="glass-card overflow-hidden">
+        <CardHeader className="border-b bg-muted/20">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-center gap-4">
+              <div className="flex h-16 w-16 items-center justify-center rounded-2xl border bg-background text-xl font-bold shadow-sm">
+                {initials}
+              </div>
+              <div className="min-w-0">
+                <CardTitle className="flex flex-wrap items-center gap-2">
+                  <Users className="h-5 w-5" />
+                  {lang === "fr" ? "Profil utilisateur" : "User profile"}
+                </CardTitle>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {lang === "fr"
+                    ? "Gérez les informations affichées dans les audits, preuves et journaux."
+                    : "Manage the information shown in audits, evidence, and logs."}
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Badge variant="outline" className={userRoleBadgeClass(activeUser.role)}>
+                {userRoleLabel(activeUser.role, lang)}
+              </Badge>
+              <Badge variant="outline" className={subscriptionPlanBadgeClass(activeUser.subscriptionPlan)}>
+                {subscriptionPlanLabel(activeUser.subscriptionPlan)}
+              </Badge>
+              <Badge variant="outline" className={activeUser.active === false ? "border-rose-500/50 text-rose-700 dark:text-rose-300 bg-rose-500/10" : "border-emerald-500/50 text-emerald-700 dark:text-emerald-300 bg-emerald-500/10"}>
+                {activeUser.active === false
+                  ? (lang === "fr" ? "Compte désactivé" : "Inactive")
+                  : (lang === "fr" ? "Compte actif" : "Active")}
+              </Badge>
+            </div>
+          </div>
+        </CardHeader>
+
+        <CardContent className="p-5 space-y-5">
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className="space-y-2">
+              <label className="text-sm font-medium" htmlFor="settings-profile-name">
+                {lang === "fr" ? "Nom affiché" : "Display name"}
+              </label>
+              <Input
+                id="settings-profile-name"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                maxLength={80}
+                placeholder={lang === "fr" ? "Votre nom" : "Your name"}
+              />
+              <p className="text-xs text-muted-foreground">
+                {lang === "fr" ? "Utilisé comme acteur dans le journal d’audit." : "Used as the actor name in the audit log."}
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium" htmlFor="settings-profile-organization">
+                {lang === "fr" ? "Organisation" : "Organization"}
+              </label>
+              <Input
+                id="settings-profile-organization"
+                value={organization}
+                onChange={(event) => setOrganization(event.target.value)}
+                maxLength={120}
+                placeholder={lang === "fr" ? "PME / Client / Cabinet" : "Company / Client / Firm"}
+              />
+              <p className="text-xs text-muted-foreground">
+                {lang === "fr" ? "Préremplira progressivement vos fiches d’audit." : "Can be reused to prefill audit profiles."}
+              </p>
+            </div>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-2xl border p-4">
+              <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                <Mail className="h-4 w-4" />
+                E-mail
+              </div>
+              <div className="truncate text-sm font-semibold">{activeUser.email}</div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                {lang === "fr" ? "Adresse de connexion Supabase" : "Supabase sign-in address"}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border p-4">
+              <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                <ShieldCheck className="h-4 w-4" />
+                {lang === "fr" ? "Rôle" : "Role"}
+              </div>
+              <div className="text-sm font-semibold">{userRoleLabel(activeUser.role, lang)}</div>
+              <div className="mt-1 text-xs text-muted-foreground">{userRoleDescription(activeUser.role, lang)}</div>
+            </div>
+
+            <div className="rounded-2xl border p-4">
+              <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                <Clock3 className="h-4 w-4" />
+                {lang === "fr" ? "Créé le" : "Created"}
+              </div>
+              <div className="text-sm font-semibold">{formatAccountDate(activeUser.createdAt)}</div>
+            </div>
+
+            <div className="rounded-2xl border p-4">
+              <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                <CheckCircle2 className="h-4 w-4" />
+                {lang === "fr" ? "Dernière connexion" : "Last sign-in"}
+              </div>
+              <div className="text-sm font-semibold">{formatAccountDate(activeUser.lastLoginAt)}</div>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-3 border-t pt-5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="text-sm text-muted-foreground">
+              {lang === "fr"
+                ? "Le rôle, l’e-mail et l’offre sont affichés en lecture seule pour éviter les changements non autorisés."
+                : "Role, email, and plan are read-only to prevent unauthorized changes."}
+            </div>
+            <Button type="button" onClick={saveProfile} disabled={!canSave}>
+              {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Pencil className="mr-2 h-4 w-4" />}
+              {saving ? (lang === "fr" ? "Enregistrement…" : "Saving…") : (lang === "fr" ? "Enregistrer le profil" : "Save profile")}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 function PageHeader({ tab, lang, rows }: { tab: string; lang: LangKey; rows: ControlItem[] }) {
   const t = I18N[lang];
   const titleMap: Record<string, string> = {
@@ -4900,6 +5102,7 @@ function PageHeader({ tab, lang, rows }: { tab: string; lang: LangKey; rows: Con
     risks: lang === "fr" ? "Risques" : "Risks",
     dashboard: t.dashboard,
     journal: lang === "fr" ? "Journal d’audit" : "Audit log",
+    settings: lang === "fr" ? "Paramètres" : "Settings",
   };
   const subMap: Record<string, string> = lang === "fr"
     ? {
@@ -4909,6 +5112,7 @@ function PageHeader({ tab, lang, rows }: { tab: string; lang: LangKey; rows: Con
         risks: "Traduire les écarts en risques métier concrets",
         dashboard: "Synthèse de maturité et priorités",
         journal: "Historique horodaté des preuves, contrôles et décisions",
+        settings: "Profil utilisateur et préférences du compte",
       }
     : {
         listing: "Assessment and 0/1 entry of controls",
@@ -4917,6 +5121,7 @@ function PageHeader({ tab, lang, rows }: { tab: string; lang: LangKey; rows: Con
         risks: "Turn gaps into concrete business risks",
         dashboard: "Scores and priorities overview",
         journal: "Timestamped history of evidence, controls and decisions",
+        settings: "User profile and account preferences",
       };
   const title = titleMap[tab] ?? "";
   const sub = subMap[tab] ?? "";
@@ -9599,6 +9804,59 @@ function GapTrackApp({
     return false;
   }, [isPremiumUser, lang, requestPremiumByEmail]);
 
+
+  const updateOwnProfile = React.useCallback(async (patch: { name: string; organization?: string }) => {
+    if (!activeUser) {
+      toast.error(lang === "fr" ? "Aucun utilisateur connecté." : "No signed-in user.");
+      return false;
+    }
+
+    const name = patch.name.trim();
+    const organization = patch.organization?.trim() || undefined;
+
+    if (!name) {
+      toast.error(lang === "fr" ? "Le nom est obligatoire." : "Name is required.");
+      return false;
+    }
+
+    if (name.length > 80 || (organization && organization.length > 120)) {
+      toast.error(lang === "fr" ? "Le profil contient une valeur trop longue." : "The profile contains a value that is too long.");
+      return false;
+    }
+
+    try {
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      if (authError || !authData.user?.id) throw authError || new Error("Utilisateur non connecté.");
+
+      const { error } = await supabase
+        .from("gaptrack_profiles")
+        .update({ name, organization: organization || null })
+        .eq("id", authData.user.id);
+
+      if (error) throw error;
+
+      await supabase.auth.updateUser({
+        data: { name, organization: organization || null },
+      }).catch((error) => {
+        console.warn("Unable to mirror profile in Supabase Auth metadata.", error);
+      });
+
+      const updatedUser: AppUser = { ...activeUser, name, organization };
+      setUsers((prev) => {
+        const next = prev.map((user) => user.id === activeUser.id ? updatedUser : user);
+        saveUsers(next);
+        return next;
+      });
+      setLocalActorFromUser(updatedUser);
+      toast.success(lang === "fr" ? "Profil mis à jour." : "Profile updated.");
+      return true;
+    } catch (error) {
+      console.error("Unable to update GapTrack profile.", error);
+      toast.error(lang === "fr" ? "Impossible de mettre à jour le profil serveur." : "Unable to update the server profile.");
+      return false;
+    }
+  }, [activeUser, lang]);
+
   const syncSupabaseAuthenticatedUser = React.useCallback((profile: { email: string; name?: string; organization?: string; role?: UserRole; subscriptionPlan?: SubscriptionPlan; createdByUserId?: string; createdByEmail?: string }) => {
     const email = normalizeEmail(profile.email);
 
@@ -11096,6 +11354,22 @@ function GapTrackApp({
                     onClear={clearAuditLog}
                     canClear={canDeleteAuditsFlag}
                     canExport={isPremiumUser}
+                  />
+                </motion.div>
+              )}
+
+
+              {tab === "settings" && (
+                <motion.div
+                  key="settings"
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                >
+                  <SettingsProfileView
+                    activeUser={activeUser}
+                    lang={lang}
+                    onSaveProfile={updateOwnProfile}
                   />
                 </motion.div>
               )}
