@@ -112,6 +112,35 @@ function normalizeUserRole(value: unknown): UserRole | undefined {
     : undefined;
 }
 
+const SECURITY_MIN_PASSWORD_LENGTH = 12;
+const SECURITY_MAX_PASSWORD_LENGTH = 128;
+
+function validatePasswordStrength(
+  password: string,
+  context: { email?: string; name?: string; organization?: string } = {},
+  lang: LangKey = "fr"
+): string | null {
+  const value = String(password || "");
+  const lower = value.toLowerCase();
+  const forbiddenFragments = [context.email, context.name, context.organization]
+    .map((part) => String(part || "").trim().toLowerCase())
+    .filter((part) => part.length >= 4);
+
+  if (value.length < SECURITY_MIN_PASSWORD_LENGTH) {
+    return lang === "fr" ? `Mot de passe : ${SECURITY_MIN_PASSWORD_LENGTH} caractères minimum.` : `Password: at least ${SECURITY_MIN_PASSWORD_LENGTH} characters.`;
+  }
+  if (value.length > SECURITY_MAX_PASSWORD_LENGTH) {
+    return lang === "fr" ? `Mot de passe : ${SECURITY_MAX_PASSWORD_LENGTH} caractères maximum.` : `Password: ${SECURITY_MAX_PASSWORD_LENGTH} characters maximum.`;
+  }
+  if (!/[a-z]/.test(value) || !/[A-Z]/.test(value) || !/[0-9]/.test(value) || !/[^A-Za-z0-9]/.test(value)) {
+    return lang === "fr" ? "Le mot de passe doit contenir minuscule, majuscule, chiffre et caractère spécial." : "Password must include lowercase, uppercase, number, and special character.";
+  }
+  if (forbiddenFragments.some((part) => lower.includes(part))) {
+    return lang === "fr" ? "Le mot de passe ne doit pas contenir votre nom, organisation ou e-mail." : "Password must not include your name, organization, or email.";
+  }
+  return null;
+}
+
 async function fetchGapTrackProfile(userId: string, fallbackEmail: string): Promise<SupabaseAuthProfile> {
   const { data, error } = await supabase
     .from("gaptrack_profiles")
@@ -222,11 +251,11 @@ export function LoginAccessPage({
     });
 
     if (error) {
-      toast.error(authErrorMessage(error));
-      return;
+      // Message volontairement générique pour limiter l’énumération d’utilisateurs.
+      console.error("Password reset request failed", error);
     }
 
-    toast.success(lang === "fr" ? "E-mail de réinitialisation envoyé." : "Password reset email sent.");
+    toast.success(lang === "fr" ? "Si le compte existe, un e-mail de réinitialisation sera envoyé." : "If the account exists, a password reset email will be sent.");
   }
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
@@ -241,13 +270,14 @@ export function LoginAccessPage({
           return;
         }
 
-        if (password.length < 8) {
-          toast.error(lang === "fr" ? "Mot de passe : 8 caractères minimum." : "Password: at least 8 characters.");
+        const targetEmail = cleanEmail(email);
+        const passwordError = validatePasswordStrength(password, { email: targetEmail, name, organization }, lang);
+        if (passwordError) {
+          toast.error(passwordError);
           return;
         }
 
-        const targetEmail = cleanEmail(email);
-        persistRememberMe(true);
+        persistRememberMe(false);
 
         const { data, error } = await supabase.auth.signUp({
           email: targetEmail,
@@ -256,8 +286,9 @@ export function LoginAccessPage({
             data: {
               name: name.trim(),
               organization: organization.trim(),
-              role: "admin",
-              subscriptionPlan: "free",
+              // Hints only: the database trigger/RLS must decide the real role and plan.
+              requestedRole: "admin",
+              requestedSubscriptionPlan: "free",
               premiumRequested: false,
             },
             emailRedirectTo: window.location.origin,
@@ -497,7 +528,7 @@ export function LoginAccessPage({
                 </div>
 
                 <Field label="Nom">
-                  <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Administrateur" autoComplete="name" />
+                  <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Administrateur" autoComplete="name" maxLength={80} required />
                 </Field>
 
                 <Field label="Organisation">
@@ -505,7 +536,7 @@ export function LoginAccessPage({
                 </Field>
 
                 <Field label="Adresse e-mail" icon={<Mail />}>
-                  <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" placeholder="admin@entreprise.com" autoComplete="email" />
+                  <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" placeholder="admin@entreprise.com" autoComplete="email" maxLength={254} required />
                 </Field>
               </>
             ) : (
@@ -516,6 +547,8 @@ export function LoginAccessPage({
                   type="email"
                   placeholder="admin@entreprise.com"
                   autoComplete="email"
+                  maxLength={254}
+                  required
                 />
               </Field>
             )}
@@ -531,6 +564,9 @@ export function LoginAccessPage({
                 type={showPassword ? "text" : "password"}
                 placeholder="••••••••••••••••"
                 autoComplete={isSetup ? "new-password" : "current-password"}
+                minLength={isSetup ? SECURITY_MIN_PASSWORD_LENGTH : undefined}
+                maxLength={SECURITY_MAX_PASSWORD_LENGTH}
+                required
               />
             </Field>
 

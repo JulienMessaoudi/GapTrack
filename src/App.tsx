@@ -618,10 +618,14 @@ async function fetchBackendEvidenceMapForSession(auditSessionId: string): Promis
   if (!auditSessionId) return {};
 
   try {
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+    if (authError || !authData.user?.id) throw authError || new Error("Utilisateur non connecté.");
+
     const { data, error } = await supabase
       .from("gaptrack_evidence_files")
-      .select("id, control_id, filename, mime_type, size_bytes, storage_path, created_at")
+      .select("id, owner_user_id, control_id, filename, mime_type, size_bytes, storage_path, created_at")
       .eq("audit_session_id", auditSessionId)
+      .eq("owner_user_id", authData.user.id)
       .order("created_at", { ascending: false });
 
     if (error) throw error;
@@ -693,18 +697,26 @@ async function uploadEvidenceFileToBackend(params: {
   }
 
   const userId = authData.user.id;
-  const mimeType = params.file.type || "application/octet-stream";
+  const validationError = validateEvidenceFile(params.file);
+  if (validationError) throw new Error(validationError);
+
+  if (![params.auditSessionId, params.controlId, params.evidenceId].every(isSafePathSegment)) {
+    throw new Error("Identifiant de preuve invalide.");
+  }
+
+  const safeFilename = safeStorageFilename(params.file.name);
+  const mimeType = resolveSafeMimeType(params.file);
   const storagePath = [
     userId,
     params.auditSessionId,
     params.controlId,
-    `${params.evidenceId}-${safeStorageFilename(params.file.name)}`,
+    `${params.evidenceId}-${safeFilename}`,
   ].join("/");
 
   const { error: uploadError } = await supabase.storage
     .from(EVIDENCE_STORAGE_BUCKET)
     .upload(storagePath, params.file, {
-      cacheControl: "3600",
+      cacheControl: "0",
       contentType: mimeType,
       upsert: false,
     });
@@ -718,7 +730,7 @@ async function uploadEvidenceFileToBackend(params: {
       owner_user_id: userId,
       audit_session_id: params.auditSessionId,
       control_id: params.controlId,
-      filename: params.file.name,
+      filename: safeFilename,
       mime_type: mimeType,
       size_bytes: params.file.size,
       storage_bucket: EVIDENCE_STORAGE_BUCKET,
@@ -734,7 +746,7 @@ async function uploadEvidenceFileToBackend(params: {
 
   return {
     id: String(data?.id || params.evidenceId),
-    filename: String(data?.filename || params.file.name),
+    filename: String(data?.filename || safeFilename),
     size: Number(data?.size_bytes ?? params.file.size),
     mimeType: typeof data?.mime_type === "string" ? data.mime_type : mimeType,
     addedAt: typeof data?.created_at === "string" ? data.created_at : params.addedAt,
@@ -748,10 +760,12 @@ async function uploadEvidenceFileToBackend(params: {
 
 async function openBackendEvidenceItem(item: EvidenceItem): Promise<void> {
   if (!item.storageKey) throw new Error("Missing Supabase Storage path.");
+  const userId = await getSupabaseUserId();
+  if (!storagePathBelongsToUser(item.storageKey, userId)) throw new Error("Chemin de preuve non autorisé.");
 
   const { data, error } = await supabase.storage
     .from(EVIDENCE_STORAGE_BUCKET)
-    .createSignedUrl(item.storageKey, 60 * 5, { download: item.filename || true });
+    .createSignedUrl(item.storageKey, 60, { download: safeStorageFilename(item.filename || "evidence") });
 
   if (error) throw error;
   if (!data?.signedUrl) throw new Error("Unable to create signed URL.");
@@ -761,6 +775,8 @@ async function openBackendEvidenceItem(item: EvidenceItem): Promise<void> {
 
 async function deleteBackendEvidenceItem(item: EvidenceItem): Promise<void> {
   if (!item.storageKey) throw new Error("Missing Supabase Storage path.");
+  const userId = await getSupabaseUserId();
+  if (!storagePathBelongsToUser(item.storageKey, userId)) throw new Error("Chemin de preuve non autorisé.");
 
   const { error: fileError } = await supabase.storage
     .from(EVIDENCE_STORAGE_BUCKET)
@@ -771,7 +787,8 @@ async function deleteBackendEvidenceItem(item: EvidenceItem): Promise<void> {
   const { error: dbError } = await supabase
     .from("gaptrack_evidence_files")
     .delete()
-    .eq("id", item.id);
+    .eq("id", item.id)
+    .eq("owner_user_id", userId);
 
   if (dbError) throw dbError;
 }
@@ -791,7 +808,7 @@ function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = filename;
+  a.download = safeStorageFilename(filename);
   document.body.appendChild(a);
   a.click();
   a.remove();
@@ -1813,6 +1830,121 @@ function normalizeUserRole(value: any): UserRole {
   return "viewer";
 }
 
+// ==================
+// Security hardening helpers
+// ==================
+const SECURITY_MIN_PASSWORD_LENGTH = 12;
+const SECURITY_MAX_PASSWORD_LENGTH = 128;
+const EVIDENCE_MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB per evidence file
+const TEMPLATE_IMPORT_MAX_FILE_BYTES = 2 * 1024 * 1024; // 2 MB per CSV/JSON template
+
+const EVIDENCE_ALLOWED_EXTENSIONS = new Set([
+  "pdf", "png", "jpg", "jpeg", "webp", "txt", "csv", "json", "doc", "docx", "xls", "xlsx", "ppt", "pptx",
+]);
+
+const EVIDENCE_ALLOWED_MIME_TYPES = new Set([
+  "application/pdf",
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "text/plain",
+  "text/csv",
+  "application/csv",
+  "application/json",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.ms-powerpoint",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+]);
+
+const EVIDENCE_BLOCKED_EXTENSIONS = new Set([
+  "html", "htm", "svg", "js", "mjs", "cjs", "ts", "tsx", "jsx", "exe", "dll", "bat", "cmd", "com", "scr", "ps1", "sh", "php", "py", "jar", "msi", "apk",
+]);
+
+const EVIDENCE_ACCEPT_ATTRIBUTE = Array.from(EVIDENCE_ALLOWED_EXTENSIONS).map((ext) => `.${ext}`).join(",");
+
+function getFileExtension(name: string): string {
+  const match = String(name || "").toLowerCase().match(/\.([a-z0-9]+)$/);
+  return match ? match[1] : "";
+}
+
+function isSafePathSegment(value: string): boolean {
+  return /^[a-zA-Z0-9._-]{1,160}$/.test(String(value || "")) && !String(value).includes("..");
+}
+
+function resolveSafeMimeType(file: File): string {
+  const declared = String(file.type || "").toLowerCase();
+  return EVIDENCE_ALLOWED_MIME_TYPES.has(declared) ? declared : "application/octet-stream";
+}
+
+function validateEvidenceFile(file: File): string | null {
+  const extension = getFileExtension(file.name);
+
+  if (!file || file.size <= 0) return "Fichier invalide.";
+  if (file.size > EVIDENCE_MAX_FILE_BYTES) return "Fichier trop volumineux : 10 Mo maximum.";
+  if (!extension || EVIDENCE_BLOCKED_EXTENSIONS.has(extension)) return "Type de fichier interdit pour une preuve.";
+  if (!EVIDENCE_ALLOWED_EXTENSIONS.has(extension)) return "Type de fichier non autorisé. Formats acceptés : PDF, images, Office, CSV, JSON, TXT.";
+
+  const declared = String(file.type || "").toLowerCase();
+  if (declared && !EVIDENCE_ALLOWED_MIME_TYPES.has(declared)) return "Type MIME non autorisé pour une preuve.";
+
+  return null;
+}
+
+function validateTemplateImportFile(file: File, lang: LangKey): string | null {
+  const extension = getFileExtension(file.name);
+  const declared = String(file.type || "").toLowerCase();
+  const validExtension = extension === "csv" || extension === "json";
+  const validMime = !declared || declared === "text/csv" || declared === "application/csv" || declared === "application/json";
+
+  if (!file || file.size <= 0) return lang === "fr" ? "Fichier invalide." : "Invalid file.";
+  if (file.size > TEMPLATE_IMPORT_MAX_FILE_BYTES) return lang === "fr" ? "Template trop volumineux : 2 Mo maximum." : "Template too large: 2 MB maximum.";
+  if (!validExtension || !validMime) return lang === "fr" ? "Import limité aux fichiers CSV ou JSON." : "Import is limited to CSV or JSON files.";
+
+  return null;
+}
+
+function validatePasswordStrength(password: string, context: { email?: string; name?: string; organization?: string } = {}, lang: LangKey = "fr"): string | null {
+  const value = String(password || "");
+  const lower = value.toLowerCase();
+  const forbiddenFragments = [context.email, context.name, context.organization]
+    .map((part) => String(part || "").trim().toLowerCase())
+    .filter((part) => part.length >= 4);
+
+  if (value.length < SECURITY_MIN_PASSWORD_LENGTH) {
+    return lang === "fr" ? `Mot de passe : ${SECURITY_MIN_PASSWORD_LENGTH} caractères minimum.` : `Password: at least ${SECURITY_MIN_PASSWORD_LENGTH} characters.`;
+  }
+  if (value.length > SECURITY_MAX_PASSWORD_LENGTH) {
+    return lang === "fr" ? `Mot de passe : ${SECURITY_MAX_PASSWORD_LENGTH} caractères maximum.` : `Password: ${SECURITY_MAX_PASSWORD_LENGTH} characters maximum.`;
+  }
+  if (!/[a-z]/.test(value) || !/[A-Z]/.test(value) || !/[0-9]/.test(value) || !/[^A-Za-z0-9]/.test(value)) {
+    return lang === "fr" ? "Le mot de passe doit contenir minuscule, majuscule, chiffre et caractère spécial." : "Password must include lowercase, uppercase, number, and special character.";
+  }
+  if (forbiddenFragments.some((part) => lower.includes(part))) {
+    return lang === "fr" ? "Le mot de passe ne doit pas contenir votre nom, organisation ou e-mail." : "Password must not include your name, organization, or email.";
+  }
+  return null;
+}
+
+function sanitizeUserForClientStorage(user: AppUser): AppUser {
+  const { passwordHash: _removedPasswordHash, ...safeUser } = user;
+  return {
+    ...safeUser,
+    email: normalizeEmail(safeUser.email),
+    role: normalizeUserRole(safeUser.role),
+    subscriptionPlan: normalizeSubscriptionPlan(safeUser.subscriptionPlan),
+    active: safeUser.active !== false,
+  };
+}
+
+function storagePathBelongsToUser(storageKey: string | undefined, userId: string): boolean {
+  if (!storageKey || !userId) return false;
+  const parts = String(storageKey).split("/");
+  return parts.length >= 4 && parts[0] === userId && parts.every((part) => isSafePathSegment(part));
+}
+
 function userRoleLabel(role: UserRole | undefined, lang: LangKey): string {
   const r = normalizeUserRole(role);
   if (lang === "fr") {
@@ -1856,7 +1988,7 @@ function loadUsers(): AppUser[] {
     if (!Array.isArray(val)) return [];
     return val
       .filter((u: any) => u && typeof u.id === "string" && typeof u.email === "string")
-      .map((u: any) => ({
+      .map((u: any) => sanitizeUserForClientStorage({
         id: String(u.id),
         name: String(u.name || u.email || "Utilisateur"),
         email: normalizeEmail(u.email),
@@ -1868,7 +2000,6 @@ function loadUsers(): AppUser[] {
         subscriptionPlan: normalizeSubscriptionPlan(u.subscriptionPlan),
         createdByUserId: u.createdByUserId ? String(u.createdByUserId) : undefined,
         createdByEmail: u.createdByEmail ? normalizeEmail(u.createdByEmail) : undefined,
-        passwordHash: u.passwordHash ? String(u.passwordHash) : undefined,
       }))
       .filter((u: AppUser) => u.email);
   } catch {
@@ -1877,15 +2008,15 @@ function loadUsers(): AppUser[] {
 }
 
 function saveUsers(users: AppUser[]) {
-  localStorage.setItem(USERS_KEY, JSON.stringify(users));
+  localStorage.setItem(USERS_KEY, JSON.stringify(users.map(sanitizeUserForClientStorage)));
 }
 
 function loadActiveUserId(): string | null {
   try { return localStorage.getItem(ACTIVE_USER_KEY); } catch { return null; }
 }
 
-function saveActiveUserId(id: string) {
-  localStorage.setItem(ACTIVE_USER_KEY, id);
+function saveActiveUserId(_id: string) {
+  // Ne persiste plus l’utilisateur actif dans localStorage : la session Supabase est la source de vérité.
 }
 
 function clearActiveUserId() {
@@ -1980,20 +2111,8 @@ function userCanDeleteAudits(user: AppUser | null | undefined): boolean {
   return normalizeUserRole(user?.role) === "admin";
 }
 
-async function hashLocalPassword(password: string, email: string): Promise<string> {
-  const material = `gaptrack.local.v1:${normalizeEmail(email)}:${password}`;
-  try {
-    if (typeof window !== "undefined" && window.crypto?.subtle) {
-      const buffer = new TextEncoder().encode(material);
-      const digest = await window.crypto.subtle.digest("SHA-256", buffer);
-      return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("");
-    }
-  } catch {}
-  try {
-    return btoa(unescape(encodeURIComponent(material)));
-  } catch {
-    return material;
-  }
+async function hashLocalPassword(_password: string, _email: string): Promise<string> {
+  throw new Error("Legacy local password authentication is disabled. Use Supabase Auth only.");
 }
 
 // ==================
@@ -3970,6 +4089,12 @@ function CreateAuditWizard({
                             onChange={async (e)=>{
                               const f = e.target.files?.[0];
                               if(!f) return;
+                              const fileError = validateTemplateImportFile(f, lang);
+                              if (fileError) {
+                                toast.error(fileError);
+                                (e.target as any).value = "";
+                                return;
+                              }
                               try{
                                 setBusy(true);
                                 const tpl = await onImportTemplate(frameworkId, f);
@@ -8519,6 +8644,9 @@ function EvidenceDrawer({ open, onClose, control, auditSessionId, evidenceMap, p
     let item: EvidenceItem;
 
     try {
+      const fileError = validateEvidenceFile(file);
+      if (fileError) throw new Error(fileError);
+
       const sha256 = await sha256File(file);
       item = await uploadEvidenceFileToBackend({
         file,
@@ -8666,7 +8794,7 @@ function EvidenceDrawer({ open, onClose, control, auditSessionId, evidenceMap, p
           </div>
 
           <div className="flex gap-2 items-center">
-            <input ref={fileInputRef} type="file" onChange={(e)=>{ const f=e.target.files?.[0]; if(f) addFile(f); e.currentTarget.value=''; }} className="hidden"/>
+            <input ref={fileInputRef} type="file" accept={EVIDENCE_ACCEPT_ATTRIBUTE} onChange={(e)=>{ const f=e.target.files?.[0]; if(f) addFile(f); e.currentTarget.value=''; }} className="hidden"/>
             <Button variant="outline" disabled={!canAddEvidence} onClick={()=>fileInputRef.current?.click()}><Paperclip className="h-4 w-4 mr-1"/>{t.addFile}</Button>
           </div>
           <div className="space-y-1">
@@ -9362,7 +9490,7 @@ function GapTrackApp({
   );
 
   const [users, setUsers] = useState<AppUser[]>(() => loadUsers());
-  const [activeUserId, setActiveUserId] = useState<string>(() => loadActiveUserId() || "");
+  const [activeUserId, setActiveUserId] = useState<string>("");
   const [usersDialogOpen, setUsersDialogOpen] = useState(false);
   const activeUser = React.useMemo(
     () => users.find((u) => u.id === activeUserId && u.active !== false) || null,
@@ -9496,7 +9624,7 @@ function GapTrackApp({
           ...existing,
           name: profile.name?.trim() || existing.name || email,
           organization: profile.organization?.trim() || existing.organization,
-          role: normalizeUserRole(profile.role || existing.role),
+          role: profile.role ? normalizeUserRole(profile.role) : (isServiceOwnerEmail(email) ? "admin" : "viewer"),
           subscriptionPlan,
           createdByUserId: profile.createdByUserId || existing.createdByUserId,
           createdByEmail: profile.createdByEmail ? normalizeEmail(profile.createdByEmail) : existing.createdByEmail,
@@ -9510,7 +9638,7 @@ function GapTrackApp({
           id: uuid(),
           name: profile.name?.trim() || email,
           email,
-          role: normalizeUserRole(profile.role || (prev.length === 0 ? "admin" : "viewer")),
+          role: profile.role ? normalizeUserRole(profile.role) : (isServiceOwnerEmail(email) ? "admin" : "viewer"),
           subscriptionPlan,
           organization: profile.organization?.trim() || undefined,
           createdByUserId: profile.createdByUserId || undefined,
@@ -9541,10 +9669,11 @@ function GapTrackApp({
         email: user.email,
         name: typeof meta.name === "string" ? meta.name : undefined,
         organization: typeof meta.organization === "string" ? meta.organization : undefined,
-        role: meta.role === "admin" || meta.role === "auditor" || meta.role === "contributor" || meta.role === "viewer" ? meta.role : undefined,
-        subscriptionPlan: normalizeSubscriptionPlan(meta.subscriptionPlan),
-        createdByUserId: typeof meta.createdByUserId === "string" ? meta.createdByUserId : undefined,
-        createdByEmail: typeof meta.createdByEmail === "string" ? meta.createdByEmail : undefined,
+        // Never trust client-editable Auth metadata for role, plan, or ownership.
+        role: undefined,
+        subscriptionPlan: "free" as SubscriptionPlan,
+        createdByUserId: undefined,
+        createdByEmail: undefined,
       };
 
       const serverProfile = await fetchGapTrackProfileOnServer(user.id, fallbackProfile);
@@ -9577,50 +9706,14 @@ function GapTrackApp({
     };
   }, [syncSupabaseAuthenticatedUser]);
 
-  const createAdminUser = React.useCallback(async (payload: NewUserPayload) => {
-    const email = normalizeEmail(payload.email);
-    const user: AppUser = {
-      id: uuid(),
-      name: payload.name.trim() || email,
-      email,
-      role: "admin",
-      organization: payload.organization?.trim() || undefined,
-      subscriptionPlan: "free",
-      createdAt: new Date().toISOString(),
-      lastLoginAt: new Date().toISOString(),
-      active: true,
-      passwordHash: await hashLocalPassword(payload.password, email),
-    };
-    const next = [user];
-    saveUsers(next);
-    setUsers(next);
-    saveActiveUserId(user.id);
-    setActiveUserId(user.id);
-    setLocalActorFromUser(user);
-    toast.success(lang === "fr" ? "Compte administrateur créé." : "Administrator account created.");
+  const createAdminUser = React.useCallback(async (_payload: NewUserPayload) => {
+    toast.error(lang === "fr" ? "La création locale est désactivée : utilisez Supabase Auth." : "Local account creation is disabled: use Supabase Auth.");
   }, [lang]);
 
-  const loginUser = React.useCallback(async (userId: string, password: string) => {
-    const user = users.find((u) => u.id === userId && u.active !== false);
-    if (!user) {
-      toast.error(lang === "fr" ? "Utilisateur introuvable ou inactif." : "User not found or inactive.");
-      return false;
-    }
-    const expected = user.passwordHash || "";
-    const actual = await hashLocalPassword(password, user.email);
-    if (expected && expected !== actual) {
-      toast.error(lang === "fr" ? "Mot de passe incorrect." : "Invalid password.");
-      return false;
-    }
-    const next = users.map((u) => u.id === user.id ? { ...u, lastLoginAt: new Date().toISOString() } : u);
-    saveUsers(next);
-    setUsers(next);
-    saveActiveUserId(user.id);
-    setActiveUserId(user.id);
-    setLocalActorFromUser({ ...user, lastLoginAt: new Date().toISOString() });
-    toast.success(lang === "fr" ? `Bienvenue ${user.name}` : `Welcome ${user.name}`);
-    return true;
-  }, [users, lang]);
+  const loginUser = React.useCallback(async (_userId: string, _password: string) => {
+    toast.error(lang === "fr" ? "La connexion locale est désactivée : utilisez Supabase Auth." : "Local login is disabled: use Supabase Auth.");
+    return false;
+  }, [lang]);
 
   const logoutUser = React.useCallback(() => {
     void supabase.auth.signOut();
@@ -9647,8 +9740,9 @@ function GapTrackApp({
       toast.error(lang === "fr" ? "Ce compte propriétaire est protégé." : "This service-owner account is protected.");
       return false;
     }
-    if (payload.password.length < 8) {
-      toast.error(lang === "fr" ? "Mot de passe : 8 caractères minimum." : "Password: at least 8 characters.");
+    const passwordError = validatePasswordStrength(payload.password, { email, name: payload.name, organization: payload.organization }, lang);
+    if (passwordError) {
+      toast.error(passwordError);
       return false;
     }
 
@@ -9667,10 +9761,11 @@ function GapTrackApp({
           data: {
             name: payload.name.trim(),
             organization,
-            role: normalizeUserRole(payload.role),
-            subscriptionPlan,
-            createdByUserId,
-            createdByEmail,
+            // These are only hints for server-side onboarding. RLS/RPC must decide the actual role and plan.
+            requestedRole: normalizeUserRole(payload.role),
+            requestedSubscriptionPlan: subscriptionPlan,
+            invitedByUserId: createdByUserId,
+            invitedByEmail: createdByEmail,
           },
           emailRedirectTo: window.location.origin,
         },
@@ -9734,7 +9829,6 @@ function GapTrackApp({
       createdByEmail,
       createdAt: new Date().toISOString(),
       active: true,
-      passwordHash: await hashLocalPassword(payload.password, email),
     };
     const next = [user, ...users];
     saveUsers(next);
@@ -9933,13 +10027,9 @@ function GapTrackApp({
     });
   }, [activeUser, activeUserId, canManageSubscriptionsFlag, canManageUsersFlag, lang]);
 
-  const resetUserPassword = React.useCallback(async (userId: string, password: string) => {
+  const resetUserPassword = React.useCallback(async (userId: string, _password: string) => {
     if (!canManageUsersFlag) {
       toast.error(lang === "fr" ? "Action réservée aux administrateurs." : "Administrators only.");
-      return;
-    }
-    if (password.length < 8) {
-      toast.error(lang === "fr" ? "Mot de passe : 8 caractères minimum." : "Password: at least 8 characters.");
       return;
     }
     const target = users.find((u) => u.id === userId);
@@ -9952,11 +10042,17 @@ function GapTrackApp({
       toast.error(lang === "fr" ? "Ce compte propriétaire est protégé." : "This service-owner account is protected.");
       return;
     }
-    const passwordHash = await hashLocalPassword(password, target.email);
-    const next = users.map((u) => u.id === userId ? { ...u, passwordHash } : u);
-    saveUsers(next);
-    setUsers(next);
-    toast.success(lang === "fr" ? "Mot de passe réinitialisé." : "Password reset.");
+
+    const { error } = await supabase.auth.resetPasswordForEmail(target.email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+
+    if (error) {
+      toast.error(authErrorMessage(error));
+      return;
+    }
+
+    toast.success(lang === "fr" ? "E-mail de réinitialisation envoyé." : "Password reset email sent.");
   }, [activeUser, canManageSubscriptionsFlag, canManageUsersFlag, lang, users]);
 
   useEffect(() => {

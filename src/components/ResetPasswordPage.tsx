@@ -6,6 +6,20 @@ import { supabase } from "../lib/supabase";
 import { authErrorMessage } from "../lib/authErrorMessages";
 import "./LoginAccessPage.css";
 
+const SECURITY_MIN_PASSWORD_LENGTH = 12;
+const SECURITY_MAX_PASSWORD_LENGTH = 128;
+
+function validatePasswordStrength(password: string): string | null {
+  const value = String(password || "");
+
+  if (value.length < SECURITY_MIN_PASSWORD_LENGTH) return `Mot de passe : ${SECURITY_MIN_PASSWORD_LENGTH} caractères minimum.`;
+  if (value.length > SECURITY_MAX_PASSWORD_LENGTH) return `Mot de passe : ${SECURITY_MAX_PASSWORD_LENGTH} caractères maximum.`;
+  if (!/[a-z]/.test(value) || !/[A-Z]/.test(value) || !/[0-9]/.test(value) || !/[^A-Za-z0-9]/.test(value)) {
+    return "Le mot de passe doit contenir minuscule, majuscule, chiffre et caractère spécial.";
+  }
+  return null;
+}
+
 export function ResetPasswordPage() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -17,8 +31,9 @@ export function ResetPasswordPage() {
     event.preventDefault();
     if (busy) return;
 
-    if (password.length < 8) {
-      toast.error("Mot de passe : 8 caractères minimum.");
+    const passwordError = validatePasswordStrength(password);
+    if (passwordError) {
+      toast.error(passwordError);
       return;
     }
 
@@ -71,6 +86,9 @@ export function ResetPasswordPage() {
                 type={showPassword ? "text" : "password"}
                 placeholder="••••••••••••••••"
                 autoComplete="new-password"
+                minLength={SECURITY_MIN_PASSWORD_LENGTH}
+                maxLength={SECURITY_MAX_PASSWORD_LENGTH}
+                required
               />
               <span className="gt-control-right">
                 <button
@@ -94,6 +112,9 @@ export function ResetPasswordPage() {
                 type={showConfirmPassword ? "text" : "password"}
                 placeholder="••••••••••••••••"
                 autoComplete="new-password"
+                minLength={SECURITY_MIN_PASSWORD_LENGTH}
+                maxLength={SECURITY_MAX_PASSWORD_LENGTH}
+                required
               />
               <span className="gt-control-right">
                 <button
