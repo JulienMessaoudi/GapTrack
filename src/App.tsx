@@ -10025,7 +10025,7 @@ function GapTrackApp({
   }, [activeUser, lang]);
 
   const requestOwnPasswordReset = React.useCallback(async () => {
-    const targetEmail = normalizeEmail(activeUser?.email);
+    const targetEmail = normalizeEmail(activeUser?.email || "");
 
     if (!targetEmail) {
       toast.error(lang === "fr" ? "Aucun e-mail de compte disponible." : "No account email is available.");
