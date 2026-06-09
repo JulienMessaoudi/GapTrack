@@ -4898,14 +4898,19 @@ function SettingsProfileView({
   activeUser,
   lang,
   onSaveProfile,
+  onRequestPasswordReset,
+  onLogout,
 }: {
   activeUser: AppUser | null;
   lang: LangKey;
   onSaveProfile: (patch: { name: string; organization?: string }) => Promise<boolean>;
+  onRequestPasswordReset: () => Promise<void>;
+  onLogout: () => void;
 }) {
   const [name, setName] = useState(activeUser?.name || "");
   const [organization, setOrganization] = useState(activeUser?.organization || "");
   const [saving, setSaving] = useState(false);
+  const [securityAction, setSecurityAction] = useState<"password" | "logout" | null>(null);
 
   useEffect(() => {
     setName(activeUser?.name || "");
@@ -4964,6 +4969,28 @@ function SettingsProfileView({
     } finally {
       setSaving(false);
     }
+  }
+
+  async function requestPasswordReset() {
+    if (securityAction) return;
+    setSecurityAction("password");
+    try {
+      await onRequestPasswordReset();
+    } finally {
+      setSecurityAction(null);
+    }
+  }
+
+  function confirmLogout() {
+    const confirmed = window.confirm(
+      lang === "fr"
+        ? "Voulez-vous vraiment vous déconnecter de cette session ?"
+        : "Do you really want to sign out of this session?"
+    );
+
+    if (!confirmed) return;
+    setSecurityAction("logout");
+    onLogout();
   }
 
   return (
@@ -5086,6 +5113,146 @@ function SettingsProfileView({
               {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Pencil className="mr-2 h-4 w-4" />}
               {saving ? (lang === "fr" ? "Enregistrement…" : "Saving…") : (lang === "fr" ? "Enregistrer le profil" : "Save profile")}
             </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="glass-card overflow-hidden">
+        <CardHeader className="border-b bg-muted/20">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="min-w-0">
+              <CardTitle className="flex flex-wrap items-center gap-2">
+                <ShieldCheck className="h-5 w-5" />
+                {lang === "fr" ? "Sécurité du compte" : "Account security"}
+              </CardTitle>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {lang === "fr"
+                  ? "Contrôlez les accès à votre compte et appliquez les bonnes pratiques de sécurité."
+                  : "Control account access and apply security best practices."}
+              </p>
+            </div>
+            <Badge variant="outline" className="border-emerald-500/50 text-emerald-700 dark:text-emerald-300 bg-emerald-500/10">
+              <ShieldCheck className="mr-1 h-3.5 w-3.5" />
+              {lang === "fr" ? "Protégé par Supabase Auth" : "Protected by Supabase Auth"}
+            </Badge>
+          </div>
+        </CardHeader>
+
+        <CardContent className="p-5 space-y-5">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-2xl border p-4">
+              <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                <Shield className="h-4 w-4" />
+                {lang === "fr" ? "Mot de passe" : "Password"}
+              </div>
+              <div className="text-sm font-semibold">
+                {lang === "fr" ? "Géré par Supabase Auth" : "Managed by Supabase Auth"}
+              </div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                {lang === "fr" ? "La modification passe par un e-mail sécurisé." : "Changes go through a secure email."}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border p-4">
+              <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                <CheckCircle2 className="h-4 w-4" />
+                {lang === "fr" ? "Session" : "Session"}
+              </div>
+              <div className="text-sm font-semibold">
+                {lang === "fr" ? "Session active" : "Active session"}
+              </div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                {lang === "fr" ? "Déconnectez-vous si l’appareil est partagé." : "Sign out if this device is shared."}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border p-4">
+              <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                <Clock3 className="h-4 w-4" />
+                {lang === "fr" ? "Dernière connexion" : "Last sign-in"}
+              </div>
+              <div className="text-sm font-semibold">{formatAccountDate(activeUser.lastLoginAt)}</div>
+            </div>
+
+            <div className="rounded-2xl border p-4">
+              <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                <Mail className="h-4 w-4" />
+                {lang === "fr" ? "E-mail de sécurité" : "Security email"}
+              </div>
+              <div className="truncate text-sm font-semibold">{activeUser.email}</div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                {lang === "fr" ? "Utilisé pour la réinitialisation." : "Used for password recovery."}
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className="rounded-2xl border bg-muted/10 p-4">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h3 className="text-sm font-semibold">
+                    {lang === "fr" ? "Modifier mon mot de passe" : "Change my password"}
+                  </h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {lang === "fr"
+                      ? "Recevez un lien de réinitialisation sur l’adresse e-mail de votre compte."
+                      : "Receive a reset link at your account email address."}
+                  </p>
+                </div>
+              </div>
+              <Button
+                type="button"
+                className="mt-4"
+                onClick={requestPasswordReset}
+                disabled={securityAction !== null}
+              >
+                {securityAction === "password" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Mail className="mr-2 h-4 w-4" />}
+                {securityAction === "password"
+                  ? (lang === "fr" ? "Envoi en cours…" : "Sending…")
+                  : (lang === "fr" ? "Envoyer le lien sécurisé" : "Send secure link")}
+              </Button>
+            </div>
+
+            <div className="rounded-2xl border bg-muted/10 p-4">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h3 className="text-sm font-semibold">
+                    {lang === "fr" ? "Déconnexion de cette session" : "Sign out of this session"}
+                  </h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {lang === "fr"
+                      ? "Ferme l’accès GapTrack sur cet appareil. Recommandé sur un ordinateur partagé."
+                      : "Closes GapTrack access on this device. Recommended on shared computers."}
+                  </p>
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                className="mt-4"
+                onClick={confirmLogout}
+                disabled={securityAction !== null}
+              >
+                {securityAction === "logout" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <LogOut className="mr-2 h-4 w-4" />}
+                {lang === "fr" ? "Me déconnecter" : "Sign out"}
+              </Button>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4">
+            <div className="flex gap-3">
+              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-700 dark:text-amber-300" />
+              <div className="space-y-2">
+                <h3 className="text-sm font-semibold text-amber-900 dark:text-amber-100">
+                  {lang === "fr" ? "Conseils de sécurité" : "Security tips"}
+                </h3>
+                <ul className="list-disc space-y-1 pl-4 text-sm text-amber-900/80 dark:text-amber-100/80">
+                  <li>{lang === "fr" ? "Utilisez un mot de passe unique, long et difficile à deviner." : "Use a unique, long password that is hard to guess."}</li>
+                  <li>{lang === "fr" ? "Ne partagez jamais votre compte : créez un utilisateur dédié pour chaque personne." : "Never share your account: create a dedicated user for each person."}</li>
+                  <li>{lang === "fr" ? "Déconnectez-vous après usage sur un poste non personnel." : "Sign out after use on a device you do not own."}</li>
+                </ul>
+              </div>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -9857,6 +10024,31 @@ function GapTrackApp({
     }
   }, [activeUser, lang]);
 
+  const requestOwnPasswordReset = React.useCallback(async () => {
+    const targetEmail = normalizeEmail(activeUser?.email);
+
+    if (!targetEmail) {
+      toast.error(lang === "fr" ? "Aucun e-mail de compte disponible." : "No account email is available.");
+      return;
+    }
+
+    const { error } = await supabase.auth.resetPasswordForEmail(targetEmail, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+
+    if (error) {
+      console.error("Unable to send own password reset email", error);
+      toast.error(authErrorMessage(error));
+      return;
+    }
+
+    toast.success(
+      lang === "fr"
+        ? "E-mail de réinitialisation envoyé. Consultez votre boîte mail."
+        : "Password reset email sent. Check your inbox."
+    );
+  }, [activeUser?.email, lang]);
+
   const syncSupabaseAuthenticatedUser = React.useCallback((profile: { email: string; name?: string; organization?: string; role?: UserRole; subscriptionPlan?: SubscriptionPlan; createdByUserId?: string; createdByEmail?: string }) => {
     const email = normalizeEmail(profile.email);
 
@@ -11370,6 +11562,11 @@ function GapTrackApp({
                     activeUser={activeUser}
                     lang={lang}
                     onSaveProfile={updateOwnProfile}
+                    onRequestPasswordReset={requestOwnPasswordReset}
+                    onLogout={() => {
+                      logoutUser();
+                      navigate("home", true);
+                    }}
                   />
                 </motion.div>
               )}
