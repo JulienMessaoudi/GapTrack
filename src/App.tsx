@@ -4900,12 +4900,14 @@ function SettingsProfileView({
   onSaveProfile,
   onRequestPasswordReset,
   onLogout,
+  onRequestPremium,
 }: {
   activeUser: AppUser | null;
   lang: LangKey;
   onSaveProfile: (patch: { name: string; organization?: string }) => Promise<boolean>;
   onRequestPasswordReset: () => Promise<void>;
   onLogout: () => void;
+  onRequestPremium?: () => void;
 }) {
   const [name, setName] = useState(activeUser?.name || "");
   const [organization, setOrganization] = useState(activeUser?.organization || "");
@@ -4991,6 +4993,43 @@ function SettingsProfileView({
     if (!confirmed) return;
     setSecurityAction("logout");
     onLogout();
+  }
+
+  const currentSubscriptionPlan = normalizeSubscriptionPlan(activeUser.subscriptionPlan);
+  const hasPremiumSubscription = currentSubscriptionPlan === "premium";
+  const subscriptionIncludedFeatures = hasPremiumSubscription
+    ? [
+        lang === "fr" ? "Audits illimités" : "Unlimited audits",
+        lang === "fr" ? "Exports PDF et CSV activés" : "PDF and CSV exports enabled",
+        lang === "fr" ? "Gestion avancée des utilisateurs" : "Advanced user management",
+        lang === "fr" ? "Preuves et rapports utilisables sans restriction d’offre" : "Evidence and reports available without plan restrictions",
+      ]
+    : [
+        lang === "fr" ? "1 audit actif pour démarrer" : "1 active audit to get started",
+        lang === "fr" ? "Saisie des contrôles et suivi des écarts" : "Control assessment and gap tracking",
+        lang === "fr" ? "Ajout de preuves et notes selon les droits du compte" : "Evidence and notes according to account permissions",
+        lang === "fr" ? "Demande Premium par e-mail avec activation manuelle" : "Premium request by email with manual activation",
+      ];
+  const subscriptionLockedFeatures = hasPremiumSubscription
+    ? []
+    : [
+        lang === "fr" ? "Exports PDF / CSV" : "PDF / CSV exports",
+        lang === "fr" ? "Audits illimités" : "Unlimited audits",
+        lang === "fr" ? "Création et gestion avancée des utilisateurs" : "Advanced user creation and management",
+      ];
+
+  function requestPremiumFromSettings() {
+    if (onRequestPremium) {
+      onRequestPremium();
+      return;
+    }
+
+    window.location.href = buildPremiumRequestMailto({
+      email: activeUser.email,
+      name: activeUser.name,
+      organization: activeUser.organization,
+      source: lang === "fr" ? "Paramètres - Gestion de l’abonnement" : "Settings - Subscription management",
+    });
   }
 
   return (
@@ -5251,6 +5290,146 @@ function SettingsProfileView({
                   <li>{lang === "fr" ? "Ne partagez jamais votre compte : créez un utilisateur dédié pour chaque personne." : "Never share your account: create a dedicated user for each person."}</li>
                   <li>{lang === "fr" ? "Déconnectez-vous après usage sur un poste non personnel." : "Sign out after use on a device you do not own."}</li>
                 </ul>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="glass-card overflow-hidden">
+        <CardHeader className="border-b bg-muted/20">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="min-w-0">
+              <CardTitle className="flex flex-wrap items-center gap-2">
+                <Badge variant="outline" className={subscriptionPlanBadgeClass(currentSubscriptionPlan)}>
+                  {subscriptionPlanLabel(currentSubscriptionPlan)}
+                </Badge>
+                {lang === "fr" ? "Gestion de l’abonnement" : "Subscription management"}
+              </CardTitle>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {lang === "fr"
+                  ? "Consultez votre offre, vos limites et demandez l’activation Premium si nécessaire."
+                  : "Review your plan, limits, and request Premium activation when needed."}
+              </p>
+            </div>
+            <Badge variant="outline" className={hasPremiumSubscription ? "border-cyan-500/50 text-cyan-700 dark:text-cyan-300 bg-cyan-500/10" : "border-sky-500/40 text-sky-700 dark:text-sky-300 bg-sky-500/10"}>
+              {hasPremiumSubscription
+                ? (lang === "fr" ? "Premium actif" : "Premium active")
+                : (lang === "fr" ? "Offre Free" : "Free plan")}
+            </Badge>
+          </div>
+        </CardHeader>
+
+        <CardContent className="p-5 space-y-5">
+          <div className="grid gap-4 lg:grid-cols-3">
+            <div className="rounded-2xl border bg-muted/10 p-4 lg:col-span-1">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    {lang === "fr" ? "Offre actuelle" : "Current plan"}
+                  </div>
+                  <div className="mt-1 text-2xl font-semibold">{subscriptionPlanLabel(currentSubscriptionPlan)}</div>
+                </div>
+                <div className={hasPremiumSubscription ? "flex h-12 w-12 items-center justify-center rounded-2xl border border-cyan-500/30 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300" : "flex h-12 w-12 items-center justify-center rounded-2xl border border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300"}>
+                  {hasPremiumSubscription ? <ShieldCheck className="h-6 w-6" /> : <Info className="h-6 w-6" />}
+                </div>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                {hasPremiumSubscription
+                  ? (lang === "fr"
+                    ? "Votre compte dispose des fonctionnalités avancées de GapTrack."
+                    : "Your account has access to GapTrack advanced features.")
+                  : (lang === "fr"
+                    ? "Votre compte est en Free. Le Premium s’active manuellement après demande."
+                    : "Your account is on Free. Premium is manually activated after request.")}
+              </p>
+              <div className="mt-4 rounded-xl border bg-background/60 p-3 text-xs text-muted-foreground">
+                {lang === "fr" ? "Adresse associée" : "Linked address"}
+                <div className="mt-1 truncate text-sm font-semibold text-foreground">{activeUser.email}</div>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border p-4 lg:col-span-2">
+              <h3 className="text-sm font-semibold">
+                {hasPremiumSubscription
+                  ? (lang === "fr" ? "Fonctionnalités incluses" : "Included features")
+                  : (lang === "fr" ? "Fonctionnalités disponibles avec votre offre" : "Features available with your plan")}
+              </h3>
+              <div className="mt-3 grid gap-2 md:grid-cols-2">
+                {subscriptionIncludedFeatures.map((feature) => (
+                  <div key={feature} className="flex items-start gap-2 rounded-xl border bg-background/60 p-3 text-sm">
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-300" />
+                    <span>{feature}</span>
+                  </div>
+                ))}
+              </div>
+
+              {!hasPremiumSubscription ? (
+                <div className="mt-4 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4">
+                  <div className="flex gap-3">
+                    <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-700 dark:text-amber-300" />
+                    <div>
+                      <h4 className="text-sm font-semibold text-amber-900 dark:text-amber-100">
+                        {lang === "fr" ? "Fonctionnalités Premium verrouillées" : "Locked Premium features"}
+                      </h4>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {subscriptionLockedFeatures.map((feature) => (
+                          <Badge key={feature} variant="outline" className="border-amber-500/40 text-amber-800 dark:text-amber-100 bg-amber-500/10">
+                            {feature}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className="rounded-2xl border bg-muted/10 p-4">
+              <h3 className="text-sm font-semibold">
+                {lang === "fr" ? "Demander une évolution d’offre" : "Request a plan change"}
+              </h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {hasPremiumSubscription
+                  ? (lang === "fr"
+                    ? "Vous pouvez contacter le support pour toute question liée à votre offre Premium."
+                    : "You can contact support for any question about your Premium plan.")
+                  : (lang === "fr"
+                    ? "Un e-mail prérempli sera préparé avec votre adresse, nom et organisation. L’activation reste contrôlée côté serveur."
+                    : "A prefilled email will be prepared with your address, name, and organization. Activation remains server-side controlled.")}
+              </p>
+              <Button type="button" className="mt-4" onClick={requestPremiumFromSettings}>
+                <Mail className="mr-2 h-4 w-4" />
+                {hasPremiumSubscription
+                  ? (lang === "fr" ? "Contacter le support Premium" : "Contact Premium support")
+                  : (lang === "fr" ? "Demander l’activation Premium" : "Request Premium activation")}
+              </Button>
+            </div>
+
+            <div className="rounded-2xl border bg-muted/10 p-4">
+              <h3 className="text-sm font-semibold">
+                {lang === "fr" ? "Sécurité de l’abonnement" : "Subscription security"}
+              </h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {lang === "fr"
+                  ? "Le changement d’offre ne doit jamais être décidé par le navigateur : GapTrack lit l’état réel depuis Supabase."
+                  : "Plan changes must never be decided by the browser: GapTrack reads the real state from Supabase."}
+              </p>
+              <div className="mt-4 space-y-2 text-sm">
+                <div className="flex items-start gap-2">
+                  <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-300" />
+                  <span>{lang === "fr" ? "Offre lue depuis le profil serveur." : "Plan read from the server profile."}</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-300" />
+                  <span>{lang === "fr" ? "Activation Premium réservée à la fonction Supabase sécurisée." : "Premium activation reserved to the secured Supabase function."}</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-300" />
+                  <span>{lang === "fr" ? "Les exports restent bloqués côté interface tant que l’offre n’est pas Premium." : "Exports stay blocked in the UI until the plan is Premium."}</span>
+                </div>
               </div>
             </div>
           </div>
@@ -11567,6 +11746,7 @@ function GapTrackApp({
                       logoutUser();
                       navigate("home", true);
                     }}
+                    onRequestPremium={() => requestPremiumByEmail(lang === "fr" ? "Paramètres - Gestion de l’abonnement" : "Settings - Subscription management")}
                   />
                 </motion.div>
               )}
