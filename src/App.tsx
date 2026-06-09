@@ -10309,6 +10309,9 @@ function GapTrackApp({
     if (accountDeletionConfirmationHandledRef.current) return;
     if (!activeUser) return;
 
+    const deletionUser = activeUser;
+    const deletionUserEmail = normalizeEmail(deletionUser.email);
+
     accountDeletionConfirmationHandledRef.current = true;
 
     const cleanDeletionQuery = () => {
@@ -10321,8 +10324,8 @@ function GapTrackApp({
       try {
         const firstConfirmation = window.confirm(
           lang === "fr"
-            ? `Le lien e-mail a été validé. Voulez-vous supprimer définitivement le compte ${activeUser.email} et ses données serveur ?`
-            : `The email link was validated. Do you want to permanently delete the account ${activeUser.email} and its server data?`
+            ? `Le lien e-mail a été validé. Voulez-vous supprimer définitivement le compte ${deletionUserEmail} et ses données serveur ?`
+            : `The email link was validated. Do you want to permanently delete the account ${deletionUserEmail} and its server data?`
         );
 
         if (!firstConfirmation) {
@@ -10333,18 +10336,18 @@ function GapTrackApp({
         const typedEmail = normalizeEmail(
           window.prompt(
             lang === "fr"
-              ? `Dernière confirmation : retapez votre e-mail (${activeUser.email}) pour supprimer le compte.`
-              : `Final confirmation: retype your email (${activeUser.email}) to delete the account.`
+              ? `Dernière confirmation : retapez votre e-mail (${deletionUserEmail}) pour supprimer le compte.`
+              : `Final confirmation: retype your email (${deletionUserEmail}) to delete the account.`
           ) || ""
         );
 
-        if (typedEmail !== normalizeEmail(activeUser.email)) {
+        if (typedEmail !== deletionUserEmail) {
           toast.error(lang === "fr" ? "E-mail incorrect. Suppression annulée." : "Incorrect email. Deletion cancelled.");
           return;
         }
 
         const { error } = await supabase.functions.invoke("gaptrack-delete-own-account", {
-          body: { confirmEmail: activeUser.email },
+          body: { confirmEmail: deletionUserEmail },
         });
 
         if (error) throw error;
@@ -10354,7 +10357,7 @@ function GapTrackApp({
         clearActiveUserId();
         setActiveUserId("");
         setUsers((prev) => {
-          const next = prev.filter((user) => user.id !== activeUser.id && normalizeEmail(user.email) !== normalizeEmail(activeUser.email));
+          const next = prev.filter((user) => user.id !== deletionUser.id && normalizeEmail(user.email) !== deletionUserEmail);
           saveUsers(next);
           return next;
         });
@@ -10713,7 +10716,7 @@ function GapTrackApp({
     const requestedSubscriptionPlan = canManageSubscriptionsFlag ? normalizeSubscriptionPlan(payload.subscriptionPlan) : "free";
     let subscriptionPlan = requestedSubscriptionPlan;
     const createdByUserId = activeUser?.id;
-    const createdByEmail = activeUser?.email ? normalizeEmail(activeUser.email) : undefined;
+    const createdByEmail = activeUser?.email ? deletionUserEmail : undefined;
 
     try {
       const previousSession = await supabase.auth.getSession().then(({ data }) => data.session).catch(() => null);
