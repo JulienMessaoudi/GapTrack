@@ -4913,7 +4913,7 @@ function SettingsProfileView({
   const [organization, setOrganization] = useState(activeUser?.organization || "");
   const [saving, setSaving] = useState(false);
   const [securityAction, setSecurityAction] = useState<"password" | "logout" | null>(null);
-  const [privacyAction, setPrivacyAction] = useState<"export" | "localData" | "localEvidence" | "deletion" | null>(null);
+  const [privacyAction, setPrivacyAction] = useState<"export" | "deletion" | null>(null);
 
   useEffect(() => {
     setName(activeUser?.name || "");
@@ -5082,81 +5082,6 @@ function SettingsProfileView({
       );
 
       toast.success(lang === "fr" ? "Export des données du compte généré." : "Account data export generated.");
-    } finally {
-      setPrivacyAction(null);
-    }
-  }
-
-  async function clearLocalEvidenceData() {
-    if (privacyAction) return;
-
-    const confirmed = window.confirm(
-      lang === "fr"
-        ? "Supprimer les preuves stockées localement dans ce navigateur ? Les preuves déjà envoyées dans Supabase ne seront pas supprimées."
-        : "Delete evidence stored locally in this browser? Evidence already uploaded to Supabase will not be deleted."
-    );
-    if (!confirmed) return;
-
-    setPrivacyAction("localEvidence");
-    try {
-      if (typeof window === "undefined" || !window.indexedDB) {
-        toast.info(lang === "fr" ? "IndexedDB n’est pas disponible dans ce navigateur." : "IndexedDB is not available in this browser.");
-        return;
-      }
-
-      await new Promise<void>((resolve, reject) => {
-        const request = window.indexedDB.deleteDatabase(EVIDENCE_FILES_DB_NAME);
-        request.onsuccess = () => resolve();
-        request.onerror = () => reject(request.error || new Error("Unable to delete local evidence database."));
-        request.onblocked = () => resolve();
-      });
-
-      toast.success(lang === "fr" ? "Stockage local des preuves nettoyé." : "Local evidence storage cleared.");
-    } catch (error) {
-      console.error("Unable to clear local evidence data.", error);
-      toast.error(lang === "fr" ? "Impossible de nettoyer les preuves locales." : "Unable to clear local evidence.");
-    } finally {
-      setPrivacyAction(null);
-    }
-  }
-
-  function clearLegacyBrowserData() {
-    if (privacyAction) return;
-
-    const confirmed = window.confirm(
-      lang === "fr"
-        ? "Nettoyer les anciennes données locales de GapTrack sur ce navigateur ? Votre session Supabase restera gérée par Supabase Auth."
-        : "Clear old local GapTrack data in this browser? Your Supabase session remains managed by Supabase Auth."
-    );
-    if (!confirmed) return;
-
-    setPrivacyAction("localData");
-    try {
-      const localStorageKeys = [
-        STORAGE_KEY,
-        STORAGE_SETTINGS,
-        USERS_KEY,
-        ACTIVE_USER_KEY,
-        TEMPLATES_KEY,
-        LAST_TEMPLATE_BY_FRAMEWORK_KEY,
-        "grc_current_user",
-        "grc_user_email",
-        "user_email",
-        "email",
-      ];
-      const sessionStorageKeys = [
-        "gaptrack_selected_plan",
-        "gaptrack_public_screen",
-      ];
-
-      for (const key of localStorageKeys) {
-        try { localStorage.removeItem(key); } catch {}
-      }
-      for (const key of sessionStorageKeys) {
-        try { sessionStorage.removeItem(key); } catch {}
-      }
-
-      toast.success(lang === "fr" ? "Données locales héritées nettoyées." : "Legacy local data cleared.");
     } finally {
       setPrivacyAction(null);
     }
@@ -5693,38 +5618,6 @@ function SettingsProfileView({
             </div>
           </div>
 
-          <div className="grid gap-4 lg:grid-cols-2">
-            <div className="rounded-2xl border bg-muted/10 p-4">
-              <h3 className="text-sm font-semibold">
-                {lang === "fr" ? "Nettoyer les anciennes données locales" : "Clear legacy local data"}
-              </h3>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {lang === "fr"
-                  ? "Supprime les anciennes clés locales GapTrack/GRC utilisées par les versions précédentes. La session Supabase n’est pas supprimée."
-                  : "Deletes old local GapTrack/GRC keys used by previous versions. The Supabase session is not deleted."}
-              </p>
-              <Button type="button" variant="outline" className="mt-4" onClick={clearLegacyBrowserData} disabled={privacyAction !== null}>
-                {privacyAction === "localData" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
-                {lang === "fr" ? "Nettoyer le cache local" : "Clear local cache"}
-              </Button>
-            </div>
-
-            <div className="rounded-2xl border bg-muted/10 p-4">
-              <h3 className="text-sm font-semibold">
-                {lang === "fr" ? "Supprimer les preuves locales" : "Delete local evidence"}
-              </h3>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {lang === "fr"
-                  ? "Efface les fichiers de preuves conservés dans IndexedDB sur cet appareil. Les preuves envoyées dans Supabase ne sont pas supprimées."
-                  : "Clears evidence files kept in IndexedDB on this device. Evidence uploaded to Supabase is not deleted."}
-              </p>
-              <Button type="button" variant="outline" className="mt-4" onClick={clearLocalEvidenceData} disabled={privacyAction !== null}>
-                {privacyAction === "localEvidence" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
-                {lang === "fr" ? "Supprimer le stockage local" : "Delete local storage"}
-              </Button>
-            </div>
-          </div>
-
           <div className="rounded-2xl border border-sky-500/30 bg-sky-500/10 p-4">
             <div className="flex gap-3">
               <Info className="mt-0.5 h-5 w-5 shrink-0 text-sky-700 dark:text-sky-300" />
@@ -5734,8 +5627,8 @@ function SettingsProfileView({
                 </h3>
                 <p className="text-sm text-sky-900/80 dark:text-sky-100/80">
                   {lang === "fr"
-                    ? "Les actions sensibles comme la suppression définitive d’un compte ou de données serveur doivent être exécutées côté Supabase avec des règles RLS/RPC adaptées. L’interface prépare les demandes et nettoie uniquement ce qui est local au navigateur."
-                    : "Sensitive actions such as permanent account or server-side data deletion must run server-side in Supabase with proper RLS/RPC rules. The interface prepares requests and only clears data local to the browser."}
+                    ? "Les actions sensibles comme la suppression définitive d’un compte ou de données serveur doivent être exécutées côté Supabase avec des règles RLS/RPC adaptées. L’interface prépare uniquement une demande de suppression pour éviter toute action abusive côté navigateur."
+                    : "Sensitive actions such as permanent account or server-side data deletion must run server-side in Supabase with proper RLS/RPC rules. The interface only prepares a deletion request to prevent abusive browser-side actions."}
                 </p>
               </div>
             </div>
