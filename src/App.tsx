@@ -171,6 +171,24 @@ async function updateSubscriptionPlanOnServer(
   return data;
 }
 
+async function updateManagedUserProfileOnServer(
+  email: string,
+  patch: { role?: UserRole; subscriptionPlan?: SubscriptionPlan; active?: boolean }
+) {
+  const { data, error } = await supabase.rpc("gaptrack_owner_update_user_profile", {
+    target_email: normalizeEmail(email),
+    next_role: patch.role ? normalizeUserRole(patch.role) : null,
+    next_plan: patch.subscriptionPlan ? normalizeSubscriptionPlan(patch.subscriptionPlan) : null,
+    next_active: typeof patch.active === "boolean" ? patch.active : null,
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
 async function fetchGapTrackProfileOnServer(
   userId: string,
   fallback: {
@@ -179,6 +197,7 @@ async function fetchGapTrackProfileOnServer(
     organization?: string;
     role?: UserRole;
     subscriptionPlan?: SubscriptionPlan;
+    active?: boolean;
     createdByUserId?: string;
     createdByEmail?: string;
   }
@@ -188,15 +207,28 @@ async function fetchGapTrackProfileOnServer(
   organization?: string;
   role?: UserRole;
   subscriptionPlan?: SubscriptionPlan;
+  active?: boolean;
   createdByUserId?: string;
   createdByEmail?: string;
 }> {
   try {
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from("gaptrack_profiles")
-      .select("email, name, organization, role, subscription_plan")
+      .select("email, name, organization, role, subscription_plan, active")
       .eq("id", userId)
       .maybeSingle();
+
+    // Compatibilité : si la colonne active n'a pas encore été ajoutée côté Supabase,
+    // on relit le profil avec l'ancien schéma pour ne pas bloquer la connexion.
+    if (error && String(error.message || "").toLowerCase().includes("active")) {
+      const fallbackQuery = await supabase
+        .from("gaptrack_profiles")
+        .select("email, name, organization, role, subscription_plan")
+        .eq("id", userId)
+        .maybeSingle();
+      data = fallbackQuery.data as any;
+      error = fallbackQuery.error;
+    }
 
     if (error) {
       throw error;
@@ -215,6 +247,7 @@ async function fetchGapTrackProfileOnServer(
         ? data.role
         : fallback.role,
       subscriptionPlan: normalizeSubscriptionPlan(data.subscription_plan),
+      active: typeof (data as any).active === "boolean" ? (data as any).active : fallback.active,
     };
   } catch (error) {
     console.error("Unable to fetch GapTrack profile from Supabase.", error);
@@ -3287,7 +3320,8 @@ function UserManagementDialog({
                         const isSelf = activeUser?.id === u.id;
                         const isOwnerAccount = isServiceOwnerEmail(u.email);
                         const canEditTarget = canManage && userCanModifyUserRecord(activeUser, u);
-                        const disablingLastAdmin = u.role === "admin" && admins.length <= 1 && u.active !== false;
+                        const disablingLastAdmin = !userCanManageSubscriptions(activeUser) && u.role === "admin" && admins.length <= 1 && u.active !== false;
+                        const deletingLastAdmin = u.role === "admin" && admins.length <= 1 && u.active !== false;
                         return (
                           <div key={u.id} className={"rounded-2xl border bg-muted/10 p-4 " + (u.active === false ? "opacity-60" : "")}>
                             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -3374,7 +3408,7 @@ function UserManagementDialog({
                                   <Button
                                     size="sm"
                                     variant="destructive"
-                                    disabled={!canEditTarget || isSelf || disablingLastAdmin || isOwnerAccount}
+                                    disabled={!canEditTarget || isSelf || deletingLastAdmin || isOwnerAccount}
                                     onClick={() => onDeleteUser(u.id)}
                                   >
                                     <Trash2 className="mr-1 h-4 w-4" />
@@ -3626,7 +3660,8 @@ function ServiceOwnerAdminConsole({
                 const isSelf = activeUser.id === u.id;
                 const isOwnerAccount = isServiceOwnerEmail(u.email);
                 const canEditTarget = userCanModifyUserRecord(activeUser, u);
-                const disablingLastAdmin = u.role === "admin" && activeAdmins.length <= 1 && u.active !== false;
+                const disablingLastAdmin = !userCanManageSubscriptions(activeUser) && u.role === "admin" && activeAdmins.length <= 1 && u.active !== false;
+                const deletingLastAdmin = u.role === "admin" && activeAdmins.length <= 1 && u.active !== false;
 
                 return (
                   <article key={u.id} className={"rounded-2xl border bg-muted/10 p-4 " + (u.active === false ? "opacity-60" : "")}>
@@ -3721,7 +3756,7 @@ function ServiceOwnerAdminConsole({
                           <Button
                             size="sm"
                             variant="destructive"
-                            disabled={!canEditTarget || isSelf || disablingLastAdmin || isOwnerAccount}
+                            disabled={!canEditTarget || isSelf || deletingLastAdmin || isOwnerAccount}
                             onClick={() => onDeleteUser(u.id)}
                           >
                             <Trash2 className="mr-1 h-4 w-4" />
@@ -10171,7 +10206,7 @@ function AppRouter() {
     if (typeof window !== "undefined") {
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
-  }, []);
+  }, [lang]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -10428,10 +10463,21 @@ function GapTrackApp({
     );
   }, [activeUser?.email, lang]);
 
-  const syncSupabaseAuthenticatedUser = React.useCallback((profile: { email: string; name?: string; organization?: string; role?: UserRole; subscriptionPlan?: SubscriptionPlan; createdByUserId?: string; createdByEmail?: string }) => {
+  const syncSupabaseAuthenticatedUser = React.useCallback((profile: { email: string; name?: string; organization?: string; role?: UserRole; subscriptionPlan?: SubscriptionPlan; active?: boolean; createdByUserId?: string; createdByEmail?: string }) => {
     const email = normalizeEmail(profile.email);
 
     if (!email) return;
+
+    if (profile.active === false) {
+      setUsers((prev) => {
+        const next = prev.map((u) => normalizeEmail(u.email) === email ? { ...u, active: false } : u);
+        saveUsers(next);
+        return next;
+      });
+      toast.error(lang === "fr" ? "Ce compte a été désactivé par l’administrateur." : "This account has been disabled by the administrator.");
+      void supabase.auth.signOut();
+      return;
+    }
 
     const now = new Date().toISOString();
     const profilePlan = normalizeSubscriptionPlan(profile.subscriptionPlan);
@@ -10451,7 +10497,7 @@ function GapTrackApp({
           subscriptionPlan,
           createdByUserId: profile.createdByUserId || existing.createdByUserId,
           createdByEmail: profile.createdByEmail ? normalizeEmail(profile.createdByEmail) : existing.createdByEmail,
-          active: true,
+          active: profile.active !== false,
           lastLoginAt: now,
         };
         next = prev.map((u) => u.id === existing.id ? active : u);
@@ -10468,7 +10514,7 @@ function GapTrackApp({
           createdByEmail: profile.createdByEmail ? normalizeEmail(profile.createdByEmail) : undefined,
           createdAt: now,
           lastLoginAt: now,
-          active: true,
+          active: profile.active !== false,
         };
         next = [active, ...prev];
       }
@@ -10479,7 +10525,7 @@ function GapTrackApp({
       setLocalActorFromUser(active);
       return next;
     });
-  }, []);
+  }, [lang]);
 
   useEffect(() => {
     let mounted = true;
@@ -10495,6 +10541,7 @@ function GapTrackApp({
         // Never trust client-editable Auth metadata for role, plan, or ownership.
         role: undefined,
         subscriptionPlan: "free" as SubscriptionPlan,
+        active: undefined,
         createdByUserId: undefined,
         createdByEmail: undefined,
       };
@@ -10624,7 +10671,7 @@ function GapTrackApp({
 
       if (requestedSubscriptionPlan === "premium") {
         try {
-          await updateSubscriptionPlanOnServer(email, "premium");
+          await updateManagedUserProfileOnServer(email, { subscriptionPlan: "premium" });
         } catch (error) {
           console.error(error);
           subscriptionPlan = "free";
@@ -10695,7 +10742,7 @@ function GapTrackApp({
     }
 
     const activeAdmins = users.filter((u) => u.active !== false && u.role === "admin");
-    if (target.role === "admin" && activeAdmins.length <= 1 && (patch.role || patch.active === false)) {
+    if (!canManageSubscriptionsFlag && target.role === "admin" && activeAdmins.length <= 1 && (patch.role || patch.active === false)) {
       toast.error(lang === "fr" ? "Impossible de retirer le dernier administrateur actif." : "Cannot remove the last active administrator.");
       return;
     }
@@ -10704,7 +10751,11 @@ function GapTrackApp({
       const nextPlan = normalizeSubscriptionPlan(patch.subscriptionPlan);
 
       try {
-        await updateSubscriptionPlanOnServer(target.email, nextPlan);
+        if (canManageSubscriptionsFlag) {
+          await updateManagedUserProfileOnServer(target.email, { subscriptionPlan: nextPlan });
+        } else {
+          await updateSubscriptionPlanOnServer(target.email, nextPlan);
+        }
       } catch (error) {
         console.error(error);
         toast.error(
@@ -10728,6 +10779,23 @@ function GapTrackApp({
 
       toast.success(lang === "fr" ? "Offre mise à jour côté serveur." : "Plan updated on server.");
       return;
+    }
+
+    if (canManageSubscriptionsFlag && (patch.role || typeof patch.active === "boolean")) {
+      try {
+        await updateManagedUserProfileOnServer(target.email, {
+          role: patch.role ? normalizeUserRole(patch.role) : undefined,
+          active: typeof patch.active === "boolean" ? patch.active : undefined,
+        });
+      } catch (error) {
+        console.error(error);
+        toast.error(
+          lang === "fr"
+            ? "Impossible de mettre à jour ce compte côté Supabase."
+            : "Unable to update this account in Supabase."
+        );
+        return;
+      }
     }
 
     setUsers((prev) => {
@@ -10762,7 +10830,7 @@ function GapTrackApp({
     const nextPlan = normalizeSubscriptionPlan(plan);
 
     try {
-      await updateSubscriptionPlanOnServer(email, nextPlan);
+      await updateManagedUserProfileOnServer(email, { subscriptionPlan: nextPlan });
     } catch (error) {
       console.error(error);
       toast.error(
@@ -10800,7 +10868,7 @@ function GapTrackApp({
     }
 
     try {
-      await updateSubscriptionPlanOnServer(email, "premium");
+      await updateManagedUserProfileOnServer(email, { subscriptionPlan: "premium" });
     } catch (error) {
       console.error(error);
       toast.error(
