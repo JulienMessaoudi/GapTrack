@@ -4913,6 +4913,7 @@ function SettingsProfileView({
   const [organization, setOrganization] = useState(activeUser?.organization || "");
   const [saving, setSaving] = useState(false);
   const [securityAction, setSecurityAction] = useState<"password" | "logout" | null>(null);
+  const [privacyAction, setPrivacyAction] = useState<"export" | "localData" | "localEvidence" | "deletion" | null>(null);
 
   useEffect(() => {
     setName(activeUser?.name || "");
@@ -5030,6 +5031,162 @@ function SettingsProfileView({
       organization: activeUser?.organization || "",
       source: lang === "fr" ? "Paramètres - Gestion de l’abonnement" : "Settings - Subscription management",
     });
+  }
+
+  const accountId = activeUser.id || "";
+  const accountEmail = activeUser.email || "";
+  const accountName = activeUser.name || "";
+  const accountOrganization = activeUser.organization || "";
+  const accountRole = activeUser.role;
+  const accountCreatedAt = activeUser.createdAt;
+  const accountLastLoginAt = activeUser.lastLoginAt || null;
+  const accountIsActive = activeUser.active !== false;
+  const exportDate = () => new Date().toISOString().slice(0, 10);
+
+  function exportAccountPrivacyData() {
+    if (privacyAction) return;
+
+    setPrivacyAction("export");
+    try {
+      const payload = {
+        exportedAt: new Date().toISOString(),
+        source: "GapTrack - Paramètres - Confidentialité et données",
+        account: {
+          id: accountId,
+          name: accountName,
+          email: accountEmail,
+          organization: accountOrganization || null,
+          role: accountRole,
+          subscriptionPlan: currentSubscriptionPlan,
+          createdAt: accountCreatedAt,
+          lastLoginAt: accountLastLoginAt,
+          active: accountIsActive,
+        },
+        privacy: {
+          authenticationProvider: "Supabase Auth",
+          profileStorage: "public.gaptrack_profiles",
+          auditStorage: "public.gaptrack_audit_sessions",
+          evidenceStorage: EVIDENCE_STORAGE_BUCKET,
+          localEvidenceCache: EVIDENCE_FILES_DB_NAME,
+          note:
+            lang === "fr"
+              ? "Cet export contient les informations de compte visibles dans votre profil GapTrack. Les audits et preuves complets restent exportables depuis leurs écrans dédiés selon vos droits."
+              : "This export contains the account information visible in your GapTrack profile. Full audits and evidence remain exportable from their dedicated screens according to your permissions.",
+        },
+      };
+
+      const filename = `gaptrack-donnees-compte-${safeStorageFilename(accountEmail || "utilisateur")}-${exportDate()}.json`;
+      downloadBlob(
+        new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" }),
+        filename
+      );
+
+      toast.success(lang === "fr" ? "Export des données du compte généré." : "Account data export generated.");
+    } finally {
+      setPrivacyAction(null);
+    }
+  }
+
+  async function clearLocalEvidenceData() {
+    if (privacyAction) return;
+
+    const confirmed = window.confirm(
+      lang === "fr"
+        ? "Supprimer les preuves stockées localement dans ce navigateur ? Les preuves déjà envoyées dans Supabase ne seront pas supprimées."
+        : "Delete evidence stored locally in this browser? Evidence already uploaded to Supabase will not be deleted."
+    );
+    if (!confirmed) return;
+
+    setPrivacyAction("localEvidence");
+    try {
+      if (typeof window === "undefined" || !window.indexedDB) {
+        toast.info(lang === "fr" ? "IndexedDB n’est pas disponible dans ce navigateur." : "IndexedDB is not available in this browser.");
+        return;
+      }
+
+      await new Promise<void>((resolve, reject) => {
+        const request = window.indexedDB.deleteDatabase(EVIDENCE_FILES_DB_NAME);
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error || new Error("Unable to delete local evidence database."));
+        request.onblocked = () => resolve();
+      });
+
+      toast.success(lang === "fr" ? "Stockage local des preuves nettoyé." : "Local evidence storage cleared.");
+    } catch (error) {
+      console.error("Unable to clear local evidence data.", error);
+      toast.error(lang === "fr" ? "Impossible de nettoyer les preuves locales." : "Unable to clear local evidence.");
+    } finally {
+      setPrivacyAction(null);
+    }
+  }
+
+  function clearLegacyBrowserData() {
+    if (privacyAction) return;
+
+    const confirmed = window.confirm(
+      lang === "fr"
+        ? "Nettoyer les anciennes données locales de GapTrack sur ce navigateur ? Votre session Supabase restera gérée par Supabase Auth."
+        : "Clear old local GapTrack data in this browser? Your Supabase session remains managed by Supabase Auth."
+    );
+    if (!confirmed) return;
+
+    setPrivacyAction("localData");
+    try {
+      const localStorageKeys = [
+        STORAGE_KEY,
+        STORAGE_SETTINGS,
+        USERS_KEY,
+        ACTIVE_USER_KEY,
+        TEMPLATES_KEY,
+        LAST_TEMPLATE_BY_FRAMEWORK_KEY,
+        "grc_current_user",
+        "grc_user_email",
+        "user_email",
+        "email",
+      ];
+      const sessionStorageKeys = [
+        "gaptrack_selected_plan",
+        "gaptrack_public_screen",
+      ];
+
+      for (const key of localStorageKeys) {
+        try { localStorage.removeItem(key); } catch {}
+      }
+      for (const key of sessionStorageKeys) {
+        try { sessionStorage.removeItem(key); } catch {}
+      }
+
+      toast.success(lang === "fr" ? "Données locales héritées nettoyées." : "Legacy local data cleared.");
+    } finally {
+      setPrivacyAction(null);
+    }
+  }
+
+  function requestAccountDeletionByEmail() {
+    if (privacyAction) return;
+
+    setPrivacyAction("deletion");
+    try {
+      const subject = lang === "fr" ? "Demande de suppression de compte GapTrack" : "GapTrack account deletion request";
+      const body = [
+        lang === "fr" ? "Bonjour Julien," : "Hello Julien,",
+        "",
+        lang === "fr"
+          ? "Je souhaite demander la suppression de mon compte GapTrack et des données associées accessibles à mon compte."
+          : "I would like to request deletion of my GapTrack account and the associated data accessible to my account.",
+        "",
+        `E-mail : ${accountEmail}`,
+        `Nom : ${accountName}`,
+        accountOrganization ? `Organisation : ${accountOrganization}` : "Organisation : ",
+        `Offre : ${subscriptionPlanLabel(currentSubscriptionPlan)}`,
+        "",
+        lang === "fr" ? "Merci." : "Thank you.",
+      ].join("\n");
+
+      window.location.href = `mailto:${PREMIUM_CONTACT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    } finally {
+      window.setTimeout(() => setPrivacyAction(null), 300);
+    }
   }
 
   return (
@@ -5430,6 +5587,156 @@ function SettingsProfileView({
                   <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-300" />
                   <span>{lang === "fr" ? "Les exports restent bloqués côté interface tant que l’offre n’est pas Premium." : "Exports stay blocked in the UI until the plan is Premium."}</span>
                 </div>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="glass-card overflow-hidden">
+        <CardHeader className="border-b bg-muted/20">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="min-w-0">
+              <CardTitle className="flex flex-wrap items-center gap-2">
+                <Shield className="h-5 w-5" />
+                {lang === "fr" ? "Confidentialité et données" : "Privacy and data"}
+              </CardTitle>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {lang === "fr"
+                  ? "Contrôlez les données de votre compte, les exports et les traces conservées dans ce navigateur."
+                  : "Control your account data, exports, and traces kept in this browser."}
+              </p>
+            </div>
+            <Badge variant="outline" className="border-emerald-500/50 text-emerald-700 dark:text-emerald-300 bg-emerald-500/10">
+              <ShieldCheck className="mr-1 h-3.5 w-3.5" />
+              {lang === "fr" ? "Données maîtrisées" : "Data under control"}
+            </Badge>
+          </div>
+        </CardHeader>
+
+        <CardContent className="p-5 space-y-5">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-2xl border p-4">
+              <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                <Users className="h-4 w-4" />
+                {lang === "fr" ? "Profil" : "Profile"}
+              </div>
+              <div className="text-sm font-semibold">{lang === "fr" ? "Table profils Supabase" : "Supabase profiles table"}</div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                {lang === "fr" ? "Nom, e-mail, rôle, organisation et offre." : "Name, email, role, organization, and plan."}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border p-4">
+              <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                <FileCheck2 className="h-4 w-4" />
+                {lang === "fr" ? "Audits" : "Audits"}
+              </div>
+              <div className="text-sm font-semibold">{lang === "fr" ? "Sessions et états d’audit" : "Audit sessions and states"}</div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                {lang === "fr" ? "Contrôles, plans d’action, statuts et journaux." : "Controls, action plans, statuses, and logs."}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border p-4">
+              <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                <Paperclip className="h-4 w-4" />
+                {lang === "fr" ? "Preuves" : "Evidence"}
+              </div>
+              <div className="text-sm font-semibold">{lang === "fr" ? "Stockage sécurisé" : "Secure storage"}</div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                {lang === "fr" ? "Fichiers dans Supabase ou cache local navigateur." : "Files in Supabase or local browser cache."}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border p-4">
+              <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                <Clock3 className="h-4 w-4" />
+                {lang === "fr" ? "Traçabilité" : "Traceability"}
+              </div>
+              <div className="text-sm font-semibold">{lang === "fr" ? "Journal d’audit" : "Audit log"}</div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                {lang === "fr" ? "Actions horodatées liées aux audits et preuves." : "Timestamped actions linked to audits and evidence."}
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className="rounded-2xl border bg-muted/10 p-4">
+              <h3 className="text-sm font-semibold">
+                {lang === "fr" ? "Exporter mes données de compte" : "Export my account data"}
+              </h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {lang === "fr"
+                  ? "Télécharge un fichier JSON contenant les informations visibles de votre profil, de sécurité et d’abonnement."
+                  : "Downloads a JSON file containing the visible information from your profile, security, and subscription settings."}
+              </p>
+              <Button type="button" className="mt-4" onClick={exportAccountPrivacyData} disabled={privacyAction !== null}>
+                {privacyAction === "export" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+                {lang === "fr" ? "Exporter mes données" : "Export my data"}
+              </Button>
+            </div>
+
+            <div className="rounded-2xl border bg-muted/10 p-4">
+              <h3 className="text-sm font-semibold">
+                {lang === "fr" ? "Demander la suppression du compte" : "Request account deletion"}
+              </h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {lang === "fr"
+                  ? "Prépare un e-mail de demande de suppression. La suppression réelle doit être validée côté serveur pour éviter toute suppression abusive."
+                  : "Prepares an account deletion email. Actual deletion must be validated server-side to prevent abusive deletion."}
+              </p>
+              <Button type="button" variant="outline" className="mt-4" onClick={requestAccountDeletionByEmail} disabled={privacyAction !== null}>
+                {privacyAction === "deletion" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Mail className="mr-2 h-4 w-4" />}
+                {lang === "fr" ? "Demander la suppression" : "Request deletion"}
+              </Button>
+            </div>
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className="rounded-2xl border bg-muted/10 p-4">
+              <h3 className="text-sm font-semibold">
+                {lang === "fr" ? "Nettoyer les anciennes données locales" : "Clear legacy local data"}
+              </h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {lang === "fr"
+                  ? "Supprime les anciennes clés locales GapTrack/GRC utilisées par les versions précédentes. La session Supabase n’est pas supprimée."
+                  : "Deletes old local GapTrack/GRC keys used by previous versions. The Supabase session is not deleted."}
+              </p>
+              <Button type="button" variant="outline" className="mt-4" onClick={clearLegacyBrowserData} disabled={privacyAction !== null}>
+                {privacyAction === "localData" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                {lang === "fr" ? "Nettoyer le cache local" : "Clear local cache"}
+              </Button>
+            </div>
+
+            <div className="rounded-2xl border bg-muted/10 p-4">
+              <h3 className="text-sm font-semibold">
+                {lang === "fr" ? "Supprimer les preuves locales" : "Delete local evidence"}
+              </h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {lang === "fr"
+                  ? "Efface les fichiers de preuves conservés dans IndexedDB sur cet appareil. Les preuves envoyées dans Supabase ne sont pas supprimées."
+                  : "Clears evidence files kept in IndexedDB on this device. Evidence uploaded to Supabase is not deleted."}
+              </p>
+              <Button type="button" variant="outline" className="mt-4" onClick={clearLocalEvidenceData} disabled={privacyAction !== null}>
+                {privacyAction === "localEvidence" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                {lang === "fr" ? "Supprimer le stockage local" : "Delete local storage"}
+              </Button>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-sky-500/30 bg-sky-500/10 p-4">
+            <div className="flex gap-3">
+              <Info className="mt-0.5 h-5 w-5 shrink-0 text-sky-700 dark:text-sky-300" />
+              <div className="space-y-2">
+                <h3 className="text-sm font-semibold text-sky-900 dark:text-sky-100">
+                  {lang === "fr" ? "Principe de confidentialité" : "Privacy principle"}
+                </h3>
+                <p className="text-sm text-sky-900/80 dark:text-sky-100/80">
+                  {lang === "fr"
+                    ? "Les actions sensibles comme la suppression définitive d’un compte ou de données serveur doivent être exécutées côté Supabase avec des règles RLS/RPC adaptées. L’interface prépare les demandes et nettoie uniquement ce qui est local au navigateur."
+                    : "Sensitive actions such as permanent account or server-side data deletion must run server-side in Supabase with proper RLS/RPC rules. The interface prepares requests and only clears data local to the browser."}
+                </p>
               </div>
             </div>
           </div>
