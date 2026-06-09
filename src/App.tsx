@@ -5025,9 +5025,9 @@ function SettingsProfileView({
     }
 
     window.location.href = buildPremiumRequestMailto({
-      email: activeUser?.email || "",
-      name: activeUser?.name || "",
-      organization: activeUser?.organization || "",
+      email: activeUser.email,
+      name: activeUser.name,
+      organization: activeUser.organization,
       source: lang === "fr" ? "Paramètres - Gestion de l’abonnement" : "Settings - Subscription management",
     });
   }
