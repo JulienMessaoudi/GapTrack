@@ -2011,9 +2011,6 @@ function saveUsers(users: AppUser[]) {
   localStorage.setItem(USERS_KEY, JSON.stringify(users.map(sanitizeUserForClientStorage)));
 }
 
-function loadActiveUserId(): string | null {
-  try { return localStorage.getItem(ACTIVE_USER_KEY); } catch { return null; }
-}
 
 function saveActiveUserId(_id: string) {
   // Ne persiste plus l’utilisateur actif dans localStorage : la session Supabase est la source de vérité.
@@ -2111,9 +2108,6 @@ function userCanDeleteAudits(user: AppUser | null | undefined): boolean {
   return normalizeUserRole(user?.role) === "admin";
 }
 
-async function hashLocalPassword(_password: string, _email: string): Promise<string> {
-  throw new Error("Legacy local password authentication is disabled. Use Supabase Auth only.");
-}
 
 // ==================
 // Templates helpers
