@@ -1085,3 +1085,14 @@
     min-height: 0;
   }
 }
+
+/* Masque le bouton natif Microsoft Edge / Internet Explorer pour éviter
+   le double bouton afficher/masquer le mot de passe. */
+.gaptrack-auth input[type="password"]::-ms-reveal,
+.gaptrack-auth input[type="password"]::-ms-clear,
+.gt-control input[type="password"]::-ms-reveal,
+.gt-control input[type="password"]::-ms-clear {
+  display: none;
+  width: 0;
+  height: 0;
+}

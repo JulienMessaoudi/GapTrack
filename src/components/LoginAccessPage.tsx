@@ -203,6 +203,33 @@ export function LoginAccessPage({
   }, []);
 
   useEffect(() => {
+    const styleId = "gaptrack-hide-edge-password-reveal";
+
+    if (document.getElementById(styleId)) {
+      return;
+    }
+
+    const style = document.createElement("style");
+    style.id = styleId;
+    style.textContent = `
+      .gaptrack-auth input[type="password"]::-ms-reveal,
+      .gaptrack-auth input[type="password"]::-ms-clear,
+      .gt-control input[type="password"]::-ms-reveal,
+      .gt-control input[type="password"]::-ms-clear {
+        display: none;
+        width: 0;
+        height: 0;
+      }
+    `;
+
+    document.head.appendChild(style);
+
+    return () => {
+      style.remove();
+    };
+  }, []);
+
+  useEffect(() => {
     try {
       sessionStorage.setItem("gaptrack_selected_plan", selectedPlan);
     } catch {}
