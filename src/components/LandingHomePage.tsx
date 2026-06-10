@@ -39,7 +39,7 @@ function buildPremiumRequestMailto(source: string): string {
     "Contexte ou délai souhaité : ",
     `Origine : ${source}`,
     "",
-    "J’ai compris que je peux commencer en Free en attendant l’activation Premium, sans perdre les données déjà saisies.",
+    "Je peux commencer en Free en attendant l’activation Premium.",
     "",
     "Merci.",
   ].join("\n");
@@ -197,9 +197,9 @@ function PricingSection({ onSelectPlan, onRequestPremium }: { onSelectPlan: (pla
       badge: "Pour démarrer",
       price: "0€",
       period: "/ mois",
-      description: "Idéal pour tester GapTrack, préparer un premier audit et structurer vos preuves localement, sans export.",
+      description: "Pour tester GapTrack avec un premier audit, sans export.",
       features: ["1 audit actif", "Tableau de bord consultable", "Preuves et notes locales", "Passage Premium possible ensuite"],
-      note: "Créez votre compte tout de suite : vous pourrez demander Premium sans repartir de zéro.",
+      note: "Commencez en Free, Premium pourra être demandé ensuite.",
       cta: "Commencer gratuitement",
     },
     {
@@ -208,10 +208,10 @@ function PricingSection({ onSelectPlan, onRequestPremium }: { onSelectPlan: (pla
       badge: "Le plus complet",
       price: "Sur devis",
       period: "",
-      description: "Pensé pour les équipes, cabinets et organisations qui veulent collaborer, exporter leurs rapports et industrialiser leurs audits.",
-      features: ["Audits illimités", "Exports PDF / CSV", "Utilisateurs et rôles avancés", "Activation sécurisée côté serveur"],
-      note: "Demande préremplie : indiquez simplement l’adresse à activer, votre organisation et votre besoin.",
-      reassurance: ["Compte Free utilisable immédiatement", "Activation Premium sans perte des données saisies", "Contact direct pour clarifier le besoin avant activation"],
+      description: "Pour collaborer, exporter et piloter plusieurs audits.",
+      features: ["Audits illimités", "Exports PDF / CSV", "Utilisateurs et rôles avancés", "Activation serveur sécurisée"],
+      note: "Mail prérempli : adresse, organisation, besoin.",
+      reassurance: ["Free disponible tout de suite", "Premium activé sur le même compte"],
       cta: "Être recontacté pour Premium",
       highlighted: true,
     },
@@ -225,7 +225,7 @@ function PricingSection({ onSelectPlan, onRequestPremium }: { onSelectPlan: (pla
           OFFRES GAPTRACK
         </div>
         <h2>Choisissez la version adaptée à votre usage</h2>
-        <p>Commencez en Free sans attendre, puis demandez Premium quand vous avez besoin d’exports, de plusieurs audits ou d’une gestion avancée des utilisateurs.</p>
+        <p>Démarrez en Free, passez à Premium pour les exports, les audits multiples et les rôles avancés.</p>
       </div>
 
       <div className="gth-pricing-grid">
@@ -269,8 +269,8 @@ function PricingSection({ onSelectPlan, onRequestPremium }: { onSelectPlan: (pla
       <div className="gth-pricing-reassurance">
         <ShieldCheck aria-hidden="true" />
         <div>
-          <strong>Pas besoin d’attendre Premium pour démarrer.</strong>
-          <span>Le compte Free reste le point d’entrée immédiat ; l’activation Premium se fait ensuite proprement côté serveur, sur le même compte.</span>
+          <strong>Démarrez sans attendre.</strong>
+          <span>Free est immédiat ; Premium s’active ensuite côté serveur, sur le même compte.</span>
         </div>
       </div>
     </section>
