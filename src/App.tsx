@@ -5016,11 +5016,26 @@ function SettingsProfileView({
   const [saving, setSaving] = useState(false);
   const [securityAction, setSecurityAction] = useState<"password" | "logout" | null>(null);
   const [privacyAction, setPrivacyAction] = useState<"export" | "deletion" | null>(null);
+  const [mfaAction, setMfaAction] = useState<"refresh" | "enroll" | "verify" | "unenroll" | null>(null);
+  const [mfaVerifyCode, setMfaVerifyCode] = useState("");
+  const [mfaEnrollment, setMfaEnrollment] = useState<{ factorId: string; qrCode?: string; secret?: string } | null>(null);
+  const [mfaStatus, setMfaStatus] = useState<{ factors: any[]; currentLevel?: string; nextLevel?: string; error?: string }>({ factors: [] });
 
   useEffect(() => {
     setName(activeUser?.name || "");
     setOrganization(activeUser?.organization || "");
   }, [activeUser?.id, activeUser?.name, activeUser?.organization]);
+
+  useEffect(() => {
+    setMfaEnrollment(null);
+    setMfaVerifyCode("");
+    if (!activeUser?.id) {
+      setMfaStatus({ factors: [] });
+      return;
+    }
+
+    void refreshMfaStatus(false);
+  }, [activeUser?.id]);
 
   const initials = React.useMemo(() => {
     const source = (activeUser?.name || activeUser?.email || "GT").trim();
@@ -5086,6 +5101,154 @@ function SettingsProfileView({
     }
   }
 
+  function getMfaClient() {
+    return (supabase.auth as any).mfa;
+  }
+
+  async function refreshMfaStatus(showBusy = true) {
+    const mfa = getMfaClient();
+
+    if (!mfa?.listFactors) {
+      setMfaStatus({
+        factors: [],
+        error: lang === "fr" ? "La MFA Supabase n’est pas disponible sur ce client." : "Supabase MFA is not available on this client.",
+      });
+      return;
+    }
+
+    if (showBusy) setMfaAction("refresh");
+    try {
+      const factorsResult = await mfa.listFactors();
+      if (factorsResult.error) throw factorsResult.error;
+
+      let currentLevel: string | undefined;
+      let nextLevel: string | undefined;
+
+      if (mfa.getAuthenticatorAssuranceLevel) {
+        const aalResult = await mfa.getAuthenticatorAssuranceLevel();
+        if (aalResult.error) throw aalResult.error;
+        currentLevel = aalResult.data?.currentLevel;
+        nextLevel = aalResult.data?.nextLevel;
+      }
+
+      setMfaStatus({
+        factors: Array.isArray(factorsResult.data?.totp) ? factorsResult.data.totp : [],
+        currentLevel,
+        nextLevel,
+      });
+    } catch (error) {
+      console.error("Unable to refresh MFA status", error);
+      setMfaStatus((previous) => ({ ...previous, error: authErrorMessage(error) }));
+    } finally {
+      if (showBusy) setMfaAction(null);
+    }
+  }
+
+  async function startMfaEnrollment() {
+    if (mfaAction) return;
+    const mfa = getMfaClient();
+    if (!mfa?.enroll) {
+      toast.error(lang === "fr" ? "La MFA Supabase n’est pas disponible." : "Supabase MFA is not available.");
+      return;
+    }
+
+    setMfaAction("enroll");
+    setMfaStatus((previous) => ({ ...previous, error: undefined }));
+    setMfaVerifyCode("");
+
+    try {
+      const { data, error } = await mfa.enroll({ factorType: "totp" });
+      if (error) throw error;
+
+      setMfaEnrollment({
+        factorId: String(data.id),
+        qrCode: typeof data.totp?.qr_code === "string" ? data.totp.qr_code : undefined,
+        secret: typeof data.totp?.secret === "string" ? data.totp.secret : undefined,
+      });
+
+      toast.info(lang === "fr" ? "Scannez le QR code puis validez avec le code généré." : "Scan the QR code, then validate with the generated code.");
+    } catch (error) {
+      console.error("Unable to start MFA enrollment", error);
+      toast.error(authErrorMessage(error));
+    } finally {
+      setMfaAction(null);
+    }
+  }
+
+  async function confirmMfaEnrollment() {
+    if (mfaAction || !mfaEnrollment) return;
+
+    const code = mfaVerifyCode.replace(/\s+/g, "").trim();
+    if (!/^\d{6}$/.test(code)) {
+      toast.error(lang === "fr" ? "Saisissez le code à 6 chiffres de votre application d’authentification." : "Enter the 6-digit code from your authenticator app.");
+      return;
+    }
+
+    const mfa = getMfaClient();
+    setMfaAction("verify");
+
+    try {
+      const challenge = await mfa.challenge({ factorId: mfaEnrollment.factorId });
+      if (challenge.error) throw challenge.error;
+
+      const verify = await mfa.verify({
+        factorId: mfaEnrollment.factorId,
+        challengeId: challenge.data.id,
+        code,
+      });
+      if (verify.error) throw verify.error;
+
+      setMfaEnrollment(null);
+      setMfaVerifyCode("");
+      await refreshMfaStatus(false);
+      toast.success(lang === "fr" ? "Double authentification activée." : "Two-factor authentication enabled.");
+    } catch (error) {
+      console.error("Unable to confirm MFA enrollment", error);
+      toast.error(authErrorMessage(error));
+    } finally {
+      setMfaAction(null);
+    }
+  }
+
+  async function unenrollMfaFactor(factorId: string) {
+    if (mfaAction) return;
+
+    const confirmed = window.confirm(
+      lang === "fr"
+        ? "Désactiver la double authentification pour ce compte ?"
+        : "Disable two-factor authentication for this account?"
+    );
+    if (!confirmed) return;
+
+    const mfa = getMfaClient();
+    setMfaAction("unenroll");
+
+    try {
+      const { error } = await mfa.unenroll({ factorId });
+      if (error) throw error;
+
+      setMfaEnrollment(null);
+      setMfaVerifyCode("");
+      await refreshMfaStatus(false);
+      toast.success(lang === "fr" ? "Double authentification désactivée." : "Two-factor authentication disabled.");
+    } catch (error) {
+      console.error("Unable to disable MFA", error);
+      toast.error(authErrorMessage(error));
+    } finally {
+      setMfaAction(null);
+    }
+  }
+
+  async function copyMfaSecret() {
+    if (!mfaEnrollment?.secret) return;
+    try {
+      await navigator.clipboard.writeText(mfaEnrollment.secret);
+      toast.success(lang === "fr" ? "Clé secrète copiée." : "Secret key copied.");
+    } catch {
+      toast.error(lang === "fr" ? "Impossible de copier la clé automatiquement." : "Unable to copy the key automatically.");
+    }
+  }
+
   function confirmLogout() {
     const confirmed = window.confirm(
       lang === "fr"
@@ -5099,6 +5262,10 @@ function SettingsProfileView({
   }
 
   const currentSubscriptionPlan = normalizeSubscriptionPlan(activeUser.subscriptionPlan);
+  const verifiedMfaFactors = mfaStatus.factors.filter((factor) => factor?.status === "verified");
+  const pendingMfaFactors = mfaStatus.factors.filter((factor) => factor?.status && factor.status !== "verified");
+  const hasMfaEnabled = verifiedMfaFactors.length > 0;
+  const mfaNeedsVerification = mfaStatus.nextLevel === "aal2" && mfaStatus.currentLevel !== "aal2";
   const hasPremiumSubscription = currentSubscriptionPlan === "premium";
   const subscriptionIncludedFeatures = hasPremiumSubscription
     ? [
@@ -5401,14 +5568,33 @@ function SettingsProfileView({
 
             <div className="rounded-2xl border p-4">
               <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                <CheckCircle2 className="h-4 w-4" />
-                {lang === "fr" ? "Session" : "Session"}
+                <ShieldCheck className="h-4 w-4" />
+                {lang === "fr" ? "2FA" : "2FA"}
               </div>
               <div className="text-sm font-semibold">
-                {lang === "fr" ? "Session active" : "Active session"}
+                {mfaAction === "refresh"
+                  ? (lang === "fr" ? "Vérification…" : "Checking…")
+                  : hasMfaEnabled
+                    ? (lang === "fr" ? "Activée" : "Enabled")
+                    : (lang === "fr" ? "Non activée" : "Not enabled")}
               </div>
               <div className="mt-1 text-xs text-muted-foreground">
-                {lang === "fr" ? "Déconnectez-vous si l’appareil est partagé." : "Sign out if this device is shared."}
+                {hasMfaEnabled
+                  ? (lang === "fr" ? `${verifiedMfaFactors.length} facteur TOTP actif.` : `${verifiedMfaFactors.length} active TOTP factor.`)
+                  : (lang === "fr" ? "Ajoutez un code à usage unique." : "Add a one-time code.")}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border p-4">
+              <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                <CheckCircle2 className="h-4 w-4" />
+                {lang === "fr" ? "Niveau session" : "Session level"}
+              </div>
+              <div className="text-sm font-semibold">{mfaStatus.currentLevel?.toUpperCase() || "AAL1"}</div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                {mfaNeedsVerification
+                  ? (lang === "fr" ? "Un code 2FA sera demandé." : "A 2FA code will be requested.")
+                  : (lang === "fr" ? "Session conforme à l’état actuel." : "Session matches current state.")}
               </div>
             </div>
 
@@ -5418,17 +5604,6 @@ function SettingsProfileView({
                 {lang === "fr" ? "Dernière connexion" : "Last sign-in"}
               </div>
               <div className="text-sm font-semibold">{formatAccountDate(activeUser.lastLoginAt)}</div>
-            </div>
-
-            <div className="rounded-2xl border p-4">
-              <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                <Mail className="h-4 w-4" />
-                {lang === "fr" ? "E-mail de sécurité" : "Security email"}
-              </div>
-              <div className="truncate text-sm font-semibold">{activeUser.email}</div>
-              <div className="mt-1 text-xs text-muted-foreground">
-                {lang === "fr" ? "Utilisé pour la réinitialisation." : "Used for password recovery."}
-              </div>
             </div>
           </div>
 
@@ -5485,6 +5660,177 @@ function SettingsProfileView({
             </div>
           </div>
 
+          <div className="rounded-2xl border bg-muted/10 p-4">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <h3 className="flex items-center gap-2 text-sm font-semibold">
+                  <ShieldCheck className="h-4 w-4" />
+                  {lang === "fr" ? "Double authentification 2FA" : "Two-factor authentication"}
+                </h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {lang === "fr"
+                    ? "Activez un code TOTP dans une application d’authentification. Après activation, GapTrack demandera ce code après le mot de passe."
+                    : "Enable a TOTP code in an authenticator app. After activation, GapTrack will request this code after the password."}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Badge variant="outline" className={hasMfaEnabled ? "border-emerald-500/50 text-emerald-700 dark:text-emerald-300 bg-emerald-500/10" : "border-amber-500/50 text-amber-700 dark:text-amber-300 bg-amber-500/10"}>
+                  {hasMfaEnabled ? (lang === "fr" ? "2FA activée" : "2FA enabled") : (lang === "fr" ? "2FA inactive" : "2FA inactive")}
+                </Badge>
+                <Button type="button" variant="outline" size="sm" onClick={() => refreshMfaStatus()} disabled={mfaAction !== null}>
+                  {mfaAction === "refresh" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Redo2 className="mr-2 h-4 w-4" />}
+                  {lang === "fr" ? "Actualiser" : "Refresh"}
+                </Button>
+              </div>
+            </div>
+
+            {mfaStatus.error ? (
+              <div className="mt-4 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-sm text-rose-800 dark:text-rose-100">
+                {mfaStatus.error}
+              </div>
+            ) : null}
+
+            <div className="mt-4 grid gap-4 lg:grid-cols-2">
+              <div className="rounded-2xl border bg-background/60 p-4">
+                <h4 className="text-sm font-semibold">
+                  {hasMfaEnabled ? (lang === "fr" ? "Facteurs actifs" : "Active factors") : (lang === "fr" ? "Aucun facteur actif" : "No active factor")}
+                </h4>
+
+                {verifiedMfaFactors.length ? (
+                  <div className="mt-3 space-y-2">
+                    {verifiedMfaFactors.map((factor, index) => (
+                      <div key={factor.id || index} className="flex flex-col gap-3 rounded-xl border bg-muted/20 p-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-medium">
+                            {factor.friendly_name || factor.factor_type || `TOTP ${index + 1}`}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {factor.created_at
+                              ? (lang === "fr" ? `Créé le ${formatAccountDate(factor.created_at)}` : `Created ${formatAccountDate(factor.created_at)}`)
+                              : (lang === "fr" ? "Facteur vérifié" : "Verified factor")}
+                          </div>
+                        </div>
+                        <Button type="button" variant="outline" size="sm" onClick={() => unenrollMfaFactor(factor.id)} disabled={mfaAction !== null}>
+                          {mfaAction === "unenroll" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                          {lang === "fr" ? "Désactiver" : "Disable"}
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    {lang === "fr"
+                      ? "Ajoutez un facteur TOTP pour renforcer l’accès au compte."
+                      : "Add a TOTP factor to strengthen account access."}
+                  </p>
+                )}
+
+                {pendingMfaFactors.length ? (
+                  <p className="mt-3 text-xs text-muted-foreground">
+                    {lang === "fr"
+                      ? `${pendingMfaFactors.length} facteur non finalisé sera ignoré tant qu’il n’est pas vérifié.`
+                      : `${pendingMfaFactors.length} unfinished factor will be ignored until verified.`}
+                  </p>
+                ) : null}
+
+                {!mfaEnrollment ? (
+                  <Button type="button" className="mt-4" onClick={startMfaEnrollment} disabled={mfaAction !== null}>
+                    {mfaAction === "enroll" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
+                    {hasMfaEnabled
+                      ? (lang === "fr" ? "Ajouter un autre facteur" : "Add another factor")
+                      : (lang === "fr" ? "Activer la 2FA" : "Enable 2FA")}
+                  </Button>
+                ) : null}
+              </div>
+
+              <div className="rounded-2xl border bg-background/60 p-4">
+                {mfaEnrollment ? (
+                  <div className="space-y-4">
+                    <div>
+                      <h4 className="text-sm font-semibold">
+                        {lang === "fr" ? "Scanner le QR code" : "Scan the QR code"}
+                      </h4>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        {lang === "fr"
+                          ? "Ajoutez GapTrack dans votre application d’authentification, puis saisissez le code à 6 chiffres."
+                          : "Add GapTrack to your authenticator app, then enter the 6-digit code."}
+                      </p>
+                    </div>
+
+                    {mfaEnrollment.qrCode ? (
+                      <div className="flex justify-center rounded-2xl border bg-white p-4">
+                        <img src={mfaEnrollment.qrCode} alt={lang === "fr" ? "QR code 2FA" : "2FA QR code"} className="h-48 w-48" />
+                      </div>
+                    ) : null}
+
+                    {mfaEnrollment.secret ? (
+                      <div className="rounded-xl border bg-muted/20 p-3">
+                        <div className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                          {lang === "fr" ? "Clé manuelle" : "Manual key"}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <code className="min-w-0 flex-1 break-all rounded bg-background px-2 py-1 text-xs">{mfaEnrollment.secret}</code>
+                          <Button type="button" variant="outline" size="sm" onClick={copyMfaSecret}>
+                            <Copy className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium" htmlFor="settings-mfa-code">
+                        {lang === "fr" ? "Code à 6 chiffres" : "6-digit code"}
+                      </label>
+                      <Input
+                        id="settings-mfa-code"
+                        value={mfaVerifyCode}
+                        onChange={(event) => setMfaVerifyCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                        inputMode="numeric"
+                        autoComplete="one-time-code"
+                        placeholder="123456"
+                        maxLength={6}
+                      />
+                    </div>
+
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <Button type="button" onClick={confirmMfaEnrollment} disabled={mfaAction !== null}>
+                        {mfaAction === "verify" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
+                        {lang === "fr" ? "Confirmer l’activation" : "Confirm activation"}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => {
+                          setMfaEnrollment(null);
+                          setMfaVerifyCode("");
+                        }}
+                        disabled={mfaAction !== null}
+                      >
+                        {lang === "fr" ? "Annuler" : "Cancel"}
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-sky-500/30 bg-sky-500/10 p-4 text-sm text-sky-900 dark:text-sky-100">
+                    <div className="flex gap-3">
+                      <Info className="mt-0.5 h-5 w-5 shrink-0" />
+                      <div>
+                        <h4 className="font-semibold">
+                          {lang === "fr" ? "À savoir" : "Good to know"}
+                        </h4>
+                        <p className="mt-1 text-sky-900/80 dark:text-sky-100/80">
+                          {lang === "fr"
+                            ? "La 2FA ne peut pas être activée à distance sans l’utilisateur : il doit scanner le secret depuis sa propre application d’authentification."
+                            : "2FA cannot be enabled remotely without the user: they must scan the secret from their own authenticator app."}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
           <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4">
             <div className="flex gap-3">
               <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-700 dark:text-amber-300" />
@@ -5495,6 +5841,7 @@ function SettingsProfileView({
                 <ul className="list-disc space-y-1 pl-4 text-sm text-amber-900/80 dark:text-amber-100/80">
                   <li>{lang === "fr" ? "Utilisez un mot de passe unique, long et difficile à deviner." : "Use a unique, long password that is hard to guess."}</li>
                   <li>{lang === "fr" ? "Ne partagez jamais votre compte : créez un utilisateur dédié pour chaque personne." : "Never share your account: create a dedicated user for each person."}</li>
+                  <li>{lang === "fr" ? "Activez la double authentification pour les comptes administrateurs et auditeurs." : "Enable two-factor authentication for administrator and auditor accounts."}</li>
                   <li>{lang === "fr" ? "Déconnectez-vous après usage sur un poste non personnel." : "Sign out after use on a device you do not own."}</li>
                 </ul>
               </div>
@@ -10751,6 +11098,29 @@ function GapTrackApp({
 
     async function syncAuthSessionUser(user: any) {
       if (!user?.email) return;
+
+      try {
+        const mfa = (supabase.auth as any).mfa;
+        if (mfa?.getAuthenticatorAssuranceLevel) {
+          const { data, error } = await mfa.getAuthenticatorAssuranceLevel();
+          if (error) throw error;
+
+          if (data?.nextLevel === "aal2" && data?.currentLevel !== "aal2") {
+            if (!mounted) return;
+            clearActiveUserId();
+            setActiveUserId("");
+            setLocalActorFromUser(null);
+            return;
+          }
+        }
+      } catch (error) {
+        console.error("Unable to evaluate Supabase MFA session level", error);
+        if (!mounted) return;
+        clearActiveUserId();
+        setActiveUserId("");
+        setLocalActorFromUser(null);
+        return;
+      }
 
       const meta = user.user_metadata || {};
       const fallbackProfile = {

@@ -1135,3 +1135,77 @@
   font-size: 13px;
   line-height: 1.45;
 }
+
+/* Double authentification Supabase MFA */
+.gt-mfa-card {
+  margin: 0 0 18px;
+  padding: 16px;
+  border: 1px solid rgba(67, 210, 184, .22);
+  border-radius: 14px;
+  background: rgba(28, 172, 162, .10);
+  color: #d7fff6;
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.gt-mfa-card > svg {
+  width: 22px;
+  height: 22px;
+  margin-top: 1px;
+  flex: 0 0 auto;
+  color: #62e7cb;
+}
+
+.gt-mfa-card strong,
+.gt-mfa-card span {
+  display: block;
+}
+
+.gt-mfa-card strong {
+  color: #fff;
+  font-size: 15px;
+  font-weight: 850;
+}
+
+.gt-mfa-card span {
+  margin-top: 4px;
+  color: #b7d4dc;
+  font-size: 13px;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.gt-auth-note-error {
+  border-color: rgba(226, 79, 101, .35);
+  background: rgba(226, 79, 101, .12);
+  color: #ffe1e6;
+}
+
+.gt-auth-note-error span {
+  color: #ffc6d0;
+}
+
+.gt-secondary-action {
+  width: 100%;
+  min-height: 46px;
+  margin-top: 12px;
+  border: 1px solid rgba(167, 190, 231, .30);
+  border-radius: 10px;
+  color: #dbe6ff;
+  background: rgba(255, 255, 255, .025);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.gt-secondary-action:hover:not(:disabled) {
+  color: #fff;
+  border-color: rgba(126, 168, 255, .55);
+  background: rgba(255, 255, 255, .055);
+}
+
+.gt-secondary-action:disabled {
+  opacity: .65;
+  cursor: not-allowed;
+}

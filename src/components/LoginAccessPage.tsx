@@ -54,6 +54,11 @@ interface SupabaseAuthProfile {
   createdByEmail?: string;
 }
 
+interface PendingMfaSession {
+  profile: SupabaseAuthProfile;
+  metadata: Record<string, unknown>;
+}
+
 interface LoginAccessPageProps {
   mode: "setup" | "login";
   lang: LangKey;
@@ -165,6 +170,49 @@ async function fetchGapTrackProfile(userId: string, fallbackEmail: string): Prom
   };
 }
 
+function metadataString(metadata: Record<string, unknown>, key: string): string | undefined {
+  const value = metadata[key];
+  return typeof value === "string" && value.trim() ? value : undefined;
+}
+
+async function needsMfaChallenge(): Promise<boolean> {
+  const mfa = (supabase.auth as any).mfa;
+  if (!mfa?.getAuthenticatorAssuranceLevel) return false;
+
+  const { data, error } = await mfa.getAuthenticatorAssuranceLevel();
+  if (error) throw error;
+
+  return data?.nextLevel === "aal2" && data?.currentLevel !== "aal2";
+}
+
+async function verifyFirstTotpFactor(code: string) {
+  const mfa = (supabase.auth as any).mfa;
+  if (!mfa?.listFactors || !mfa?.challenge || !mfa?.verify) {
+    throw new Error("La double authentification n’est pas disponible sur ce client Supabase.");
+  }
+
+  const factors = await mfa.listFactors();
+  if (factors.error) throw factors.error;
+
+  const totpFactors = Array.isArray(factors.data?.totp) ? factors.data.totp : [];
+  const totpFactor = totpFactors.find((factor: any) => factor?.status === "verified") || totpFactors[0];
+
+  if (!totpFactor?.id) {
+    throw new Error("Aucun facteur 2FA TOTP actif n’a été trouvé pour ce compte.");
+  }
+
+  const challenge = await mfa.challenge({ factorId: totpFactor.id });
+  if (challenge.error) throw challenge.error;
+
+  const verify = await mfa.verify({
+    factorId: totpFactor.id,
+    challengeId: challenge.data.id,
+    code,
+  });
+
+  if (verify.error) throw verify.error;
+  return verify.data;
+}
 
 function planDescription(plan: SubscriptionPlan): string {
   return plan === "premium"
@@ -197,6 +245,10 @@ export function LoginAccessPage({
   const [confirmationPopupOpen, setConfirmationPopupOpen] = useState(false);
   const [existingAccountEmail, setExistingAccountEmail] = useState("");
   const [existingAccountPopupOpen, setExistingAccountPopupOpen] = useState(false);
+  const [pendingMfaSession, setPendingMfaSession] = useState<PendingMfaSession | null>(null);
+  const [mfaCode, setMfaCode] = useState("");
+  const [mfaError, setMfaError] = useState("");
+  const [mfaBusy, setMfaBusy] = useState(false);
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
@@ -267,6 +319,54 @@ export function LoginAccessPage({
       source: "Page d’inscription GapTrack",
     });
     toast.info(lang === "fr" ? "Votre demande Premium est prête : le compte Free reste utilisable en attendant l’activation." : "Your Premium request is ready: the Free account remains usable while activation is pending.");
+  }
+
+  function completeSupabaseAuthentication(profile: SupabaseAuthProfile, metadata: Record<string, unknown>) {
+    onSupabaseAuthenticated?.({
+      email: profile.email,
+      name: profile.name,
+      organization: profile.organization,
+      role: profile.role,
+      subscriptionPlan: profile.subscriptionPlan,
+      createdByUserId: metadataString(metadata, "createdByUserId"),
+      createdByEmail: metadataString(metadata, "createdByEmail"),
+    });
+
+    toast.success(lang === "fr" ? "Connexion réussie." : "Signed in.");
+  }
+
+  async function cancelMfaChallenge() {
+    setPendingMfaSession(null);
+    setMfaCode("");
+    setMfaError("");
+    await supabase.auth.signOut();
+    toast.info(lang === "fr" ? "Vérification 2FA annulée." : "2FA verification cancelled.");
+  }
+
+  async function submitMfaChallenge(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (mfaBusy || !pendingMfaSession) return;
+
+    const code = mfaCode.replace(/\s+/g, "").trim();
+    if (!/^\d{6}$/.test(code)) {
+      setMfaError(lang === "fr" ? "Saisissez le code à 6 chiffres de votre application d’authentification." : "Enter the 6-digit code from your authenticator app.");
+      return;
+    }
+
+    setMfaBusy(true);
+    setMfaError("");
+    try {
+      await verifyFirstTotpFactor(code);
+      const { profile, metadata } = pendingMfaSession;
+      setPendingMfaSession(null);
+      setMfaCode("");
+      completeSupabaseAuthentication(profile, metadata);
+    } catch (error) {
+      console.error("MFA verification failed", error);
+      setMfaError(authErrorMessage(error));
+    } finally {
+      setMfaBusy(false);
+    }
   }
 
   async function handleForgotPassword() {
@@ -407,17 +507,21 @@ export function LoginAccessPage({
         return;
       }
 
-      onSupabaseAuthenticated?.({
-        email: serverProfile.email,
-        name: serverProfile.name,
-        organization: serverProfile.organization,
-        role: serverProfile.role,
-        subscriptionPlan: serverProfile.subscriptionPlan,
-        createdByUserId: typeof profileMetadata.createdByUserId === "string" ? profileMetadata.createdByUserId : undefined,
-        createdByEmail: typeof profileMetadata.createdByEmail === "string" ? profileMetadata.createdByEmail : undefined,
-      });
+      try {
+        if (await needsMfaChallenge()) {
+          setPendingMfaSession({ profile: serverProfile, metadata: profileMetadata as Record<string, unknown> });
+          setMfaCode("");
+          setMfaError("");
+          toast.info(lang === "fr" ? "Confirmez le code 2FA pour terminer la connexion." : "Confirm your 2FA code to complete sign-in.");
+          return;
+        }
+      } catch (mfaError) {
+        console.error("Unable to evaluate MFA requirement", mfaError);
+        toast.error(authErrorMessage(mfaError));
+        return;
+      }
 
-      toast.success(lang === "fr" ? "Connexion réussie." : "Signed in.");
+      completeSupabaseAuthentication(serverProfile, profileMetadata as Record<string, unknown>);
     } finally {
       setBusy(false);
     }
@@ -473,47 +577,92 @@ export function LoginAccessPage({
         <section className="gt-login-card" aria-label={isSetup ? "Création du compte" : "Connexion"}>
           <div className="gt-secure-badge">
             <ShieldCheck aria-hidden="true" />
-            <span>{isSetup ? "Premier accès sécurisé" : "Accès sécurisé"}</span>
+            <span>{pendingMfaSession ? "Double authentification" : isSetup ? "Premier accès sécurisé" : "Accès sécurisé"}</span>
           </div>
 
           <div className="gt-login-heading">
-            <h2>{isSetup ? "Créer un compte" : "Connexion"}</h2>
+            <h2>{pendingMfaSession ? "Code 2FA" : isSetup ? "Créer un compte" : "Connexion"}</h2>
             <p>
-              {isSetup
-                ? `Créez votre accès GapTrack Free maintenant. Vous pourrez demander Premium en parallèle, sans perdre vos données.`
-                : confirmationEmail
-                  ? "Confirmez votre e-mail, puis connectez-vous à votre espace GapTrack"
-                  : "Accédez à votre espace GapTrack"}
+              {pendingMfaSession
+                ? "Saisissez le code de votre application d’authentification pour finaliser l’accès."
+                : isSetup
+                  ? `Créez votre accès GapTrack Free maintenant. Vous pourrez demander Premium en parallèle, sans perdre vos données.`
+                  : confirmationEmail
+                    ? "Confirmez votre e-mail, puis connectez-vous à votre espace GapTrack"
+                    : "Accédez à votre espace GapTrack"}
             </p>
           </div>
 
-          <div className="gt-auth-tabs" role="tablist" aria-label="Connexion ou création de compte">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={authView === "login"}
-              className={authView === "login" ? "gt-auth-tab active" : "gt-auth-tab"}
-              onClick={() => {
-                setAuthView("login");
-                setPassword("");
-              }}
-            >
-              Connexion
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={authView === "signup"}
-              className={authView === "signup" ? "gt-auth-tab active" : "gt-auth-tab"}
-              onClick={() => {
-                setAuthView("signup");
-                setPassword("");
-              }}
-            >
-              Créer un compte
-            </button>
-          </div>
+          {!pendingMfaSession ? (
+            <div className="gt-auth-tabs" role="tablist" aria-label="Connexion ou création de compte">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={authView === "login"}
+                className={authView === "login" ? "gt-auth-tab active" : "gt-auth-tab"}
+                onClick={() => {
+                  setAuthView("login");
+                  setPassword("");
+                }}
+              >
+                Connexion
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={authView === "signup"}
+                className={authView === "signup" ? "gt-auth-tab active" : "gt-auth-tab"}
+                onClick={() => {
+                  setAuthView("signup");
+                  setPassword("");
+                }}
+              >
+                Créer un compte
+              </button>
+            </div>
+          ) : null}
 
+          {pendingMfaSession ? (
+            <form className="gt-form" onSubmit={submitMfaChallenge}>
+              <div className="gt-mfa-card">
+                <ShieldCheck aria-hidden="true" />
+                <div>
+                  <strong>Vérification en deux étapes</strong>
+                  <span>Compte : {pendingMfaSession.profile.email}</span>
+                </div>
+              </div>
+
+              {mfaError ? (
+                <div className="gt-auth-note gt-auth-note-error">
+                  <strong>Code non validé</strong>
+                  <span>{mfaError}</span>
+                </div>
+              ) : null}
+
+              <Field label="Code d’authentification" icon={<ShieldCheck />}>
+                <input
+                  value={mfaCode}
+                  onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  placeholder="123456"
+                  autoComplete="one-time-code"
+                  maxLength={6}
+                  required
+                />
+              </Field>
+
+              <button type="submit" className="gt-primary" disabled={mfaBusy}>
+                {mfaBusy ? <Loader2 className="gt-spin" aria-hidden="true" /> : null}
+                <span>{mfaBusy ? "Vérification…" : "Valider le code 2FA"}</span>
+                {!mfaBusy ? <ArrowRight aria-hidden="true" /> : null}
+              </button>
+
+              <button type="button" className="gt-secondary-action" onClick={cancelMfaChallenge} disabled={mfaBusy}>
+                Annuler et revenir à la connexion
+              </button>
+            </form>
+          ) : (
           <form className="gt-form" onSubmit={submit}>
             {!isSetup && confirmationEmail ? (
               <div className="gt-auth-note">
@@ -630,12 +779,13 @@ export function LoginAccessPage({
             </button>
 
           </form>
+          )}
 
           <div className="gt-protection">
             <div className="gt-protection-icon"><ShieldCheck aria-hidden="true" /></div>
             <div>
-              <h3>Vos données sont protégées</h3>
-              <p>Compte Free utilisable immédiatement : 1 utilisateur, 1 audit actif et preuves locales. Premium est activé côté serveur après validation.</p>
+              <h3>{pendingMfaSession ? "Connexion renforcée" : "Vos données sont protégées"}</h3>
+              <p>{pendingMfaSession ? "Le code 2FA vérifie que vous possédez bien l’application d’authentification liée à ce compte." : "Compte Free utilisable immédiatement : 1 utilisateur, 1 audit actif et preuves locales. Premium est activé côté serveur après validation."}</p>
             </div>
           </div>
         </section>
