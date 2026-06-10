@@ -31,11 +31,15 @@ function buildPremiumRequestMailto(source: string): string {
   const body = [
     "Bonjour Julien,",
     "",
-    "Je souhaite demander l’activation de GapTrack Premium.",
+    "Je souhaite être recontacté pour activer GapTrack Premium.",
     "E-mail à activer : ",
     "Nom : ",
     "Organisation : ",
+    "Besoin principal : audits illimités / exports PDF-CSV / utilisateurs et rôles / autre",
+    "Contexte ou délai souhaité : ",
     `Origine : ${source}`,
+    "",
+    "J’ai compris que je peux commencer en Free en attendant l’activation Premium, sans perdre les données déjà saisies.",
     "",
     "Merci.",
   ].join("\n");
@@ -174,7 +178,19 @@ function HomePage({
 }
 
 function PricingSection({ onSelectPlan, onRequestPremium }: { onSelectPlan: (plan: SubscriptionPlan) => void; onRequestPremium: () => void }) {
-  const plans = [
+  const plans: Array<{
+    key: SubscriptionPlan;
+    label: string;
+    badge: string;
+    price: string;
+    period: string;
+    description: string;
+    features: string[];
+    note?: string;
+    reassurance?: string[];
+    cta: string;
+    highlighted?: boolean;
+  }> = [
     {
       key: "free" as const,
       label: "Free",
@@ -182,7 +198,8 @@ function PricingSection({ onSelectPlan, onRequestPremium }: { onSelectPlan: (pla
       price: "0€",
       period: "/ mois",
       description: "Idéal pour tester GapTrack, préparer un premier audit et structurer vos preuves localement, sans export.",
-      features: ["1 audit actif", "Tableau de bord consultable", "Preuves et notes locales", "Pas d’export PDF / CSV"],
+      features: ["1 audit actif", "Tableau de bord consultable", "Preuves et notes locales", "Passage Premium possible ensuite"],
+      note: "Créez votre compte tout de suite : vous pourrez demander Premium sans repartir de zéro.",
       cta: "Commencer gratuitement",
     },
     {
@@ -192,8 +209,10 @@ function PricingSection({ onSelectPlan, onRequestPremium }: { onSelectPlan: (pla
       price: "Sur devis",
       period: "",
       description: "Pensé pour les équipes, cabinets et organisations qui veulent collaborer, exporter leurs rapports et industrialiser leurs audits.",
-      features: ["Audits illimités", "Exports PDF / CSV", "Utilisateurs et rôles avancés", "Activation manuelle après demande"],
-      cta: "Demander Premium",
+      features: ["Audits illimités", "Exports PDF / CSV", "Utilisateurs et rôles avancés", "Activation sécurisée côté serveur"],
+      note: "Demande préremplie : indiquez simplement l’adresse à activer, votre organisation et votre besoin.",
+      reassurance: ["Compte Free utilisable immédiatement", "Activation Premium sans perte des données saisies", "Contact direct pour clarifier le besoin avant activation"],
+      cta: "Être recontacté pour Premium",
       highlighted: true,
     },
   ];
@@ -206,7 +225,7 @@ function PricingSection({ onSelectPlan, onRequestPremium }: { onSelectPlan: (pla
           OFFRES GAPTRACK
         </div>
         <h2>Choisissez la version adaptée à votre usage</h2>
-        <p>Une version Free pour découvrir la plateforme, puis une version Premium pour collaborer, suivre plus d’audits et professionnaliser votre conformité.</p>
+        <p>Commencez en Free sans attendre, puis demandez Premium quand vous avez besoin d’exports, de plusieurs audits ou d’une gestion avancée des utilisateurs.</p>
       </div>
 
       <div className="gth-pricing-grid">
@@ -227,6 +246,14 @@ function PricingSection({ onSelectPlan, onRequestPremium }: { onSelectPlan: (pla
                 <li key={feature}><CheckCircle2 aria-hidden="true" />{feature}</li>
               ))}
             </ul>
+            {plan.note ? <p className="gth-price-note">{plan.note}</p> : null}
+            {plan.reassurance ? (
+              <div className="gth-premium-reassurance" aria-label="Réassurances Premium">
+                {plan.reassurance.map((item) => (
+                  <span key={item}><ShieldCheck aria-hidden="true" />{item}</span>
+                ))}
+              </div>
+            ) : null}
             <button
               className={plan.highlighted ? "gth-primary" : "gth-secondary"}
               type="button"
@@ -237,6 +264,14 @@ function PricingSection({ onSelectPlan, onRequestPremium }: { onSelectPlan: (pla
             </button>
           </article>
         ))}
+      </div>
+
+      <div className="gth-pricing-reassurance">
+        <ShieldCheck aria-hidden="true" />
+        <div>
+          <strong>Pas besoin d’attendre Premium pour démarrer.</strong>
+          <span>Le compte Free reste le point d’entrée immédiat ; l’activation Premium se fait ensuite proprement côté serveur, sur le même compte.</span>
+        </div>
       </div>
     </section>
   );

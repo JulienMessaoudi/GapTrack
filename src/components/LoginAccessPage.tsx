@@ -90,11 +90,15 @@ function buildPremiumRequestMailto(params: { email?: string; name?: string; orga
   const body = [
     "Bonjour Julien,",
     "",
-    "Je souhaite demander l’activation de GapTrack Premium pour cette adresse e-mail :",
-    params.email ? `E-mail : ${params.email}` : "E-mail : ",
+    "Je souhaite être recontacté pour activer GapTrack Premium.",
+    params.email ? `E-mail à activer : ${params.email}` : "E-mail à activer : ",
     params.name ? `Nom : ${params.name}` : "Nom : ",
     params.organization ? `Organisation : ${params.organization}` : "Organisation : ",
+    "Besoin principal : audits illimités / exports PDF-CSV / utilisateurs et rôles / autre",
+    "Contexte ou délai souhaité : ",
     params.source ? `Origine : ${params.source}` : "Origine : Page d’inscription GapTrack",
+    "",
+    "J’ai compris que je peux créer ou utiliser mon compte Free en attendant l’activation Premium, sans perdre les données déjà saisies.",
     "",
     "Merci.",
   ].join("\n");
@@ -164,8 +168,8 @@ async function fetchGapTrackProfile(userId: string, fallbackEmail: string): Prom
 
 function planDescription(plan: SubscriptionPlan): string {
   return plan === "premium"
-    ? "Audits illimités, exports PDF/CSV et activation manuelle après demande."
-    : "1 audit actif, preuves locales et aucun export PDF/CSV.";
+    ? "Audits illimités, exports PDF/CSV, utilisateurs et rôles avancés. Vos données Free sont conservées après activation."
+    : "1 audit actif, preuves locales et passage Premium possible ensuite, sans recréer de compte.";
 }
 
 function readSelectedPlan(): SubscriptionPlan {
@@ -262,7 +266,7 @@ export function LoginAccessPage({
       organization: organization.trim(),
       source: "Page d’inscription GapTrack",
     });
-    toast.info(lang === "fr" ? "Une demande Premium va être préparée par e-mail." : "A Premium request email will be prepared.");
+    toast.info(lang === "fr" ? "Votre demande Premium est prête : le compte Free reste utilisable en attendant l’activation." : "Your Premium request is ready: the Free account remains usable while activation is pending.");
   }
 
   async function handleForgotPassword() {
@@ -476,7 +480,7 @@ export function LoginAccessPage({
             <h2>{isSetup ? "Créer un compte" : "Connexion"}</h2>
             <p>
               {isSetup
-                ? `Créez votre accès GapTrack Free. Le Premium s’active ensuite manuellement après demande.`
+                ? `Créez votre accès GapTrack Free maintenant. Vous pourrez demander Premium en parallèle, sans perdre vos données.`
                 : confirmationEmail
                   ? "Confirmez votre e-mail, puis connectez-vous à votre espace GapTrack"
                   : "Accédez à votre espace GapTrack"}
@@ -538,8 +542,18 @@ export function LoginAccessPage({
                 >
                   <span>Premium</span>
                   <strong>Sur devis</strong>
-                  <small>Demande par e-mail, activation manuelle</small>
+                  <small>Demande préremplie, activation serveur</small>
                 </button>
+              </div>
+            ) : null}
+
+            {isSetup ? (
+              <div className="gt-premium-helper">
+                <Mail aria-hidden="true" />
+                <div>
+                  <strong>Pas besoin d’attendre Premium</strong>
+                  <span>Créez votre compte Free maintenant : la demande Premium est préremplie et l’activation se fera ensuite sur le même compte.</span>
+                </div>
               </div>
             ) : null}
 
@@ -548,7 +562,7 @@ export function LoginAccessPage({
                 <div className={`gt-selected-plan gt-selected-plan-${selectedPlan}`}>
                   <CheckCircle2 aria-hidden="true" />
                   <div>
-                    <span>Offre activée à la création</span>
+                    <span>Offre activée immédiatement</span>
                     <strong>Free</strong>
                   </div>
                   <p>{planDescription("free")}</p>
@@ -621,7 +635,7 @@ export function LoginAccessPage({
             <div className="gt-protection-icon"><ShieldCheck aria-hidden="true" /></div>
             <div>
               <h3>Vos données sont protégées</h3>
-              <p>Authentification Supabase, session protégée et activation Premium contrôlée par le propriétaire.</p>
+              <p>Compte Free utilisable immédiatement, session protégée et activation Premium contrôlée côté serveur après validation.</p>
             </div>
           </div>
         </section>
@@ -640,7 +654,7 @@ export function LoginAccessPage({
             <p>
               Cliquez sur le lien envoyé à <strong>{confirmationEmail}</strong>, puis revenez vous connecter.
             </p>
-            <p className="gt-confirm-plan">Offre activée : <strong>Free</strong>. Le Premium s’active manuellement après validation.</p>
+            <p className="gt-confirm-plan">Offre activée : <strong>Free</strong>. Vous pouvez demander Premium ensuite sans recréer votre compte.</p>
             <button
               type="button"
               className="gt-primary"

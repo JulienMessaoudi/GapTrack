@@ -1096,3 +1096,42 @@
   width: 0;
   height: 0;
 }
+
+/* Premium request reassurance */
+.gt-premium-helper {
+  margin: -4px 0 18px;
+  padding: 14px 16px;
+  border: 1px solid rgba(87, 224, 204, .22);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(35, 142, 174, .13), rgba(255,255,255,.035));
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  color: #dce8fb;
+}
+
+.gt-premium-helper > svg {
+  width: 19px;
+  height: 19px;
+  margin-top: 1px;
+  flex: 0 0 auto;
+  color: #55dcc7;
+}
+
+.gt-premium-helper strong,
+.gt-premium-helper span {
+  display: block;
+}
+
+.gt-premium-helper strong {
+  color: #fff;
+  font-size: 14px;
+  font-weight: 850;
+}
+
+.gt-premium-helper span {
+  margin-top: 4px;
+  color: #b8c7dc;
+  font-size: 13px;
+  line-height: 1.45;
+}

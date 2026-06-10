@@ -264,11 +264,15 @@ function buildPremiumRequestMailto(params: { email?: string; name?: string; orga
   const body = [
     "Bonjour Julien,",
     "",
-    "Je souhaite demander l’activation de GapTrack Premium pour cette adresse e-mail :",
-    params.email ? `E-mail : ${params.email}` : "E-mail : ",
+    "Je souhaite être recontacté pour activer GapTrack Premium.",
+    params.email ? `E-mail à activer : ${params.email}` : "E-mail à activer : ",
     params.name ? `Nom : ${params.name}` : "Nom : ",
     params.organization ? `Organisation : ${params.organization}` : "Organisation : ",
+    "Besoin principal : audits illimités / exports PDF-CSV / utilisateurs et rôles / autre",
+    "Contexte ou délai souhaité : ",
     params.source ? `Origine : ${params.source}` : "Origine : GapTrack",
+    "",
+    "J’ai compris que je peux continuer à utiliser mon compte Free en attendant l’activation Premium, sans perdre les données déjà saisies.",
     "",
     "Merci.",
   ].join("\n");
@@ -5044,7 +5048,7 @@ function SettingsProfileView({
         lang === "fr" ? "1 audit actif pour démarrer" : "1 active audit to get started",
         lang === "fr" ? "Saisie des contrôles et suivi des écarts" : "Control assessment and gap tracking",
         lang === "fr" ? "Ajout de preuves et notes selon les droits du compte" : "Evidence and notes according to account permissions",
-        lang === "fr" ? "Demande Premium par e-mail avec activation manuelle" : "Premium request by email with manual activation",
+        lang === "fr" ? "Demande Premium préremplie, sans recréer de compte" : "Prefilled Premium request, no new account required",
       ];
   const subscriptionLockedFeatures = hasPremiumSubscription
     ? []
@@ -5474,8 +5478,8 @@ function SettingsProfileView({
                     ? "Votre compte dispose des fonctionnalités avancées de GapTrack."
                     : "Your account has access to GapTrack advanced features.")
                   : (lang === "fr"
-                    ? "Votre compte est en Free. Le Premium s’active manuellement après demande."
-                    : "Your account is on Free. Premium is manually activated after request.")}
+                    ? "Votre compte est en Free et reste utilisable immédiatement. Premium pourra être activé côté serveur sur ce même compte."
+                    : "Your account is on Free and remains usable immediately. Premium can be enabled server-side on this same account.")}
               </p>
               <div className="mt-4 rounded-xl border bg-background/60 p-3 text-xs text-muted-foreground">
                 {lang === "fr" ? "Adresse associée" : "Linked address"}
@@ -5531,8 +5535,8 @@ function SettingsProfileView({
                     ? "Vous pouvez contacter le support pour toute question liée à votre offre Premium."
                     : "You can contact support for any question about your Premium plan.")
                   : (lang === "fr"
-                    ? "Un e-mail prérempli sera préparé avec votre adresse, nom et organisation. L’activation reste contrôlée côté serveur."
-                    : "A prefilled email will be prepared with your address, name, and organization. Activation remains server-side controlled.")}
+                    ? "Un e-mail prérempli sera préparé avec votre adresse, nom, organisation et besoin. Vous pouvez continuer à travailler en Free pendant la validation."
+                    : "A prefilled email will be prepared with your address, name, organization, and need. You can keep working on Free while validation is pending.")}
               </p>
               <Button type="button" className="mt-4" onClick={requestPremiumFromSettings}>
                 <Mail className="mr-2 h-4 w-4" />
@@ -5558,7 +5562,7 @@ function SettingsProfileView({
                 </div>
                 <div className="flex items-start gap-2">
                   <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-300" />
-                  <span>{lang === "fr" ? "Activation Premium réservée à la fonction Supabase sécurisée." : "Premium activation reserved to the secured Supabase function."}</span>
+                  <span>{lang === "fr" ? "Activation Premium réservée à la fonction Supabase sécurisée, sur le même compte." : "Premium activation reserved to the secured Supabase function, on the same account."}</span>
                 </div>
                 <div className="flex items-start gap-2">
                   <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-300" />
