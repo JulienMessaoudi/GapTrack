@@ -94,7 +94,7 @@ function buildPremiumRequestMailto(params: { email?: string; name?: string; orga
     params.email ? `E-mail à activer : ${params.email}` : "E-mail à activer : ",
     params.name ? `Nom : ${params.name}` : "Nom : ",
     params.organization ? `Organisation : ${params.organization}` : "Organisation : ",
-    "Besoin principal : audits illimités / exports PDF-CSV / utilisateurs et rôles / autre",
+    "Besoin principal : audits illimités / exports PDF-CSV / preuves cloud / validation des preuves / utilisateurs et rôles / modèles personnalisés / autre",
     "Contexte ou délai souhaité : ",
     params.source ? `Origine : ${params.source}` : "Origine : Page d’inscription GapTrack",
     "",
@@ -168,8 +168,8 @@ async function fetchGapTrackProfile(userId: string, fallbackEmail: string): Prom
 
 function planDescription(plan: SubscriptionPlan): string {
   return plan === "premium"
-    ? "Audits illimités, exports PDF/CSV, utilisateurs et rôles avancés. Vos données Free sont conservées après activation."
-    : "1 audit actif, preuves locales et passage Premium possible ensuite, sans recréer de compte.";
+    ? "Audits illimités, exports PDF/CSV, preuves cloud, validation des preuves, rôles avancés et modèles personnalisés. Vos données Free sont conservées après activation."
+    : "1 audit actif, 1 utilisateur, preuves locales et passage Premium possible ensuite, sans recréer de compte.";
 }
 
 function readSelectedPlan(): SubscriptionPlan {
@@ -532,7 +532,7 @@ export function LoginAccessPage({
                 >
                   <span>Free</span>
                   <strong>0€</strong>
-                  <small>Découvrir avec un audit actif</small>
+                  <small>Solo : 1 audit actif</small>
                 </button>
                 <button
                   type="button"
@@ -542,7 +542,7 @@ export function LoginAccessPage({
                 >
                   <span>Premium</span>
                   <strong>Sur devis</strong>
-                  <small>Demande préremplie, activation serveur</small>
+                  <small>Équipe, exports, preuves cloud</small>
                 </button>
               </div>
             ) : null}
@@ -552,7 +552,7 @@ export function LoginAccessPage({
                 <Mail aria-hidden="true" />
                 <div>
                   <strong>Pas besoin d’attendre Premium</strong>
-                  <span>Créez votre compte Free maintenant : la demande Premium est préremplie et l’activation se fera ensuite sur le même compte.</span>
+                  <span>Créez votre compte Free maintenant : Premium débloquera ensuite les audits illimités, exports, rôles, preuves cloud et validations sur le même compte.</span>
                 </div>
               </div>
             ) : null}
@@ -635,7 +635,7 @@ export function LoginAccessPage({
             <div className="gt-protection-icon"><ShieldCheck aria-hidden="true" /></div>
             <div>
               <h3>Vos données sont protégées</h3>
-              <p>Compte Free utilisable immédiatement, session protégée et activation Premium contrôlée côté serveur après validation.</p>
+              <p>Compte Free utilisable immédiatement : 1 utilisateur, 1 audit actif et preuves locales. Premium est activé côté serveur après validation.</p>
             </div>
           </div>
         </section>

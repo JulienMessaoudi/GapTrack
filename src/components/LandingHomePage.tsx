@@ -35,7 +35,7 @@ function buildPremiumRequestMailto(source: string): string {
     "E-mail à activer : ",
     "Nom : ",
     "Organisation : ",
-    "Besoin principal : audits illimités / exports PDF-CSV / utilisateurs et rôles / autre",
+    "Besoin principal : audits illimités / exports PDF-CSV / preuves cloud / validation des preuves / utilisateurs et rôles / modèles personnalisés / autre",
     "Contexte ou délai souhaité : ",
     `Origine : ${source}`,
     "",
@@ -197,9 +197,9 @@ function PricingSection({ onSelectPlan, onRequestPremium }: { onSelectPlan: (pla
       badge: "Pour démarrer",
       price: "0€",
       period: "/ mois",
-      description: "Idéal pour tester GapTrack, préparer un premier audit et structurer vos preuves localement, sans export.",
-      features: ["1 audit actif", "Tableau de bord consultable", "Preuves et notes locales", "Passage Premium possible ensuite"],
-      note: "Créez votre compte tout de suite : vous pourrez demander Premium sans repartir de zéro.",
+      description: "Idéal pour tester GapTrack seul, préparer un premier audit et structurer vos preuves localement, sans engagement.",
+      features: ["1 audit actif", "1 utilisateur", "Tableau de bord de base", "Preuves et notes locales", "Sans export PDF / CSV"],
+      note: "Free sert à découvrir la valeur du produit ; Premium prend le relais dès qu’il faut collaborer, exporter ou tracer finement.",
       cta: "Commencer gratuitement",
     },
     {
@@ -208,10 +208,10 @@ function PricingSection({ onSelectPlan, onRequestPremium }: { onSelectPlan: (pla
       badge: "Le plus complet",
       price: "Sur devis",
       period: "",
-      description: "Pensé pour les équipes, cabinets et organisations qui veulent collaborer, exporter leurs rapports et industrialiser leurs audits.",
-      features: ["Audits illimités", "Exports PDF / CSV", "Utilisateurs et rôles avancés", "Activation sécurisée côté serveur"],
+      description: "Pensé pour les équipes, cabinets et organisations qui veulent collaborer, exporter, valider les preuves et industrialiser leurs audits.",
+      features: ["Audits illimités", "Exports PDF / CSV", "Utilisateurs et rôles avancés", "Stockage cloud sécurisé des preuves", "Validation / refus des preuves", "Modèles personnalisés et journal d’audit"],
       note: "Demande préremplie : indiquez simplement l’adresse à activer, votre organisation et votre besoin.",
-      reassurance: ["Compte Free utilisable immédiatement", "Activation Premium sans perte des données saisies", "Contact direct pour clarifier le besoin avant activation"],
+      reassurance: ["Compte Free utilisable immédiatement", "Activation Premium sans perte des données saisies", "Collaboration, exports et traçabilité débloqués après validation"],
       cta: "Être recontacté pour Premium",
       highlighted: true,
     },
@@ -225,7 +225,7 @@ function PricingSection({ onSelectPlan, onRequestPremium }: { onSelectPlan: (pla
           OFFRES GAPTRACK
         </div>
         <h2>Choisissez la version adaptée à votre usage</h2>
-        <p>Commencez en Free sans attendre, puis demandez Premium quand vous avez besoin d’exports, de plusieurs audits ou d’une gestion avancée des utilisateurs.</p>
+        <p>Commencez en Free pour tester seul sur un audit, puis demandez Premium quand vous avez besoin d’audits illimités, d’exports, de preuves cloud, de validation et de collaboration équipe.</p>
       </div>
 
       <div className="gth-pricing-grid">
@@ -270,7 +270,7 @@ function PricingSection({ onSelectPlan, onRequestPremium }: { onSelectPlan: (pla
         <ShieldCheck aria-hidden="true" />
         <div>
           <strong>Pas besoin d’attendre Premium pour démarrer.</strong>
-          <span>Le compte Free reste le point d’entrée immédiat ; l’activation Premium se fait ensuite proprement côté serveur, sur le même compte.</span>
+          <span>Free reste le point d’entrée immédiat ; Premium s’active ensuite proprement côté serveur sur le même compte, avec vos données conservées.</span>
         </div>
       </div>
     </section>

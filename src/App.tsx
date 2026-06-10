@@ -268,7 +268,7 @@ function buildPremiumRequestMailto(params: { email?: string; name?: string; orga
     params.email ? `E-mail à activer : ${params.email}` : "E-mail à activer : ",
     params.name ? `Nom : ${params.name}` : "Nom : ",
     params.organization ? `Organisation : ${params.organization}` : "Organisation : ",
-    "Besoin principal : audits illimités / exports PDF-CSV / utilisateurs et rôles / autre",
+    "Besoin principal : audits illimités / exports PDF-CSV / preuves cloud / validation des preuves / utilisateurs et rôles / modèles personnalisés / autre",
     "Contexte ou délai souhaité : ",
     params.source ? `Origine : ${params.source}` : "Origine : GapTrack",
     "",
@@ -584,6 +584,16 @@ function openEvidenceFilesDb(): Promise<IDBDatabase> {
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error || new Error("Unable to open evidence storage."));
   });
+}
+
+async function saveEvidenceFile(record: StoredEvidenceFile): Promise<void> {
+  const db = await openEvidenceFilesDb();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(EVIDENCE_FILES_STORE_NAME, "readwrite");
+    tx.objectStore(EVIDENCE_FILES_STORE_NAME).put(record);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error || new Error("Unable to save evidence file."));
+  }).finally(() => db.close());
 }
 
 async function getEvidenceFile(id: string): Promise<StoredEvidenceFile | null> {
@@ -3789,7 +3799,9 @@ function CreateAuditWizard({
   templates,
   currentRowsCount,
   onImportTemplate,
-  onCreateAudit
+  onCreateAudit,
+  canImportTemplates = true,
+  onPremiumRequired,
 }:{
   open: boolean;
   onClose: () => void;
@@ -3797,6 +3809,8 @@ function CreateAuditWizard({
   templates: ChecklistTemplate[];
   currentRowsCount: number;
   onImportTemplate: (frameworkId: FrameworkId, file: File) => Promise<ChecklistTemplate>;
+  canImportTemplates?: boolean;
+  onPremiumRequired?: (featureLabel?: string) => boolean;
   onCreateAudit: (payload: {
     name: string;
     frameworkId: FrameworkId;
@@ -4077,8 +4091,8 @@ function CreateAuditWizard({
                     <div className="font-medium">{lang==='fr' ? "Source de la checklist" : "Checklist source"}</div>
                     <p className="text-sm text-muted-foreground">
                       {lang === "fr"
-                        ? "Utilisez la checklist déjà chargée ou importez un référentiel CSV/JSON."
-                        : "Use the existing checklist or import a CSV/JSON framework."}
+                        ? "Utilisez la checklist déjà chargée. L’import de modèles CSV/JSON est réservé à Premium."
+                        : "Use the existing checklist. CSV/JSON template import is reserved for Premium."}
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -4119,6 +4133,7 @@ function CreateAuditWizard({
                             type="file"
                             accept=".json,.csv,application/json,text/csv"
                             style={{display:"none"}}
+                            disabled={busy || !canImportTemplates}
                             onChange={async (e)=>{
                               const f = e.target.files?.[0];
                               if(!f) return;
@@ -4135,7 +4150,7 @@ function CreateAuditWizard({
                                 setTemplateId(tpl.id);
                               }catch(err){
                                 console.error(err);
-                                toast.error(lang==='fr' ? "Import impossible (format JSON/CSV)" : "Import failed (JSON/CSV format)");
+                                toast.error(err instanceof Error && err.message ? err.message : (lang==='fr' ? "Import impossible (format JSON/CSV)" : "Import failed (JSON/CSV format)"));
                               }finally{
                                 setBusy(false);
                                 (e.target as any).value = "";
@@ -4143,6 +4158,10 @@ function CreateAuditWizard({
                             }}
                           />
                           <Button size="sm" variant="outline" onClick={(ev)=>{
+                            if (!canImportTemplates) {
+                              onPremiumRequired?.(lang === "fr" ? "L’import de modèles personnalisés" : "Custom template import");
+                              return;
+                            }
                             const input = (ev.currentTarget.parentElement?.querySelector('input[type="file"]') as HTMLInputElement | null);
                             input?.click();
                           }} disabled={busy}>
@@ -4178,6 +4197,14 @@ function CreateAuditWizard({
                         </Button>
                       </div>
                     </div>
+
+                    {!canImportTemplates ? (
+                      <div className="mt-3 rounded-lg border border-cyan-500/30 bg-cyan-500/10 p-3 text-sm text-cyan-900 dark:text-cyan-100">
+                        {lang === "fr"
+                          ? "Free permet de travailler sur l’audit en cours. Les imports de modèles personnalisés sont inclus dans Premium."
+                          : "Free lets you work on the current audit. Custom template imports are included in Premium."}
+                      </div>
+                    ) : null}
 
                     {available.length > 0 ? (
                       <div className="mt-3">
@@ -4663,6 +4690,42 @@ function Sidebar({ current, onNavigate, lang }: { current: string; onNavigate: (
   );
 }
 
+
+function PremiumFeatureNotice({ lang, title, description, bullets, onRequestPremium }: { lang: LangKey; title: string; description: string; bullets?: string[]; onRequestPremium: () => void }) {
+  return (
+    <div className="p-4">
+      <Card className="glass-card border-cyan-500/30 bg-cyan-500/5">
+        <CardContent className="p-6">
+          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div className="min-w-0">
+              <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-3 py-1 text-xs font-semibold text-cyan-800 dark:text-cyan-100">
+                <ShieldCheck className="h-4 w-4" />
+                {lang === "fr" ? "Premium" : "Premium"}
+              </div>
+              <h2 className="text-xl font-semibold">{title}</h2>
+              <p className="mt-2 max-w-2xl text-sm text-muted-foreground">{description}</p>
+              {bullets?.length ? (
+                <div className="mt-4 grid gap-2 md:grid-cols-2">
+                  {bullets.map((item) => (
+                    <div key={item} className="flex items-start gap-2 rounded-xl border bg-background/60 p-3 text-sm">
+                      <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-300" />
+                      <span>{item}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+            <Button type="button" onClick={onRequestPremium} className="shrink-0">
+              <Mail className="mr-2 h-4 w-4" />
+              {lang === "fr" ? "Demander Premium" : "Request Premium"}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 function MobileNav({ current, onNavigate, lang }: { current: string; onNavigate: (k: string) => void; lang: LangKey }) {
   const t = I18N[lang];
   const items = [
@@ -5040,22 +5103,28 @@ function SettingsProfileView({
   const subscriptionIncludedFeatures = hasPremiumSubscription
     ? [
         lang === "fr" ? "Audits illimités" : "Unlimited audits",
-        lang === "fr" ? "Exports PDF et CSV activés" : "PDF and CSV exports enabled",
-        lang === "fr" ? "Gestion avancée des utilisateurs" : "Advanced user management",
-        lang === "fr" ? "Preuves et rapports utilisables sans restriction d’offre" : "Evidence and reports available without plan restrictions",
+        lang === "fr" ? "Exports PDF / CSV et journal exportable" : "PDF / CSV exports and exportable audit log",
+        lang === "fr" ? "Utilisateurs, rôles et collaboration équipe" : "Users, roles, and team collaboration",
+        lang === "fr" ? "Stockage cloud sécurisé des preuves" : "Secure cloud evidence storage",
+        lang === "fr" ? "Validation / refus des preuves" : "Evidence validation / rejection workflow",
+        lang === "fr" ? "Import de modèles personnalisés" : "Custom template imports",
       ]
     : [
-        lang === "fr" ? "1 audit actif pour démarrer" : "1 active audit to get started",
+        lang === "fr" ? "1 audit actif pour tester GapTrack" : "1 active audit to try GapTrack",
+        lang === "fr" ? "1 utilisateur, usage individuel" : "1 user, individual use",
         lang === "fr" ? "Saisie des contrôles et suivi des écarts" : "Control assessment and gap tracking",
-        lang === "fr" ? "Ajout de preuves et notes selon les droits du compte" : "Evidence and notes according to account permissions",
-        lang === "fr" ? "Demande Premium préremplie, sans recréer de compte" : "Prefilled Premium request, no new account required",
+        lang === "fr" ? "Preuves et notes stockées localement" : "Locally stored evidence and notes",
       ];
   const subscriptionLockedFeatures = hasPremiumSubscription
     ? []
     : [
-        lang === "fr" ? "Exports PDF / CSV" : "PDF / CSV exports",
         lang === "fr" ? "Audits illimités" : "Unlimited audits",
-        lang === "fr" ? "Création et gestion avancée des utilisateurs" : "Advanced user creation and management",
+        lang === "fr" ? "Exports PDF / CSV" : "PDF / CSV exports",
+        lang === "fr" ? "Utilisateurs, rôles et collaboration" : "Users, roles, and collaboration",
+        lang === "fr" ? "Stockage cloud sécurisé des preuves" : "Secure cloud evidence storage",
+        lang === "fr" ? "Validation / refus des preuves" : "Evidence validation / rejection",
+        lang === "fr" ? "Modèles personnalisés" : "Custom templates",
+        lang === "fr" ? "Journal d’audit avancé" : "Advanced audit log",
       ];
 
   function requestPremiumFromSettings() {
@@ -5566,7 +5635,7 @@ function SettingsProfileView({
                 </div>
                 <div className="flex items-start gap-2">
                   <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-300" />
-                  <span>{lang === "fr" ? "Les exports restent bloqués côté interface tant que l’offre n’est pas Premium." : "Exports stay blocked in the UI until the plan is Premium."}</span>
+                  <span>{lang === "fr" ? "Les exports, la collaboration, les preuves cloud, la validation et les modèles personnalisés restent bloqués tant que l’offre n’est pas Premium." : "Exports, collaboration, cloud evidence, validation, and custom templates stay locked until the plan is Premium."}</span>
                 </div>
               </div>
             </div>
@@ -7122,6 +7191,7 @@ function PlanView({
   setProofStatusForRow,
   onOpenEvidence,
   canExport = true,
+  canAssignOwners = true,
   onPremiumRequired,
 }: {
   rows: ControlItem[];
@@ -7133,6 +7203,7 @@ function PlanView({
   setProofStatusForRow: (controlId: string, status: EvidenceStatus) => void;
   onOpenEvidence: (control: ControlItem) => void;
   canExport?: boolean;
+  canAssignOwners?: boolean;
   onPremiumRequired?: (featureLabel?: string) => boolean;
 }) {
   const t = I18N[lang];
@@ -8005,9 +8076,18 @@ function PlanView({
                           <div className="text-xs text-muted-foreground">{lang === "fr" ? "Responsable" : "Owner"}</div>
                           <Input
                             value={plan.owner || ""}
-                            placeholder={lang === "fr" ? "Ex: DSI / RSSI / Prestataire..." : "e.g., CIO / CISO / Vendor..."}
+                            placeholder={canAssignOwners ? (lang === "fr" ? "Ex: DSI / RSSI / Prestataire..." : "e.g., CIO / CISO / Vendor...") : (lang === "fr" ? "Assignation réservée à Premium" : "Assignment reserved for Premium")}
+                            readOnly={!canAssignOwners}
+                            onFocus={() => {
+                              if (!canAssignOwners) onPremiumRequired?.(lang === "fr" ? "L’assignation des responsables" : "Owner assignment");
+                            }}
                             onChange={(e) => patchPlan(selectedRow.id, { owner: e.target.value })}
                           />
+                          {!canAssignOwners ? (
+                            <div className="text-[11px] text-muted-foreground">
+                              {lang === "fr" ? "Free garde un plan simple ; l’assignation nominative est Premium." : "Free keeps a simple plan; named assignment is Premium."}
+                            </div>
+                          ) : null}
                         </div>
 
                         <div className="space-y-1">
@@ -9352,7 +9432,7 @@ function AuditLogView({ entries, lang, onExport, onClear, canClear, canExport = 
   );
 }
 
-function EvidenceDrawer({ open, onClose, control, auditSessionId, evidenceMap, proofStatusMap, commitEvidenceChange, lang, canAddEvidence, canReviewEvidence, onAuditEvent }: { open: boolean; onClose: ()=>void; control: ControlItem | null; auditSessionId: string; evidenceMap: Record<string, EvidenceItem[]>; proofStatusMap: EvidenceStatusMap; commitEvidenceChange: (nextEvidenceMap: Record<string, EvidenceItem[]>, nextProofStatusMap?: EvidenceStatusMap) => void; lang: LangKey; canAddEvidence: boolean; canReviewEvidence: boolean; onAuditEvent?: (entry: Omit<AuditLogEntry, "id" | "at" | "actor" | "actorEmail">) => void }){
+function EvidenceDrawer({ open, onClose, control, auditSessionId, evidenceMap, proofStatusMap, commitEvidenceChange, lang, canAddEvidence, canReviewEvidence, canUseCloudStorage, onAuditEvent }: { open: boolean; onClose: ()=>void; control: ControlItem | null; auditSessionId: string; evidenceMap: Record<string, EvidenceItem[]>; proofStatusMap: EvidenceStatusMap; commitEvidenceChange: (nextEvidenceMap: Record<string, EvidenceItem[]>, nextProofStatusMap?: EvidenceStatusMap) => void; lang: LangKey; canAddEvidence: boolean; canReviewEvidence: boolean; canUseCloudStorage: boolean; onAuditEvent?: (entry: Omit<AuditLogEntry, "id" | "at" | "actor" | "actorEmail">) => void }){
   const t = I18N[lang];
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [note, setNote] = useState("");
@@ -9385,8 +9465,8 @@ function EvidenceDrawer({ open, onClose, control, auditSessionId, evidenceMap, p
 
   const setProofStatus = (status: EvidenceStatus) => {
     const coerced = coerceEvidenceStatusForCount(status, list.length);
-    if ((coerced === "validated" || coerced === "refused") && !canReviewEvidence) {
-      toast.error(lang === "fr" ? "Seul un auditeur ou administrateur peut valider ou refuser une preuve." : "Only an auditor or administrator can validate or reject evidence.");
+    if (["to_validate", "validated", "refused"].includes(coerced) && !canReviewEvidence) {
+      toast.error(lang === "fr" ? "Le workflow de validation des preuves est réservé à Premium." : "The evidence validation workflow is reserved for Premium.");
       return;
     }
     if (coerced === proofStatus) return;
@@ -9449,27 +9529,58 @@ function EvidenceDrawer({ open, onClose, control, auditSessionId, evidenceMap, p
       if (fileError) throw new Error(fileError);
 
       const sha256 = await sha256File(file);
-      item = await uploadEvidenceFileToBackend({
-        file,
-        auditSessionId,
-        controlId: control.id,
-        evidenceId: id,
-        addedAt,
-        addedBy,
-        sha256,
-      });
+      if (canUseCloudStorage) {
+        item = await uploadEvidenceFileToBackend({
+          file,
+          auditSessionId,
+          controlId: control.id,
+          evidenceId: id,
+          addedAt,
+          addedBy,
+          sha256,
+        });
 
-      toast.success(
-        lang === "fr"
-          ? "Preuve envoyée dans le stockage sécurisé Supabase."
-          : "Evidence uploaded to secure Supabase storage."
-      );
+        toast.success(
+          lang === "fr"
+            ? "Preuve envoyée dans le stockage sécurisé Supabase."
+            : "Evidence uploaded to secure Supabase storage."
+        );
+      } else {
+        const safeFilename = safeStorageFilename(file.name);
+        const mimeType = resolveSafeMimeType(file);
+        await saveEvidenceFile({
+          id,
+          blob: file,
+          filename: safeFilename,
+          mimeType,
+          size: file.size,
+          addedAt,
+          sha256,
+        });
+        item = {
+          id,
+          filename: safeFilename,
+          size: file.size,
+          mimeType,
+          addedAt,
+          addedBy,
+          storageKind: "indexeddb",
+          storageKey: id,
+          sha256,
+          contentAvailable: true,
+        };
+        toast.success(
+          lang === "fr"
+            ? "Preuve enregistrée localement. Le stockage cloud sécurisé est inclus dans Premium."
+            : "Evidence saved locally. Secure cloud storage is included in Premium."
+        );
+      }
     } catch (error) {
       console.error("Evidence upload error:", error);
       toast.error(
-        lang === "fr"
-          ? "Impossible d’envoyer la preuve dans le stockage sécurisé."
-          : "Unable to upload the evidence to secure storage."
+        canUseCloudStorage
+          ? (lang === "fr" ? "Impossible d’envoyer la preuve dans le stockage sécurisé." : "Unable to upload the evidence to secure storage.")
+          : (lang === "fr" ? "Impossible d’enregistrer la preuve localement." : "Unable to save the evidence locally.")
       );
       return;
     }
@@ -9562,9 +9673,13 @@ function EvidenceDrawer({ open, onClose, control, auditSessionId, evidenceMap, p
           <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-muted-foreground flex gap-2">
             <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-300" />
             <div>
-              {lang === "fr"
-                ? "Les fichiers ajoutés ici sont envoyés dans un bucket privé Supabase Storage. L’accès se fait par URL signée temporaire et les droits sont contrôlés par les policies RLS."
-                : "Files added here are uploaded to a private Supabase Storage bucket. Access uses temporary signed URLs and permissions are controlled by RLS policies."}
+              {canUseCloudStorage
+                ? (lang === "fr"
+                  ? "Premium actif : les fichiers ajoutés ici sont envoyés dans un bucket privé Supabase Storage avec URL signée temporaire et policies RLS."
+                  : "Premium active: files added here are uploaded to a private Supabase Storage bucket with temporary signed URLs and RLS policies.")
+                : (lang === "fr"
+                  ? "Offre Free : les fichiers sont conservés localement dans ce navigateur. Passez en Premium pour le stockage cloud sécurisé et partagé."
+                  : "Free plan: files are stored locally in this browser. Upgrade to Premium for secure shared cloud storage.")}
             </div>
           </div>
 
@@ -9588,9 +9703,13 @@ function EvidenceDrawer({ open, onClose, control, auditSessionId, evidenceMap, p
               </SelectContent>
             </Select>
             <div className="text-xs text-muted-foreground">
-              {lang === "fr"
-                ? "Aucune preuve est automatique quand aucun fichier ni note n’existe. Dès qu’une preuve est ajoutée, le statut peut être Preuve ajoutée, À valider, Validée ou Refusée / insuffisante."
-                : "No evidence is automatic when no file or note exists. As soon as evidence is added, the status can be Evidence added, To validate, Validated, or Rejected / insufficient."}
+              {canReviewEvidence
+                ? (lang === "fr"
+                  ? "Premium : les preuves peuvent être envoyées en validation, validées ou refusées par un auditeur / administrateur."
+                  : "Premium: evidence can be submitted, validated, or rejected by an auditor / administrator.")
+                : (lang === "fr"
+                  ? "Free : le statut indique surtout la présence d’une preuve. Le workflow de validation / refus est réservé à Premium."
+                  : "Free: the status mainly indicates whether evidence exists. Validation / rejection workflow is reserved for Premium.")}
             </div>
           </div>
 
@@ -11282,6 +11401,7 @@ function GapTrackApp({
 
   const setProofStatusForRow = React.useCallback((rowId: string, status: EvidenceStatus) => {
     if (!requireAuditEditor()) return;
+    if (["to_validate", "validated", "refused"].includes(status) && !requirePremiumFeature(lang === "fr" ? "Le workflow de validation des preuves" : "Evidence validation workflow")) return;
     if ((status === "validated" || status === "refused") && !requireEvidenceReviewer()) return;
     rememberSnapshot();
     const count = evidenceMapRef.current[rowId]?.length || 0;
@@ -11307,7 +11427,7 @@ function GapTrackApp({
         after: evidenceStatusLabel(coerced, lang),
       });
     }
-  }, [rememberSnapshot, requireAuditEditor, requireEvidenceReviewer, appendAuditLog, lang]);
+  }, [rememberSnapshot, requireAuditEditor, requireEvidenceReviewer, requirePremiumFeature, appendAuditLog, lang]);
 
   const commitEvidenceChange = React.useCallback((nextEvidenceMap: Record<string, EvidenceItem[]>, nextProofStatusMap?: EvidenceStatusMap) => {
     if (!requireAuditEditor()) return;
@@ -11598,6 +11718,9 @@ function GapTrackApp({
 
   const handleImportTemplate = React.useCallback(async (frameworkId: FrameworkId, file: File) => {
     if (!requireAuditManager()) throw new Error(lang === "fr" ? "Droits insuffisants" : "Insufficient rights");
+    if (!requirePremiumFeature(lang === "fr" ? "L’import de modèles personnalisés" : "Custom template import")) {
+      throw new Error(lang === "fr" ? "Import réservé à Premium" : "Premium required for import");
+    }
     const tpl = await importTemplateFile(frameworkId, file);
     setTemplates((prev) => {
       const next = [tpl, ...prev.filter(p => p.id !== tpl.id)];
@@ -11609,7 +11732,7 @@ function GapTrackApp({
       saveLastTemplateByFramework(last);
     }catch{}
     return tpl;
-  }, [requireAuditManager, lang]);
+  }, [requireAuditManager, requirePremiumFeature, lang]);
 
   const allowCreateAuditForPlan = React.useCallback(() => {
     const hasOnlyBootstrap = sessions.length === 1 && isBootstrapAuditSession(sessions[0]);
@@ -11619,8 +11742,8 @@ function GapTrackApp({
 
     toast.error(
       lang === "fr"
-        ? "Offre Free : 1 audit actif. Passez en Premium pour créer plusieurs audits."
-        : "Free plan: 1 active audit. Upgrade to Premium to create multiple audits.",
+        ? "Offre Free : 1 audit actif pour tester GapTrack. Premium débloque les audits illimités et la collaboration."
+        : "Free plan: 1 active audit to try GapTrack. Premium unlocks unlimited audits and collaboration.",
       {
         action: {
           label: lang === "fr" ? "Demander Premium" : "Request Premium",
@@ -12083,17 +12206,27 @@ function GapTrackApp({
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -8 }}
                 >
-                  <AuditLogView
-                    entries={auditLog}
-                    lang={lang}
-                    onExport={() => {
-                      if (!requirePremiumFeature(lang === "fr" ? "L’export CSV du journal" : "Audit log CSV export")) return;
-                      exportAuditLogCSV(auditLog, lang);
-                    }}
-                    onClear={clearAuditLog}
-                    canClear={canDeleteAuditsFlag}
-                    canExport={isPremiumUser}
-                  />
+                  {isPremiumUser ? (
+                    <AuditLogView
+                      entries={auditLog}
+                      lang={lang}
+                      onExport={() => {
+                        if (!requirePremiumFeature(lang === "fr" ? "L’export CSV du journal" : "Audit log CSV export")) return;
+                        exportAuditLogCSV(auditLog, lang);
+                      }}
+                      onClear={clearAuditLog}
+                      canClear={canDeleteAuditsFlag}
+                      canExport={isPremiumUser}
+                    />
+                  ) : (
+                    <PremiumFeatureNotice
+                      lang={lang}
+                      title={lang === "fr" ? "Journal d’audit avancé" : "Advanced audit log"}
+                      description={lang === "fr" ? "Free enregistre l’essentiel pour votre audit en cours. Premium affiche et exporte le journal horodaté complet des preuves, validations, refus et modifications." : "Free keeps the essentials for your current audit. Premium displays and exports the full timestamped log of evidence, validation, rejection, and changes."}
+                      bullets={lang === "fr" ? ["Historique horodaté", "Export CSV du journal", "Traçabilité des validations", "Support des audits équipe"] : ["Timestamped history", "CSV audit log export", "Validation traceability", "Team audit support"]}
+                      onRequestPremium={() => requestPremiumByEmail(lang === "fr" ? "Journal d’audit avancé" : "Advanced audit log")}
+                    />
+                  )}
                 </motion.div>
               )}
 
@@ -12136,6 +12269,7 @@ function GapTrackApp({
 				setProofStatusForRow={setProofStatusForRow}
 				onOpenEvidence={openEvidence}
 					canExport={isPremiumUser}
+                        canAssignOwners={isPremiumUser}
 					onPremiumRequired={requirePremiumFeature}
 			  />
                 </motion.div>
@@ -12159,7 +12293,8 @@ function GapTrackApp({
         commitEvidenceChange={commitEvidenceChange}
         lang={lang}
         canAddEvidence={canEditAuditFlag}
-        canReviewEvidence={canReviewEvidenceFlag}
+        canReviewEvidence={canReviewEvidenceFlag && isPremiumUser}
+        canUseCloudStorage={isPremiumUser}
         onAuditEvent={appendAuditLog}
       />
 	  
@@ -12187,6 +12322,8 @@ function GapTrackApp({
         templates={templates}
         currentRowsCount={rows.length}
         onImportTemplate={handleImportTemplate}
+        canImportTemplates={isPremiumUser}
+        onPremiumRequired={requirePremiumFeature}
         onCreateAudit={({ name, frameworkId, scope, criticality, templateId, rows: tplRows, organization, auditor, sponsor, auditDate, auditType, objectives, context })=>{
           const sessionBase: Omit<Session, "id" | "createdAt"> = {
             name,
