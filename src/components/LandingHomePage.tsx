@@ -18,33 +18,40 @@ import {
   Star,
   Target,
   Users,
+  X,
 } from "lucide-react";
+import { supabase } from "../lib/supabase";
 import "./LandingHomePage.css";
 
 type LandingPageView = "plateforme" | "apropos";
 type SubscriptionPlan = "free" | "premium";
 
 const PREMIUM_CONTACT_EMAIL = "julien.messaoudi@edu.esiee.fr";
+const PREMIUM_REQUESTS_LOCAL_KEY = "gaptrack_premium_requests_v1";
 
-function buildPremiumRequestMailto(source: string): string {
-  const subject = "Demande d’activation Premium GapTrack";
-  const body = [
-    "Bonjour Julien,",
-    "",
-    "Je souhaite être recontacté pour activer GapTrack Premium.",
-    "E-mail à activer : ",
-    "Nom : ",
-    "Organisation : ",
-    "Besoin principal : audits illimités / exports PDF-CSV / preuves cloud / validation des preuves / utilisateurs et rôles / modèles personnalisés / autre",
-    "Contexte ou délai souhaité : ",
-    `Origine : ${source}`,
-    "",
-    "J’ai compris que je peux commencer en Free en attendant l’activation Premium, sans perdre les données déjà saisies.",
-    "",
-    "Merci.",
-  ].join("\n");
+interface PremiumRequestPayload {
+  name: string;
+  email: string;
+  organization: string;
+  need: string;
+  context: string;
+  source: string;
+  createdAt: string;
+}
 
-  return `mailto:${PREMIUM_CONTACT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+function isValidEmail(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim());
+}
+
+function savePremiumRequestLocally(payload: PremiumRequestPayload) {
+  try {
+    const current = JSON.parse(localStorage.getItem(PREMIUM_REQUESTS_LOCAL_KEY) || "[]");
+    const requests = Array.isArray(current) ? current : [];
+    requests.unshift(payload);
+    localStorage.setItem(PREMIUM_REQUESTS_LOCAL_KEY, JSON.stringify(requests.slice(0, 25)));
+  } catch (error) {
+    console.error("Unable to save the Premium request locally.", error);
+  }
 }
 
 export function LandingHomePage({
@@ -122,6 +129,8 @@ function HomePage({
   onAccess: (plan?: SubscriptionPlan) => void;
   openPage: (page: LandingPageView) => void;
 }) {
+  const [premiumRequestOpen, setPremiumRequestOpen] = useState(false);
+
   return (
     <>
       <section className="gth-hero" id="top">
@@ -169,11 +178,243 @@ function HomePage({
 
       <PricingSection
         onSelectPlan={onAccess}
-        onRequestPremium={() => {
-          window.location.href = buildPremiumRequestMailto("Landing page GapTrack");
-        }}
+        onRequestPremium={() => setPremiumRequestOpen(true)}
+      />
+
+      <PremiumRequestModal
+        open={premiumRequestOpen}
+        onClose={() => setPremiumRequestOpen(false)}
       />
     </>
+  );
+}
+
+
+function PremiumRequestModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [organization, setOrganization] = useState("");
+  const [need, setNeed] = useState("Audits illimités et exports PDF / CSV");
+  const [context, setContext] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [savedLocally, setSavedLocally] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !busy) onClose();
+    };
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [busy, onClose, open]);
+
+  useEffect(() => {
+    if (!open) return;
+    setSubmitted(false);
+    setSavedLocally(false);
+    setError(null);
+  }, [open]);
+
+  if (!open) return null;
+
+  const close = () => {
+    if (busy) return;
+    onClose();
+  };
+
+  const submitPremiumRequest = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (busy) return;
+
+    const cleanName = name.trim();
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanOrganization = organization.trim();
+    const cleanNeed = need.trim();
+    const cleanContext = context.trim();
+
+    if (!cleanName) {
+      setError("Indiquez votre nom pour que l’équipe puisse vous recontacter.");
+      return;
+    }
+
+    if (!isValidEmail(cleanEmail)) {
+      setError("Indiquez une adresse e-mail valide.");
+      return;
+    }
+
+    if (!cleanOrganization) {
+      setError("Indiquez votre organisation ou votre cabinet.");
+      return;
+    }
+
+    const payload: PremiumRequestPayload = {
+      name: cleanName,
+      email: cleanEmail,
+      organization: cleanOrganization,
+      need: cleanNeed,
+      context: cleanContext,
+      source: "Landing page GapTrack",
+      createdAt: new Date().toISOString(),
+    };
+
+    setBusy(true);
+    setError(null);
+
+    try {
+      const { error: insertError } = await supabase
+        .from("gaptrack_premium_requests")
+        .insert({
+          name: payload.name,
+          email: payload.email,
+          organization: payload.organization,
+          need: payload.need,
+          context: payload.context,
+          source: payload.source,
+          status: "new",
+          created_at: payload.createdAt,
+        });
+
+      if (insertError) throw insertError;
+
+      setSavedLocally(false);
+      setSubmitted(true);
+      setName("");
+      setEmail("");
+      setOrganization("");
+      setNeed("Audits illimités et exports PDF / CSV");
+      setContext("");
+    } catch (requestError) {
+      console.error("Unable to send the Premium request to Supabase.", requestError);
+      savePremiumRequestLocally(payload);
+      setSavedLocally(true);
+      setSubmitted(true);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="gth-modal-backdrop" role="presentation" onMouseDown={close}>
+      <section
+        className="gth-premium-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="gth-premium-request-title"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <button className="gth-modal-close" type="button" onClick={close} aria-label="Fermer la demande Premium">
+          <X aria-hidden="true" />
+        </button>
+
+        {submitted ? (
+          <div className="gth-premium-success">
+            <div className="gth-premium-success-icon"><CheckCircle2 aria-hidden="true" /></div>
+            <h2 id="gth-premium-request-title">Demande Premium enregistrée</h2>
+            <p>
+              Votre demande a bien été prise en compte. L’équipe GapTrack pourra revenir vers vous avec les informations d’activation Premium.
+            </p>
+            {savedLocally ? (
+              <p className="gth-premium-local-note">
+                La sauvegarde serveur n’était pas disponible : la demande a été conservée localement dans ce navigateur.
+              </p>
+            ) : null}
+            <button className="gth-primary" type="button" onClick={close}>Fermer</button>
+          </div>
+        ) : (
+          <>
+            <div className="gth-modal-heading">
+              <div className="gth-kicker">
+                <Star aria-hidden="true" />
+                DEMANDE PREMIUM
+              </div>
+              <h2 id="gth-premium-request-title">Demander l’activation Premium</h2>
+              <p>
+                Décrivez votre besoin et l’adresse à activer. La demande est envoyée depuis le site, sans ouvrir votre messagerie.
+              </p>
+            </div>
+
+            <form className="gth-premium-form" onSubmit={submitPremiumRequest}>
+              <div className="gth-form-row">
+                <label>
+                  <span>Nom complet</span>
+                  <input
+                    value={name}
+                    onChange={(event) => setName(event.target.value)}
+                    type="text"
+                    placeholder="Julien Messaoudi"
+                    autoComplete="name"
+                    required
+                  />
+                </label>
+                <label>
+                  <span>E-mail à activer</span>
+                  <input
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                    type="email"
+                    placeholder="prenom.nom@organisation.fr"
+                    autoComplete="email"
+                    required
+                  />
+                </label>
+              </div>
+
+              <label>
+                <span>Organisation</span>
+                <input
+                  value={organization}
+                  onChange={(event) => setOrganization(event.target.value)}
+                  type="text"
+                  placeholder="Entreprise, cabinet, école, collectivité…"
+                  autoComplete="organization"
+                  required
+                />
+              </label>
+
+              <label>
+                <span>Besoin principal</span>
+                <select value={need} onChange={(event) => setNeed(event.target.value)}>
+                  <option>Audits illimités et exports PDF / CSV</option>
+                  <option>Stockage cloud sécurisé des preuves</option>
+                  <option>Validation / refus des preuves</option>
+                  <option>Utilisateurs, rôles et collaboration équipe</option>
+                  <option>Modèles personnalisés</option>
+                  <option>Autre besoin Premium</option>
+                </select>
+              </label>
+
+              <label>
+                <span>Contexte ou délai souhaité</span>
+                <textarea
+                  value={context}
+                  onChange={(event) => setContext(event.target.value)}
+                  placeholder="Exemple : audit ISO 27001 prévu le mois prochain, besoin de 5 utilisateurs et export PDF."
+                  rows={4}
+                />
+              </label>
+
+              {error ? <p className="gth-form-error" role="alert">{error}</p> : null}
+
+              <div className="gth-form-actions">
+                <button className="gth-secondary" type="button" onClick={close} disabled={busy}>Annuler</button>
+                <button className="gth-primary" type="submit" disabled={busy}>
+                  {busy ? "Envoi en cours…" : "Envoyer la demande"}
+                  <ArrowRight aria-hidden="true" />
+                </button>
+              </div>
+
+              <p className="gth-form-footnote">
+                Vous pouvez continuer à utiliser Free en attendant l’activation Premium, sans perdre les données déjà saisies.
+              </p>
+            </form>
+          </>
+        )}
+      </section>
+    </div>
   );
 }
 
@@ -210,9 +451,9 @@ function PricingSection({ onSelectPlan, onRequestPremium }: { onSelectPlan: (pla
       period: "",
       description: "Pensé pour les équipes, cabinets et organisations qui veulent collaborer, exporter, valider les preuves et industrialiser leurs audits.",
       features: ["Audits illimités", "Exports PDF / CSV", "Utilisateurs et rôles avancés", "Stockage cloud sécurisé des preuves", "Validation / refus des preuves", "Modèles personnalisés et journal d’audit"],
-      note: "Demande préremplie : indiquez simplement l’adresse à activer, votre organisation et votre besoin.",
+      note: "Formulaire intégré : indiquez l’adresse à activer, votre organisation et votre besoin, sans quitter le site.",
       reassurance: ["Compte Free utilisable immédiatement", "Activation Premium sans perte des données saisies", "Collaboration, exports et traçabilité débloqués après validation"],
-      cta: "Être recontacté pour Premium",
+      cta: "Demander Premium",
       highlighted: true,
     },
   ];
@@ -260,7 +501,7 @@ function PricingSection({ onSelectPlan, onRequestPremium }: { onSelectPlan: (pla
               onClick={() => plan.key === "premium" ? onRequestPremium() : onSelectPlan(plan.key)}
             >
               {plan.cta}
-              {plan.key === "premium" ? <Mail aria-hidden="true" /> : <ArrowRight aria-hidden="true" />}
+              <ArrowRight aria-hidden="true" />
             </button>
           </article>
         ))}
@@ -298,7 +539,7 @@ function AboutPage() {
           </p>
 
           <div className="gth-hero-actions gth-about-actions">
-            <a className="gth-primary gth-about-contact-primary" href="mailto:julien.messaoudi@edu.esiee.fr">
+            <a className="gth-primary gth-about-contact-primary" href={`mailto:${PREMIUM_CONTACT_EMAIL}`}>
               Contacter le créateur
               <Mail aria-hidden="true" />
             </a>
