@@ -1965,3 +1965,9 @@
     padding-right: 34px;
   }
 }
+
+.gth-premium-local-note.gth-premium-mail-sent {
+  border-color: rgba(87, 224, 204, .28);
+  color: #cafff5 !important;
+  background: rgba(57, 205, 180, .10);
+}

@@ -39,6 +39,15 @@ interface PremiumRequestPayload {
   createdAt: string;
 }
 
+type PremiumRequestDeliveryStatus = "sent" | "stored_only" | "local_only";
+
+interface PremiumRequestFunctionResponse {
+  stored?: boolean;
+  emailSent?: boolean;
+  requesterCopySent?: boolean;
+  warning?: string;
+}
+
 function isValidEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim());
 }
@@ -198,7 +207,8 @@ function PremiumRequestModal({ open, onClose }: { open: boolean; onClose: () => 
   const [context, setContext] = useState("");
   const [busy, setBusy] = useState(false);
   const [submitted, setSubmitted] = useState(false);
-  const [savedLocally, setSavedLocally] = useState(false);
+  const [deliveryStatus, setDeliveryStatus] = useState<PremiumRequestDeliveryStatus>("sent");
+  const [deliveryWarning, setDeliveryWarning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -215,7 +225,8 @@ function PremiumRequestModal({ open, onClose }: { open: boolean; onClose: () => 
   useEffect(() => {
     if (!open) return;
     setSubmitted(false);
-    setSavedLocally(false);
+    setDeliveryStatus("sent");
+    setDeliveryWarning(null);
     setError(null);
   }, [open]);
 
@@ -265,33 +276,68 @@ function PremiumRequestModal({ open, onClose }: { open: boolean; onClose: () => 
     setError(null);
 
     try {
-      const { error: insertError } = await supabase
-        .from("gaptrack_premium_requests")
-        .insert({
-          name: payload.name,
-          email: payload.email,
-          organization: payload.organization,
-          need: payload.need,
-          context: payload.context,
-          source: payload.source,
-          status: "new",
-          created_at: payload.createdAt,
-        });
+      const { data, error: functionError } = await supabase.functions.invoke<PremiumRequestFunctionResponse>(
+        "gaptrack-premium-request",
+        { body: payload }
+      );
 
-      if (insertError) throw insertError;
+      if (functionError) throw functionError;
 
-      setSavedLocally(false);
+      const emailSent = Boolean(data?.emailSent);
+      const requesterCopySent = Boolean(data?.requesterCopySent);
+
+      setDeliveryStatus(emailSent ? "sent" : "stored_only");
+      setDeliveryWarning(
+        emailSent
+          ? requesterCopySent
+            ? "Un e-mail a été envoyé à l’équipe GapTrack et une copie de confirmation a été envoyée au demandeur."
+            : "Un e-mail a été envoyé à l’équipe GapTrack. La copie demandeur n’a pas été envoyée ou n’est pas activée."
+          : data?.warning || "La demande a été enregistrée, mais la notification e-mail n’a pas été envoyée. Vérifiez la configuration Resend de la fonction Supabase."
+      );
       setSubmitted(true);
       setName("");
       setEmail("");
       setOrganization("");
       setNeed("Audits illimités et exports PDF / CSV");
       setContext("");
-    } catch (requestError) {
-      console.error("Unable to send the Premium request to Supabase.", requestError);
-      savePremiumRequestLocally(payload);
-      setSavedLocally(true);
-      setSubmitted(true);
+    } catch (functionError) {
+      console.error("Unable to call the Premium request notification function.", functionError);
+
+      try {
+        const { error: insertError } = await supabase
+          .from("gaptrack_premium_requests")
+          .insert({
+            name: payload.name,
+            email: payload.email,
+            organization: payload.organization,
+            need: payload.need,
+            context: payload.context,
+            source: payload.source,
+            status: "new",
+            created_at: payload.createdAt,
+          });
+
+        if (insertError) throw insertError;
+
+        setDeliveryStatus("stored_only");
+        setDeliveryWarning(
+          "La demande a été enregistrée dans Supabase, mais aucun e-mail n’a été envoyé. Déployez la fonction gaptrack-premium-request et configurez RESEND_API_KEY / RESEND_FROM_EMAIL."
+        );
+        setSubmitted(true);
+        setName("");
+        setEmail("");
+        setOrganization("");
+        setNeed("Audits illimités et exports PDF / CSV");
+        setContext("");
+      } catch (insertError) {
+        console.error("Unable to save the Premium request to Supabase.", insertError);
+        savePremiumRequestLocally(payload);
+        setDeliveryStatus("local_only");
+        setDeliveryWarning(
+          "La sauvegarde serveur et l’envoi e-mail sont indisponibles. La demande a été conservée localement dans ce navigateur."
+        );
+        setSubmitted(true);
+      }
     } finally {
       setBusy(false);
     }
@@ -317,9 +363,9 @@ function PremiumRequestModal({ open, onClose }: { open: boolean; onClose: () => 
             <p>
               Votre demande a bien été prise en compte. L’équipe GapTrack pourra revenir vers vous avec les informations d’activation Premium.
             </p>
-            {savedLocally ? (
-              <p className="gth-premium-local-note">
-                La sauvegarde serveur n’était pas disponible : la demande a été conservée localement dans ce navigateur.
+            {deliveryWarning ? (
+              <p className={`gth-premium-local-note${deliveryStatus === "sent" ? " gth-premium-mail-sent" : ""}`}>
+                {deliveryWarning}
               </p>
             ) : null}
             <button className="gth-primary" type="button" onClick={close}>Fermer</button>
