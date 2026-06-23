@@ -212,22 +212,32 @@ async function fetchGapTrackProfileOnServer(
   createdByEmail?: string;
 }> {
   try {
-    let { data, error } = await supabase
-      .from("gaptrack_profiles")
-      .select("email, name, organization, role, subscription_plan, active")
-      .eq("id", userId)
-      .maybeSingle();
+    const profileColumnAttempts = [
+      "email, name, organization, role, subscription_plan, active, created_by_user_id, created_by_email",
+      "email, name, organization, role, subscription_plan, created_by_user_id, created_by_email",
+      "email, name, organization, role, subscription_plan, active",
+      "email, name, organization, role, subscription_plan",
+    ];
 
-    // Compatibilité : si la colonne active n'a pas encore été ajoutée côté Supabase,
-    // on relit le profil avec l'ancien schéma pour ne pas bloquer la connexion.
-    if (error && String(error.message || "").toLowerCase().includes("active")) {
-      const fallbackQuery = await supabase
+    let data: any = null;
+    let error: any = null;
+
+    for (const columns of profileColumnAttempts) {
+      const result = await supabase
         .from("gaptrack_profiles")
-        .select("email, name, organization, role, subscription_plan")
+        .select(columns)
         .eq("id", userId)
         .maybeSingle();
-      data = fallbackQuery.data as any;
-      error = fallbackQuery.error;
+
+      data = result.data as any;
+      error = result.error;
+
+      if (!error) break;
+
+      // Compatibilité progressive : l'application reste utilisable même si les
+      // nouvelles colonnes Supabase n'ont pas encore été migrées.
+      const message = String(error.message || "").toLowerCase();
+      if (!message.includes("active") && !message.includes("created_by")) break;
     }
 
     if (error) {
@@ -247,7 +257,13 @@ async function fetchGapTrackProfileOnServer(
         ? data.role
         : fallback.role,
       subscriptionPlan: normalizeSubscriptionPlan(data.subscription_plan),
-      active: typeof (data as any).active === "boolean" ? (data as any).active : fallback.active,
+      active: typeof data.active === "boolean" ? data.active : fallback.active,
+      createdByUserId: typeof data.created_by_user_id === "string" && data.created_by_user_id.trim()
+        ? data.created_by_user_id
+        : fallback.createdByUserId,
+      createdByEmail: typeof data.created_by_email === "string" && data.created_by_email.trim()
+        ? normalizeEmail(data.created_by_email)
+        : fallback.createdByEmail,
     };
   } catch (error) {
     console.error("Unable to fetch GapTrack profile from Supabase.", error);
@@ -11123,16 +11139,23 @@ function GapTrackApp({
       }
 
       const meta = user.user_metadata || {};
+      const metaCreatedByUserId = typeof meta.createdByUserId === "string" && meta.createdByUserId.trim()
+        ? meta.createdByUserId
+        : (typeof meta.invitedByUserId === "string" && meta.invitedByUserId.trim() ? meta.invitedByUserId : undefined);
+      const metaCreatedByEmail = typeof meta.createdByEmail === "string" && meta.createdByEmail.trim()
+        ? normalizeEmail(meta.createdByEmail)
+        : (typeof meta.invitedByEmail === "string" && meta.invitedByEmail.trim() ? normalizeEmail(meta.invitedByEmail) : undefined);
       const fallbackProfile = {
         email: user.email,
         name: typeof meta.name === "string" ? meta.name : undefined,
         organization: typeof meta.organization === "string" ? meta.organization : undefined,
-        // Never trust client-editable Auth metadata for role, plan, or ownership.
+        // Never trust client-editable Auth metadata for role or plan. Ownership is
+        // only a legacy fallback; Supabase gaptrack_profiles remains the source.
         role: undefined,
         subscriptionPlan: "free" as SubscriptionPlan,
         active: undefined,
-        createdByUserId: undefined,
-        createdByEmail: undefined,
+        createdByUserId: metaCreatedByUserId,
+        createdByEmail: metaCreatedByEmail,
       };
 
       const serverProfile = await fetchGapTrackProfileOnServer(user.id, fallbackProfile);
@@ -11208,11 +11231,16 @@ function GapTrackApp({
     const organization = payload.organization?.trim() || undefined;
     const requestedSubscriptionPlan = canManageSubscriptionsFlag ? normalizeSubscriptionPlan(payload.subscriptionPlan) : "free";
     let subscriptionPlan = requestedSubscriptionPlan;
-    const createdByUserId = activeUser?.id;
+    const localCreatedByUserId = activeUser?.id;
     const createdByEmail = activeUser?.email ? normalizeEmail(activeUser.email) : undefined;
 
     try {
       const previousSession = await supabase.auth.getSession().then(({ data }) => data.session).catch(() => null);
+      const currentAuthUserId = await supabase.auth.getUser()
+        .then(({ data }) => data.user?.id)
+        .catch(() => undefined);
+      const serverCreatedByUserId = currentAuthUserId || localCreatedByUserId;
+
       const { data, error } = await supabase.auth.signUp({
         email,
         password: payload.password,
@@ -11223,7 +11251,10 @@ function GapTrackApp({
             // These are only hints for server-side onboarding. RLS/RPC must decide the actual role and plan.
             requestedRole: normalizeUserRole(payload.role),
             requestedSubscriptionPlan: subscriptionPlan,
-            invitedByUserId: createdByUserId,
+            createdByUserId: serverCreatedByUserId,
+            createdByEmail,
+            // Ancien format conservé pour compatibilité avec les triggers déjà déployés.
+            invitedByUserId: serverCreatedByUserId,
             invitedByEmail: createdByEmail,
           },
           emailRedirectTo: window.location.origin,
@@ -11258,6 +11289,22 @@ function GapTrackApp({
         return false;
       }
 
+      const ownershipPatch: Record<string, string> = {};
+      if (serverCreatedByUserId) ownershipPatch.created_by_user_id = serverCreatedByUserId;
+      if (createdByEmail) ownershipPatch.created_by_email = createdByEmail;
+
+      if (data.user?.id && Object.keys(ownershipPatch).length > 0) {
+        await supabase
+          .from("gaptrack_profiles")
+          .update(ownershipPatch)
+          .eq("id", data.user.id)
+          .then(({ error }) => {
+            if (error) {
+              console.warn("Unable to persist created-by ownership on GapTrack profile.", error);
+            }
+          });
+      }
+
       if (requestedSubscriptionPlan === "premium") {
         try {
           await updateManagedUserProfileOnServer(email, { subscriptionPlan: "premium" });
@@ -11284,7 +11331,7 @@ function GapTrackApp({
       role: normalizeUserRole(payload.role),
       organization,
       subscriptionPlan,
-      createdByUserId,
+      createdByUserId: localCreatedByUserId,
       createdByEmail,
       createdAt: new Date().toISOString(),
       active: true,

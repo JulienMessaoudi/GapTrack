@@ -151,11 +151,29 @@ function validatePasswordStrength(
 }
 
 async function fetchGapTrackProfile(userId: string, fallbackEmail: string): Promise<SupabaseAuthProfile> {
-  const { data, error } = await supabase
-    .from("gaptrack_profiles")
-    .select("email, name, organization, role, subscription_plan")
-    .eq("id", userId)
-    .maybeSingle();
+  const profileColumnAttempts = [
+    "email, name, organization, role, subscription_plan, created_by_user_id, created_by_email",
+    "email, name, organization, role, subscription_plan",
+  ];
+
+  let data: any = null;
+  let error: any = null;
+
+  for (const columns of profileColumnAttempts) {
+    const result = await supabase
+      .from("gaptrack_profiles")
+      .select(columns)
+      .eq("id", userId)
+      .maybeSingle();
+
+    data = result.data as any;
+    error = result.error;
+
+    if (!error) break;
+
+    const message = String(error.message || "").toLowerCase();
+    if (!message.includes("created_by")) break;
+  }
 
   if (error) {
     throw error;
@@ -167,6 +185,12 @@ async function fetchGapTrackProfile(userId: string, fallbackEmail: string): Prom
     organization: typeof data?.organization === "string" ? data.organization : undefined,
     role: normalizeUserRole(data?.role),
     subscriptionPlan: normalizeSubscriptionPlan(data?.subscription_plan),
+    createdByUserId: typeof data?.created_by_user_id === "string" && data.created_by_user_id.trim()
+      ? data.created_by_user_id
+      : undefined,
+    createdByEmail: typeof data?.created_by_email === "string" && data.created_by_email.trim()
+      ? cleanEmail(data.created_by_email)
+      : undefined,
   };
 }
 
@@ -322,14 +346,21 @@ export function LoginAccessPage({
   }
 
   function completeSupabaseAuthentication(profile: SupabaseAuthProfile, metadata: Record<string, unknown>) {
+    const createdByUserId = profile.createdByUserId
+      || metadataString(metadata, "createdByUserId")
+      || metadataString(metadata, "invitedByUserId");
+    const createdByEmail = profile.createdByEmail
+      || metadataString(metadata, "createdByEmail")
+      || metadataString(metadata, "invitedByEmail");
+
     onSupabaseAuthenticated?.({
       email: profile.email,
       name: profile.name,
       organization: profile.organization,
       role: profile.role,
       subscriptionPlan: profile.subscriptionPlan,
-      createdByUserId: metadataString(metadata, "createdByUserId"),
-      createdByEmail: metadataString(metadata, "createdByEmail"),
+      createdByUserId,
+      createdByEmail: createdByEmail ? cleanEmail(createdByEmail) : undefined,
     });
 
     toast.success(lang === "fr" ? "Connexion réussie." : "Signed in.");
