@@ -193,6 +193,69 @@ async function updateManagedUserProfileOnServer(
   return data;
 }
 
+async function deleteManagedUserProfileOnServer(target: AppUser) {
+  const targetEmail = normalizeEmail(target.email);
+  const targetUserId = String(target.id || "").trim();
+
+  if (!targetUserId && !targetEmail) {
+    throw new Error("Compte cible invalide.");
+  }
+
+  try {
+    const { data, error } = await supabase.rpc("gaptrack_admin_delete_user_profile", {
+      target_user_id: targetUserId || null,
+      target_email: targetEmail || null,
+    });
+
+    if (!error) return data;
+
+    console.warn("Unable to delete managed user via RPC; falling back to direct profile deletion.", error);
+  } catch (error) {
+    console.warn("Unable to delete managed user via RPC; falling back to direct profile deletion.", error);
+  }
+
+  // Fallback pour les environnements où la fonction RPC n'est pas encore déployée.
+  // La suppression persistante se fait côté Supabase afin que le compte ne réapparaisse
+  // pas au prochain rechargement de la page.
+  const now = new Date().toISOString();
+  const actorId = await supabase.auth.getUser()
+    .then(({ data }) => data.user?.id || null)
+    .catch(() => null);
+
+  const softDeletePatch: Record<string, string | boolean | null> = {
+    active: false,
+    deleted_at: now,
+  };
+  if (actorId) softDeletePatch.deleted_by_user_id = actorId;
+
+  if (targetUserId) {
+    // Sans la RPC, on privilégie la suppression de la ligne profil pour éviter
+    // que d'anciennes fonctions de listing réaffichent le compte au rechargement.
+    const { error: deleteError } = await supabase
+      .from("gaptrack_profiles")
+      .delete()
+      .eq("id", targetUserId);
+
+    if (!deleteError) return;
+    console.warn("Unable to hard-delete managed GapTrack profile; trying soft-delete.", deleteError);
+
+    const { error: softDeleteError } = await supabase
+      .from("gaptrack_profiles")
+      .update(softDeletePatch)
+      .eq("id", targetUserId);
+
+    if (!softDeleteError) return;
+    throw softDeleteError;
+  }
+
+  const { error: deleteByEmailError } = await supabase
+    .from("gaptrack_profiles")
+    .delete()
+    .eq("email", targetEmail);
+
+  if (deleteByEmailError) throw deleteByEmailError;
+}
+
 async function fetchGapTrackProfileOnServer(
   userId: string,
   fallback: {
@@ -221,8 +284,8 @@ async function fetchGapTrackProfileOnServer(
 }> {
   try {
     const profileColumnAttempts = [
-      "email, name, organization, role, subscription_plan, active, created_by_user_id, created_by_email, group_id, group_name",
-      "email, name, organization, role, subscription_plan, created_by_user_id, created_by_email, group_id, group_name",
+      "email, name, organization, role, subscription_plan, active, created_by_user_id, created_by_email, group_id, group_name, deleted_at",
+      "email, name, organization, role, subscription_plan, created_by_user_id, created_by_email, group_id, group_name, deleted_at",
       "email, name, organization, role, subscription_plan, active, created_by_user_id, created_by_email",
       "email, name, organization, role, subscription_plan, created_by_user_id, created_by_email",
       "email, name, organization, role, subscription_plan, active",
@@ -2210,6 +2273,7 @@ function usersShareManagedGroup(a: AppUser | null | undefined, b: AppUser | null
 }
 
 function userRecordFromProfileRow(row: any): AppUser | null {
+  if (row?.deleted_at) return null;
   const email = normalizeEmail(row?.email || "");
   if (!email) return null;
   return sanitizeUserForClientStorage({
@@ -2261,7 +2325,7 @@ function mergeUsersByEmail(localUsers: AppUser[], incomingUsers: AppUser[]): App
 }
 
 async function fetchManageableUserProfilesOnServer(activeUser: AppUser): Promise<AppUser[]> {
-  const profileColumns = "id, email, name, organization, role, subscription_plan, active, created_at, created_by_user_id, created_by_email, group_id, group_name";
+  const profileColumns = "id, email, name, organization, role, subscription_plan, active, created_at, created_by_user_id, created_by_email, group_id, group_name, deleted_at";
 
   const parseRows = (rows: any[] | null | undefined) => (rows || [])
     .map(userRecordFromProfileRow)
@@ -2283,7 +2347,7 @@ async function fetchManageableUserProfilesOnServer(activeUser: AppUser): Promise
 
   const selectAttempts = [
     profileColumns,
-    "id, email, name, organization, role, subscription_plan, active, created_at, created_by_user_id, created_by_email",
+    "id, email, name, organization, role, subscription_plan, active, created_at, created_by_user_id, created_by_email, deleted_at",
     "id, email, name, organization, role, subscription_plan, created_at",
   ];
 
@@ -3318,7 +3382,7 @@ function UserManagementDialog({
   activeUser: AppUser | null;
   onAddUser: (payload: NewUserPayload) => Promise<boolean>;
   onUpdateUser: (userId: string, patch: Partial<AppUser>) => void | Promise<void>;
-  onDeleteUser: (userId: string) => void;
+  onDeleteUser: (userId: string) => void | Promise<void>;
   onResetPassword: (userId: string, password: string) => Promise<void>;
   onActivatePremiumByEmail: (email: string) => void | Promise<void>;
   canManageSubscriptions: boolean;
@@ -3638,7 +3702,7 @@ function UserManagementDialog({
                                     size="sm"
                                     variant="destructive"
                                     disabled={!canEditTarget || isSelf || deletingLastAdmin || isOwnerAccount}
-                                    onClick={() => onDeleteUser(u.id)}
+                                    onClick={() => void onDeleteUser(u.id)}
                                   >
                                     <Trash2 className="mr-1 h-4 w-4" />
                                     {lang === "fr" ? "Supprimer" : "Delete"}
@@ -3682,7 +3746,7 @@ function ServiceOwnerAdminConsole({
   activeUser: AppUser;
   onAddUser: (payload: NewUserPayload) => Promise<boolean>;
   onUpdateUser: (userId: string, patch: Partial<AppUser>) => void | Promise<void>;
-  onDeleteUser: (userId: string) => void;
+  onDeleteUser: (userId: string) => void | Promise<void>;
   onResetPassword: (userId: string, password: string) => Promise<void>;
   onSetSubscriptionByEmail: (email: string, plan: SubscriptionPlan) => void | Promise<void>;
   onLogout: () => void;
@@ -4004,7 +4068,7 @@ function ServiceOwnerAdminConsole({
                             size="sm"
                             variant="destructive"
                             disabled={!canEditTarget || isSelf || deletingLastAdmin || isOwnerAccount}
-                            onClick={() => onDeleteUser(u.id)}
+                            onClick={() => void onDeleteUser(u.id)}
                           >
                             <Trash2 className="mr-1 h-4 w-4" />
                             {lang === "fr" ? "Supprimer" : "Delete"}
@@ -11804,35 +11868,86 @@ function GapTrackApp({
     toast.success(lang === "fr" ? `Premium activé pour ${email}.` : `Premium activated for ${email}.`);
   }, [canManageSubscriptionsFlag, lang]);
 
-  const deleteUser = React.useCallback((userId: string) => {
+  const deleteUser = React.useCallback(async (userId: string) => {
     if (!canManageUsersFlag) {
       toast.error(lang === "fr" ? "Action réservée aux administrateurs." : "Administrators only.");
       return;
     }
-    if (userId === activeUserId) {
+
+    const target = users.find((u) => u.id === userId);
+
+    if (!target) {
+      toast.error(lang === "fr" ? "Compte introuvable." : "Account not found.");
+      return;
+    }
+
+    if (userId === activeUserId || activeUser?.id === userId) {
       toast.error(lang === "fr" ? "Vous ne pouvez pas supprimer votre propre compte connecté." : "You cannot delete your own signed-in account.");
       return;
     }
-    setUsers((prev) => {
-      const target = prev.find((u) => u.id === userId);
-      const activeAdmins = prev.filter((u) => u.active !== false && u.role === "admin");
-      if (target && !userCanModifyUserRecord(activeUser, target)) {
-        toast.error(lang === "fr" ? "Vous pouvez supprimer uniquement les utilisateurs que vous avez créés." : "You can only delete users you created.");
-        return prev;
-      }
-      if (target && isServiceOwnerEmail(target.email) && !canManageSubscriptionsFlag) {
-        toast.error(lang === "fr" ? "Ce compte propriétaire est protégé." : "This service-owner account is protected.");
-        return prev;
-      }
-      if (target?.role === "admin" && activeAdmins.length <= 1) {
-        toast.error(lang === "fr" ? "Impossible de supprimer le dernier administrateur actif." : "Cannot delete the last active administrator.");
-        return prev;
-      }
-      const next = prev.filter((u) => u.id !== userId);
-      saveUsers(next);
-      return next;
-    });
-  }, [activeUser, activeUserId, canManageSubscriptionsFlag, canManageUsersFlag, lang]);
+
+    const activeAdmins = users.filter((u) => u.active !== false && u.role === "admin" && !isServiceOwnerEmail(u.email));
+
+    if (!userCanModifyUserRecord(activeUser, target)) {
+      toast.error(lang === "fr" ? "Vous pouvez supprimer uniquement les utilisateurs que vous avez créés ou ceux de votre groupe." : "You can only delete users you created or users from your group.");
+      return;
+    }
+
+    if (isServiceOwnerEmail(target.email)) {
+      toast.error(lang === "fr" ? "Ce compte propriétaire est protégé." : "This service-owner account is protected.");
+      return;
+    }
+
+    if (target.role === "admin" && activeAdmins.length <= 1) {
+      toast.error(lang === "fr" ? "Impossible de supprimer le dernier administrateur actif." : "Cannot delete the last active administrator.");
+      return;
+    }
+
+    const targetLabel = `${target.name || target.email} (${target.email})`;
+    const firstConfirmation = window.confirm(
+      lang === "fr"
+        ? `Êtes-vous sûr de vouloir supprimer le compte ${targetLabel} ?\n\nCette action le retirera de l’administration GapTrack et sera enregistrée côté Supabase.`
+        : `Are you sure you want to delete the account ${targetLabel}?\n\nThis will remove it from GapTrack administration and persist the change in Supabase.`
+    );
+
+    if (!firstConfirmation) {
+      toast.info(lang === "fr" ? "Suppression annulée." : "Deletion cancelled.");
+      return;
+    }
+
+    const typedEmail = normalizeEmail(
+      window.prompt(
+        lang === "fr"
+          ? `Dernière confirmation : retapez l’e-mail du compte à supprimer (${target.email}).`
+          : `Final confirmation: retype the email of the account to delete (${target.email}).`
+      ) || ""
+    );
+
+    if (typedEmail !== normalizeEmail(target.email)) {
+      toast.error(lang === "fr" ? "E-mail incorrect. Suppression annulée." : "Incorrect email. Deletion cancelled.");
+      return;
+    }
+
+    try {
+      await deleteManagedUserProfileOnServer(target);
+
+      setUsers((prev) => {
+        const next = prev.filter((u) => u.id !== userId && normalizeEmail(u.email) !== normalizeEmail(target.email));
+        saveUsers(next);
+        return next;
+      });
+
+      toast.success(lang === "fr" ? "Compte supprimé." : "Account deleted.");
+    } catch (error) {
+      console.error("Unable to delete managed user account.", error);
+      const message = error instanceof Error ? error.message : "";
+      toast.error(
+        lang === "fr"
+          ? `Impossible de supprimer le compte côté serveur${message ? ` : ${message}` : "."}`
+          : `Unable to delete the account server-side${message ? `: ${message}` : "."}`
+      );
+    }
+  }, [activeUser, activeUserId, canManageUsersFlag, lang, users]);
 
   const resetUserPassword = React.useCallback(async (userId: string, _password: string) => {
     if (!canManageUsersFlag) {
