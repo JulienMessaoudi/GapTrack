@@ -136,6 +136,8 @@ interface AppUser {
   subscriptionPlan?: SubscriptionPlan;
   createdByUserId?: string;
   createdByEmail?: string;
+  groupId?: string;
+  groupName?: string;
 }
 
 interface NewUserPayload {
@@ -147,6 +149,8 @@ interface NewUserPayload {
   subscriptionPlan?: SubscriptionPlan;
   createdByUserId?: string;
   createdByEmail?: string;
+  groupId?: string;
+  groupName?: string;
 }
 
 function normalizeSubscriptionPlan(value: unknown): SubscriptionPlan {
@@ -200,6 +204,8 @@ async function fetchGapTrackProfileOnServer(
     active?: boolean;
     createdByUserId?: string;
     createdByEmail?: string;
+    groupId?: string;
+    groupName?: string;
   }
 ): Promise<{
   email: string;
@@ -210,9 +216,13 @@ async function fetchGapTrackProfileOnServer(
   active?: boolean;
   createdByUserId?: string;
   createdByEmail?: string;
+  groupId?: string;
+  groupName?: string;
 }> {
   try {
     const profileColumnAttempts = [
+      "email, name, organization, role, subscription_plan, active, created_by_user_id, created_by_email, group_id, group_name",
+      "email, name, organization, role, subscription_plan, created_by_user_id, created_by_email, group_id, group_name",
       "email, name, organization, role, subscription_plan, active, created_by_user_id, created_by_email",
       "email, name, organization, role, subscription_plan, created_by_user_id, created_by_email",
       "email, name, organization, role, subscription_plan, active",
@@ -237,7 +247,7 @@ async function fetchGapTrackProfileOnServer(
       // Compatibilité progressive : l'application reste utilisable même si les
       // nouvelles colonnes Supabase n'ont pas encore été migrées.
       const message = String(error.message || "").toLowerCase();
-      if (!message.includes("active") && !message.includes("created_by")) break;
+      if (!message.includes("active") && !message.includes("created_by") && !message.includes("group_")) break;
     }
 
     if (error) {
@@ -264,6 +274,12 @@ async function fetchGapTrackProfileOnServer(
       createdByEmail: typeof data.created_by_email === "string" && data.created_by_email.trim()
         ? normalizeEmail(data.created_by_email)
         : fallback.createdByEmail,
+      groupId: typeof data.group_id === "string" && data.group_id.trim()
+        ? data.group_id.trim()
+        : fallback.groupId,
+      groupName: typeof data.group_name === "string" && data.group_name.trim()
+        ? data.group_name.trim()
+        : fallback.groupName,
     };
   } catch (error) {
     console.error("Unable to fetch GapTrack profile from Supabase.", error);
@@ -2063,6 +2079,8 @@ function loadUsers(): AppUser[] {
         subscriptionPlan: normalizeSubscriptionPlan(u.subscriptionPlan),
         createdByUserId: u.createdByUserId ? String(u.createdByUserId) : undefined,
         createdByEmail: u.createdByEmail ? normalizeEmail(u.createdByEmail) : undefined,
+        groupId: u.groupId ? String(u.groupId) : undefined,
+        groupName: u.groupName ? String(u.groupName) : undefined,
       }))
       .filter((u: AppUser) => u.email);
   } catch {
@@ -2119,18 +2137,188 @@ function userWasCreatedBy(candidate: AppUser, creator: AppUser | null | undefine
   );
 }
 
+function normalizeGroupId(value: unknown): string | undefined {
+  const cleaned = String(value || "").trim();
+  return cleaned || undefined;
+}
+
+function safeGroupIdFromUser(user: AppUser): string {
+  const base = user.id || normalizeEmail(user.email) || uuid();
+  return `group-${String(base).toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "") || uuid()}`;
+}
+
+function findCreatorForUser(candidate: AppUser, users: AppUser[]): AppUser | undefined {
+  const createdByEmail = normalizeEmail(candidate.createdByEmail || "");
+  return users.find((u) => (candidate.createdByUserId && u.id === candidate.createdByUserId) || (createdByEmail && normalizeEmail(u.email) === createdByEmail));
+}
+
+function createdByLabel(candidate: AppUser, users: AppUser[], lang: LangKey): string {
+  const creator = findCreatorForUser(candidate, users);
+  if (creator) return `${creator.name || creator.email} · ${creator.email}`;
+  if (candidate.createdByEmail) return normalizeEmail(candidate.createdByEmail);
+  return lang === "fr" ? "Inscription directe / groupe racine" : "Direct signup / root group";
+}
+
+function resolveGroupForUser(user: AppUser, users: AppUser[], lang: LangKey): { groupId?: string; groupName: string } {
+  const ownGroupId = normalizeGroupId(user.groupId);
+  const ownGroupName = String(user.groupName || "").trim();
+  if (ownGroupName) return { groupId: ownGroupId, groupName: ownGroupName };
+
+  if (ownGroupId) {
+    const sameGroup = users.find((u) => normalizeGroupId(u.groupId) === ownGroupId && String(u.groupName || "").trim());
+    if (sameGroup?.groupName) return { groupId: ownGroupId, groupName: sameGroup.groupName };
+  }
+
+  const creator = findCreatorForUser(user, users);
+  if (creator?.groupName) return { groupId: normalizeGroupId(creator.groupId), groupName: creator.groupName };
+
+  const ownedUserWithGroup = users.find((u) => userWasCreatedBy(u, user) && String(u.groupName || "").trim());
+  if (ownedUserWithGroup?.groupName) return { groupId: normalizeGroupId(ownedUserWithGroup.groupId), groupName: ownedUserWithGroup.groupName };
+
+  return { groupId: ownGroupId, groupName: lang === "fr" ? "Groupe non défini" : "Group not set" };
+}
+
+function resolveManagedGroupForCreator(creator: AppUser, users: AppUser[], lang: LangKey): { groupId: string; groupName: string } {
+  const existing = resolveGroupForUser(creator, users, lang);
+  if (existing.groupId && existing.groupName && !/non défini|not set/i.test(existing.groupName)) {
+    return { groupId: existing.groupId, groupName: existing.groupName };
+  }
+
+  const createdUserWithGroup = users.find((u) => userWasCreatedBy(u, creator) && normalizeGroupId(u.groupId) && String(u.groupName || "").trim());
+  if (createdUserWithGroup?.groupId && createdUserWithGroup.groupName) {
+    return { groupId: createdUserWithGroup.groupId, groupName: createdUserWithGroup.groupName };
+  }
+
+  const knownGroups = new Set(
+    users
+      .filter((u) => !isServiceOwnerEmail(u.email))
+      .map((u) => String(u.groupName || "").trim().toLowerCase())
+      .filter(Boolean)
+  );
+  const groupName = lang === "fr" ? `Groupe ${Math.max(1, knownGroups.size + 1)}` : `Group ${Math.max(1, knownGroups.size + 1)}`;
+  return { groupId: safeGroupIdFromUser(creator), groupName };
+}
+
+function usersShareManagedGroup(a: AppUser | null | undefined, b: AppUser | null | undefined): boolean {
+  if (!a || !b) return false;
+  const aGroupId = normalizeGroupId(a.groupId);
+  const bGroupId = normalizeGroupId(b.groupId);
+  if (aGroupId && bGroupId && aGroupId === bGroupId) return true;
+  const aGroupName = String(a.groupName || "").trim().toLowerCase();
+  const bGroupName = String(b.groupName || "").trim().toLowerCase();
+  return Boolean(aGroupName && bGroupName && aGroupName === bGroupName);
+}
+
+function userRecordFromProfileRow(row: any): AppUser | null {
+  const email = normalizeEmail(row?.email || "");
+  if (!email) return null;
+  return sanitizeUserForClientStorage({
+    id: String(row?.id || uuid()),
+    name: typeof row?.name === "string" && row.name.trim() ? row.name.trim() : email,
+    email,
+    role: normalizeUserRole(row?.role),
+    organization: typeof row?.organization === "string" && row.organization.trim() ? row.organization.trim() : undefined,
+    createdAt: typeof row?.created_at === "string" ? row.created_at : new Date().toISOString(),
+    active: typeof row?.active === "boolean" ? row.active : true,
+    subscriptionPlan: normalizeSubscriptionPlan(row?.subscription_plan),
+    createdByUserId: typeof row?.created_by_user_id === "string" && row.created_by_user_id.trim() ? row.created_by_user_id : undefined,
+    createdByEmail: typeof row?.created_by_email === "string" && row.created_by_email.trim() ? normalizeEmail(row.created_by_email) : undefined,
+    groupId: typeof row?.group_id === "string" && row.group_id.trim() ? row.group_id.trim() : undefined,
+    groupName: typeof row?.group_name === "string" && row.group_name.trim() ? row.group_name.trim() : undefined,
+  });
+}
+
+function mergeUsersByEmail(localUsers: AppUser[], incomingUsers: AppUser[]): AppUser[] {
+  const byEmail = new Map<string, AppUser>();
+
+  for (const user of localUsers) {
+    byEmail.set(normalizeEmail(user.email), user);
+  }
+
+  for (const incoming of incomingUsers) {
+    const key = normalizeEmail(incoming.email);
+    if (!key) continue;
+    const existing = byEmail.get(key);
+    byEmail.set(key, sanitizeUserForClientStorage({
+      ...(existing || {}),
+      ...incoming,
+      id: existing?.id || incoming.id || uuid(),
+      createdAt: existing?.createdAt || incoming.createdAt || new Date().toISOString(),
+      lastLoginAt: existing?.lastLoginAt || incoming.lastLoginAt,
+      createdByUserId: incoming.createdByUserId || existing?.createdByUserId,
+      createdByEmail: incoming.createdByEmail || existing?.createdByEmail,
+      groupId: incoming.groupId || existing?.groupId,
+      groupName: incoming.groupName || existing?.groupName,
+    }));
+  }
+
+  return Array.from(byEmail.values()).sort((a, b) => {
+    const ga = String(a.groupName || "");
+    const gb = String(b.groupName || "");
+    if (ga !== gb) return ga.localeCompare(gb);
+    return String(a.name || a.email).localeCompare(String(b.name || b.email));
+  });
+}
+
+async function fetchManageableUserProfilesOnServer(activeUser: AppUser): Promise<AppUser[]> {
+  const profileColumns = "id, email, name, organization, role, subscription_plan, active, created_at, created_by_user_id, created_by_email, group_id, group_name";
+
+  const parseRows = (rows: any[] | null | undefined) => (rows || [])
+    .map(userRecordFromProfileRow)
+    .filter((u): u is AppUser => Boolean(u));
+
+  const rpcNames = userCanManageSubscriptions(activeUser)
+    ? ["gaptrack_owner_list_user_profiles", "gaptrack_list_user_profiles"]
+    : ["gaptrack_group_list_user_profiles"];
+
+  for (const rpcName of rpcNames) {
+    try {
+      const { data, error } = await supabase.rpc(rpcName);
+      if (!error && Array.isArray(data)) return parseRows(data);
+      if (error) console.warn(`Unable to load profiles via ${rpcName}.`, error);
+    } catch (error) {
+      console.warn(`Unable to load profiles via ${rpcName}.`, error);
+    }
+  }
+
+  const selectAttempts = [
+    profileColumns,
+    "id, email, name, organization, role, subscription_plan, active, created_at, created_by_user_id, created_by_email",
+    "id, email, name, organization, role, subscription_plan, created_at",
+  ];
+
+  for (const columns of selectAttempts) {
+    const result = await supabase
+      .from("gaptrack_profiles")
+      .select(columns)
+      .order("created_at", { ascending: false });
+
+    if (!result.error) return parseRows(result.data as any[]);
+
+    const message = String(result.error.message || "").toLowerCase();
+    if (!message.includes("active") && !message.includes("created_by") && !message.includes("group_")) {
+      console.warn("Unable to load manageable GapTrack profiles.", result.error);
+      break;
+    }
+  }
+
+  return [];
+}
+
 function userCanViewUserRecord(viewer: AppUser | null | undefined, candidate: AppUser): boolean {
   if (!userCanManageUsers(viewer)) return false;
   if (userCanManageSubscriptions(viewer)) return true;
   if (isServiceOwnerEmail(candidate.email)) return false;
-  return userWasCreatedBy(candidate, viewer);
+  if (viewer?.id === candidate.id) return true;
+  return userWasCreatedBy(candidate, viewer) || usersShareManagedGroup(viewer, candidate);
 }
 
 function userCanModifyUserRecord(editor: AppUser | null | undefined, candidate: AppUser): boolean {
   if (!userCanManageUsers(editor)) return false;
   if (userCanManageSubscriptions(editor)) return true;
   if (isServiceOwnerEmail(candidate.email)) return false;
-  return userWasCreatedBy(candidate, editor);
+  if (editor?.id === candidate.id) return true;
+  return userWasCreatedBy(candidate, editor) || usersShareManagedGroup(editor, candidate);
 }
 
 function isExistingSupabaseAccountError(error: { message?: string; status?: number } | null | undefined): boolean {
@@ -3103,7 +3291,7 @@ function UserAccessScreen(props: {
   users: AppUser[];
   onCreateAdmin: (payload: NewUserPayload) => Promise<void>;
   onLogin: (userId: string, password: string) => Promise<boolean>;
-  onSupabaseAuthenticated: (profile: { email: string; name?: string; organization?: string; role?: UserRole; subscriptionPlan?: SubscriptionPlan; createdByUserId?: string; createdByEmail?: string }) => void;
+  onSupabaseAuthenticated: (profile: { email: string; name?: string; organization?: string; role?: UserRole; subscriptionPlan?: SubscriptionPlan; createdByUserId?: string; createdByEmail?: string; groupId?: string; groupName?: string }) => void;
   onBackHome?: () => void;
 }) {
   return <LoginAccessPage {...props} />;
@@ -3168,6 +3356,7 @@ function UserManagementDialog({
 
   async function addUser() {
     if (!canCreate) return;
+    const managedGroup = activeUser ? resolveManagedGroupForCreator(activeUser, users, lang) : undefined;
     const ok = await onAddUser({
       name,
       email,
@@ -3177,6 +3366,8 @@ function UserManagementDialog({
       subscriptionPlan: canManageSubscriptions ? newUserPlan : "free",
       createdByUserId: activeUser?.id,
       createdByEmail: activeUser?.email,
+      groupId: managedGroup?.groupId,
+      groupName: managedGroup?.groupName,
     });
     if (ok) {
       setName("");
@@ -3361,6 +3552,14 @@ function UserManagementDialog({
                                 <div className="mt-1 truncate text-xs text-muted-foreground">
                                   {u.organization || "—"} · {lang === "fr" ? "Créé le" : "Created"} {new Date(u.createdAt).toLocaleDateString(lang === "fr" ? "fr-FR" : "en-US")}
                                 </div>
+                                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                                  <Badge variant="outline" className="bg-background/70">
+                                    {resolveGroupForUser(u, users, lang).groupName}
+                                  </Badge>
+                                  <span className="truncate">
+                                    {lang === "fr" ? "Créé par" : "Created by"} : {createdByLabel(u, users, lang)}
+                                  </span>
+                                </div>
                               </div>
                               <div className="flex flex-wrap items-center gap-2">
                                 <Badge variant="outline" className={subscriptionPlanBadgeClass(u.subscriptionPlan)}>
@@ -3500,8 +3699,15 @@ function ServiceOwnerAdminConsole({
   // Le compte propriétaire sert uniquement à administrer GapTrack :
   // il ne doit ni compter, ni apparaître dans la liste des comptes clients.
   const visibleUsers = useMemo(
-    () => users.filter((u) => userCanViewUserRecord(activeUser, u) && !isServiceOwnerEmail(u.email)),
-    [users, activeUser]
+    () => users
+      .filter((u) => userCanViewUserRecord(activeUser, u) && !isServiceOwnerEmail(u.email))
+      .sort((a, b) => {
+        const groupA = resolveGroupForUser(a, users, lang).groupName;
+        const groupB = resolveGroupForUser(b, users, lang).groupName;
+        if (groupA !== groupB) return groupA.localeCompare(groupB);
+        return String(a.name || a.email).localeCompare(String(b.name || b.email));
+      }),
+    [users, activeUser, lang]
   );
   const countedUsers = visibleUsers;
   const activeAdmins = countedUsers.filter((u) => u.active !== false && u.role === "admin");
@@ -3509,6 +3715,7 @@ function ServiceOwnerAdminConsole({
   const freeCount = countedUsers.length - premiumCount;
 
   async function addUser() {
+    const managedGroup = resolveManagedGroupForCreator(activeUser, users, lang);
     const ok = await onAddUser({
       name,
       email,
@@ -3518,6 +3725,8 @@ function ServiceOwnerAdminConsole({
       subscriptionPlan: newUserPlan,
       createdByUserId: activeUser.id,
       createdByEmail: activeUser.email,
+      groupId: managedGroup.groupId,
+      groupName: managedGroup.groupName,
     });
 
     if (ok) {
@@ -3708,6 +3917,14 @@ function ServiceOwnerAdminConsole({
                         <div className="truncate text-sm text-muted-foreground">{u.email}</div>
                         <div className="mt-1 truncate text-xs text-muted-foreground">
                           {u.organization || "—"} · {lang === "fr" ? "Créé le" : "Created"} {new Date(u.createdAt).toLocaleDateString(lang === "fr" ? "fr-FR" : "en-US")}
+                        </div>
+                        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                          <Badge variant="outline" className="bg-background/70">
+                            {resolveGroupForUser(u, users, lang).groupName}
+                          </Badge>
+                          <span className="truncate">
+                            {lang === "fr" ? "Créé par" : "Created by"} : {createdByLabel(u, users, lang)}
+                          </span>
                         </div>
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
@@ -10874,6 +11091,33 @@ function GapTrackApp({
   const canDeleteAuditsFlag = userCanDeleteAudits(activeUser);
   const isPremiumUser = isPremiumPlan(activeUser?.subscriptionPlan);
 
+  useEffect(() => {
+    if (!activeUser || !userCanManageUsers(activeUser)) return;
+
+    let cancelled = false;
+
+    async function loadManageableProfiles() {
+      try {
+        const profiles = await fetchManageableUserProfilesOnServer(activeUser);
+        if (cancelled || profiles.length === 0) return;
+
+        setUsers((prev) => {
+          const next = mergeUsersByEmail(prev, profiles);
+          saveUsers(next);
+          return next;
+        });
+      } catch (error) {
+        console.warn("Unable to refresh manageable GapTrack profiles.", error);
+      }
+    }
+
+    void loadManageableProfiles();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeUser?.id, activeUser?.email, activeUser?.role, activeUser?.subscriptionPlan, activeUser?.groupId, activeUser?.groupName]);
+
   // Journal d’audit local, séparé de l’undo/redo pour rester traçable.
   const [auditLog, setAuditLog] = useState<AuditLogEntry[]>([]);
   const auditLogRef = useRef<AuditLogEntry[]>([]);
@@ -11045,7 +11289,7 @@ function GapTrackApp({
     );
   }, [activeUser?.email, lang]);
 
-  const syncSupabaseAuthenticatedUser = React.useCallback((profile: { email: string; name?: string; organization?: string; role?: UserRole; subscriptionPlan?: SubscriptionPlan; active?: boolean; createdByUserId?: string; createdByEmail?: string }) => {
+  const syncSupabaseAuthenticatedUser = React.useCallback((profile: { email: string; name?: string; organization?: string; role?: UserRole; subscriptionPlan?: SubscriptionPlan; active?: boolean; createdByUserId?: string; createdByEmail?: string; groupId?: string; groupName?: string }) => {
     const email = normalizeEmail(profile.email);
 
     if (!email) return;
@@ -11079,6 +11323,8 @@ function GapTrackApp({
           subscriptionPlan,
           createdByUserId: profile.createdByUserId || existing.createdByUserId,
           createdByEmail: profile.createdByEmail ? normalizeEmail(profile.createdByEmail) : existing.createdByEmail,
+          groupId: profile.groupId || existing.groupId,
+          groupName: profile.groupName || existing.groupName,
           active: profile.active !== false,
           lastLoginAt: now,
         };
@@ -11094,6 +11340,8 @@ function GapTrackApp({
           organization: profile.organization?.trim() || undefined,
           createdByUserId: profile.createdByUserId || undefined,
           createdByEmail: profile.createdByEmail ? normalizeEmail(profile.createdByEmail) : undefined,
+          groupId: profile.groupId || undefined,
+          groupName: profile.groupName || undefined,
           createdAt: now,
           lastLoginAt: now,
           active: profile.active !== false,
@@ -11156,6 +11404,8 @@ function GapTrackApp({
         active: undefined,
         createdByUserId: metaCreatedByUserId,
         createdByEmail: metaCreatedByEmail,
+        groupId: typeof meta.groupId === "string" && meta.groupId.trim() ? meta.groupId.trim() : undefined,
+        groupName: typeof meta.groupName === "string" && meta.groupName.trim() ? meta.groupName.trim() : undefined,
       };
 
       const serverProfile = await fetchGapTrackProfileOnServer(user.id, fallbackProfile);
@@ -11233,6 +11483,12 @@ function GapTrackApp({
     let subscriptionPlan = requestedSubscriptionPlan;
     const localCreatedByUserId = activeUser?.id;
     const createdByEmail = activeUser?.email ? normalizeEmail(activeUser.email) : undefined;
+    const managedGroup = activeUser
+      ? {
+        groupId: payload.groupId || resolveManagedGroupForCreator(activeUser, users, lang).groupId,
+        groupName: payload.groupName || resolveManagedGroupForCreator(activeUser, users, lang).groupName,
+      }
+      : { groupId: payload.groupId, groupName: payload.groupName };
 
     try {
       const previousSession = await supabase.auth.getSession().then(({ data }) => data.session).catch(() => null);
@@ -11253,6 +11509,8 @@ function GapTrackApp({
             requestedSubscriptionPlan: subscriptionPlan,
             createdByUserId: serverCreatedByUserId,
             createdByEmail,
+            groupId: managedGroup.groupId,
+            groupName: managedGroup.groupName,
             // Ancien format conservé pour compatibilité avec les triggers déjà déployés.
             invitedByUserId: serverCreatedByUserId,
             invitedByEmail: createdByEmail,
@@ -11292,6 +11550,8 @@ function GapTrackApp({
       const ownershipPatch: Record<string, string> = {};
       if (serverCreatedByUserId) ownershipPatch.created_by_user_id = serverCreatedByUserId;
       if (createdByEmail) ownershipPatch.created_by_email = createdByEmail;
+      if (managedGroup.groupId) ownershipPatch.group_id = managedGroup.groupId;
+      if (managedGroup.groupName) ownershipPatch.group_name = managedGroup.groupName;
 
       if (data.user?.id && Object.keys(ownershipPatch).length > 0) {
         await supabase
@@ -11302,6 +11562,16 @@ function GapTrackApp({
             if (error) {
               console.warn("Unable to persist created-by ownership on GapTrack profile.", error);
             }
+          });
+      }
+
+      if (currentAuthUserId && managedGroup.groupId && managedGroup.groupName) {
+        await supabase
+          .from("gaptrack_profiles")
+          .update({ group_id: managedGroup.groupId, group_name: managedGroup.groupName })
+          .eq("id", currentAuthUserId)
+          .then(({ error }) => {
+            if (error) console.warn("Unable to persist creator group on GapTrack profile.", error);
           });
       }
 
@@ -11333,10 +11603,19 @@ function GapTrackApp({
       subscriptionPlan,
       createdByUserId: localCreatedByUserId,
       createdByEmail,
+      groupId: managedGroup.groupId,
+      groupName: managedGroup.groupName,
       createdAt: new Date().toISOString(),
       active: true,
     };
-    const next = [user, ...users];
+    const next = [
+      user,
+      ...users.map((existing) => (
+        activeUser && existing.id === activeUser.id && managedGroup.groupId && managedGroup.groupName
+          ? { ...existing, groupId: existing.groupId || managedGroup.groupId, groupName: existing.groupName || managedGroup.groupName }
+          : existing
+      )),
+    ];
     saveUsers(next);
     setUsers(next);
     toast.success(lang === "fr" ? "Utilisateur créé. Un e-mail de vérification lui a été envoyé." : "User created. A verification email has been sent.");

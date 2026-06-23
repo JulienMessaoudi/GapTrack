@@ -52,6 +52,8 @@ interface SupabaseAuthProfile {
   subscriptionPlan?: SubscriptionPlan;
   createdByUserId?: string;
   createdByEmail?: string;
+  groupId?: string;
+  groupName?: string;
 }
 
 interface PendingMfaSession {
@@ -152,6 +154,7 @@ function validatePasswordStrength(
 
 async function fetchGapTrackProfile(userId: string, fallbackEmail: string): Promise<SupabaseAuthProfile> {
   const profileColumnAttempts = [
+    "email, name, organization, role, subscription_plan, created_by_user_id, created_by_email, group_id, group_name",
     "email, name, organization, role, subscription_plan, created_by_user_id, created_by_email",
     "email, name, organization, role, subscription_plan",
   ];
@@ -172,7 +175,7 @@ async function fetchGapTrackProfile(userId: string, fallbackEmail: string): Prom
     if (!error) break;
 
     const message = String(error.message || "").toLowerCase();
-    if (!message.includes("created_by")) break;
+    if (!message.includes("created_by") && !message.includes("group_")) break;
   }
 
   if (error) {
@@ -190,6 +193,12 @@ async function fetchGapTrackProfile(userId: string, fallbackEmail: string): Prom
       : undefined,
     createdByEmail: typeof data?.created_by_email === "string" && data.created_by_email.trim()
       ? cleanEmail(data.created_by_email)
+      : undefined,
+    groupId: typeof data?.group_id === "string" && data.group_id.trim()
+      ? data.group_id.trim()
+      : undefined,
+    groupName: typeof data?.group_name === "string" && data.group_name.trim()
+      ? data.group_name.trim()
       : undefined,
   };
 }
