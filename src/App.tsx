@@ -11094,11 +11094,12 @@ function GapTrackApp({
   useEffect(() => {
     if (!activeUser || !userCanManageUsers(activeUser)) return;
 
+    const manager = activeUser;
     let cancelled = false;
 
     async function loadManageableProfiles() {
       try {
-        const profiles = await fetchManageableUserProfilesOnServer(activeUser);
+        const profiles = await fetchManageableUserProfilesOnServer(manager);
         if (cancelled || profiles.length === 0) return;
 
         setUsers((prev) => {
