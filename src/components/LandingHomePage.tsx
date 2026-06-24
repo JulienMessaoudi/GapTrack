@@ -318,7 +318,7 @@ function FaqSection() {
   const faqs = [
     {
       question: "À quoi sert GapTrack ?",
-      answer: "GapTrack est un logiciel d’audit GRC/SSI qui aide à centraliser les audits, les preuves, les écarts, les plans d’action et les indicateurs de conformité dans un espace sécurisé.",
+      answer: "GapTrack est un logiciel d’audit SSI qui aide à centraliser les audits, les preuves, les écarts, les plans d’action et les indicateurs de conformité dans un espace sécurisé.",
     },
     {
       question: "GapTrack peut-il aider pour ISO 27001, NIS2, DORA, RGPD ou PGSSI-S ?",
@@ -339,10 +339,10 @@ function FaqSection() {
       <div className="gth-faq-heading">
         <div className="gth-kicker">
           <Lightbulb aria-hidden="true" />
-          FAQ AUDIT GRC/SSI
+          FAQ AUDIT SSI
         </div>
         <h2 id="gth-faq-title">Questions fréquentes sur GapTrack</h2>
-        <p>Des réponses claires pour comprendre comment GapTrack accompagne les audits GRC/SSI, la gestion des preuves, le suivi des écarts et la conformité.</p>
+        <p>Des réponses claires pour comprendre comment GapTrack accompagne les audits SSI, la gestion des preuves, le suivi des écarts et la conformité.</p>
       </div>
 
       <div className="gth-faq-grid">
@@ -374,7 +374,7 @@ function AboutPage() {
           </h1>
 
           <p className="gth-lead gth-about-lead">
-            GapTrack vise à aider les équipes GRC/SSI à centraliser leurs audits, leurs preuves, leurs écarts et leurs plans d’action dans un outil simple, fiable et sécurisé.
+            GapTrack vise à aider les équipes SSI à centraliser leurs audits, leurs preuves, leurs écarts et leurs plans d’action dans un outil simple, fiable et sécurisé.
           </p>
 
           <div className="gth-hero-actions gth-about-actions">
