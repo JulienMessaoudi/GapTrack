@@ -26,6 +26,25 @@ type SubscriptionPlan = "free" | "premium";
 
 const PREMIUM_CONTACT_EMAIL = "julien.messaoudi@edu.esiee.fr";
 
+export const GAPTRACK_FAQ_ITEMS = [
+  {
+    question: "Qu’est-ce qu’un audit GRC/SSI ?",
+    answer: "Un audit GRC/SSI évalue la gouvernance, les risques, la conformité et les pratiques de sécurité d’une organisation afin d’identifier les écarts et les actions prioritaires.",
+  },
+  {
+    question: "Comment GapTrack aide à centraliser les preuves d’audit ?",
+    answer: "GapTrack regroupe les preuves, notes, statuts, responsables et plans d’action dans un même espace afin de limiter les fichiers dispersés et de faciliter la traçabilité.",
+  },
+  {
+    question: "Peut-on suivre les écarts de conformité ?",
+    answer: "Oui. La plateforme permet d’identifier les écarts, de les prioriser, de suivre leur statut et de préparer les actions correctives associées.",
+  },
+  {
+    question: "GapTrack peut-il être utilisé pour ISO 27001, NIS2, DORA, RGPD ou PGSSI-S ?",
+    answer: "Oui. GapTrack est pensé pour structurer des audits et suivis de conformité autour de référentiels comme ISO 27001, NIS2, DORA, RGPD ou PGSSI-S.",
+  },
+] as const;
+
 function buildPremiumRequestMailto(source: string): string {
   const subject = "Demande d’activation Premium GapTrack";
   const body = [
@@ -197,24 +216,7 @@ function HomePage({
 
 
 function FaqSection() {
-  const questions = [
-    {
-      question: "Qu’est-ce qu’un audit GRC/SSI ?",
-      answer: "Un audit GRC/SSI évalue la gouvernance, les risques, la conformité et les pratiques de sécurité d’une organisation afin d’identifier les écarts et les actions prioritaires.",
-    },
-    {
-      question: "Comment GapTrack aide à centraliser les preuves d’audit ?",
-      answer: "GapTrack regroupe les preuves, notes, statuts, responsables et plans d’action dans un même espace afin de limiter les fichiers dispersés et de faciliter la traçabilité.",
-    },
-    {
-      question: "Peut-on suivre les écarts de conformité ?",
-      answer: "Oui. La plateforme permet d’identifier les écarts, de les prioriser, de suivre leur statut et de préparer les actions correctives associées.",
-    },
-    {
-      question: "GapTrack peut-il être utilisé pour ISO 27001, NIS2, DORA, RGPD ou PGSSI-S ?",
-      answer: "Oui. GapTrack est pensé pour structurer des audits et suivis de conformité autour de référentiels comme ISO 27001, NIS2, DORA, RGPD ou PGSSI-S.",
-    },
-  ];
+  const questions = GAPTRACK_FAQ_ITEMS;
 
   return (
     <section className="gth-faq-section" id="gth-faq" aria-labelledby="gth-faq-title">
