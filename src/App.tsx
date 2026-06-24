@@ -10,7 +10,7 @@ import {Filter, Redo2, Search, Undo2, ArrowUp, Paperclip, Download, Plus, Copy, 
 import { ResponsiveContainer, Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Tooltip } from "recharts";
 import { LoginAccessPage } from "./components/LoginAccessPage";
 import { ResetPasswordPage } from "./components/ResetPasswordPage";
-import { LandingHomePage } from "./components/LandingHomePage";
+import { GAPTRACK_FAQ_ITEMS, LandingHomePage } from "./components/LandingHomePage";
 import { supabase } from "./lib/supabase";
 import { authErrorMessage } from "./lib/authErrorMessages";
 
@@ -10971,6 +10971,246 @@ function getCurrentAppRoute(): AppRoute {
   return "home";
 }
 
+
+interface SeoConfig {
+  title: string;
+  description: string;
+  canonicalPath: string;
+  robots: string;
+  imagePath?: string;
+  structuredData?: Record<string, unknown>;
+}
+
+const GAPTRACK_PUBLIC_SITE_URL = "https://gaptrack-ssi.vercel.app";
+
+function seoSiteOrigin(): string {
+  return GAPTRACK_PUBLIC_SITE_URL;
+}
+
+function seoAbsoluteUrl(path: string): string {
+  const origin = seoSiteOrigin();
+  if (!origin) return path;
+  return `${origin}${path}`;
+}
+
+function seoImageUrl(path = "/og-gaptrack.png"): string {
+  return seoAbsoluteUrl(path.startsWith("/") ? path : `/${path}`);
+}
+
+function upsertMetaByName(name: string, content: string) {
+  if (typeof document === "undefined") return;
+  let el = document.head.querySelector(`meta[name="${name}"]`) as HTMLMetaElement | null;
+  if (!el) {
+    el = document.createElement("meta");
+    el.setAttribute("name", name);
+    document.head.appendChild(el);
+  }
+  el.setAttribute("content", content);
+}
+
+function upsertMetaByProperty(property: string, content: string) {
+  if (typeof document === "undefined") return;
+  let el = document.head.querySelector(`meta[property="${property}"]`) as HTMLMetaElement | null;
+  if (!el) {
+    el = document.createElement("meta");
+    el.setAttribute("property", property);
+    document.head.appendChild(el);
+  }
+  el.setAttribute("content", content);
+}
+
+function upsertCanonicalLink(href: string) {
+  if (typeof document === "undefined") return;
+  let el = document.head.querySelector('link[rel="canonical"]') as HTMLLinkElement | null;
+  if (!el) {
+    el = document.createElement("link");
+    el.setAttribute("rel", "canonical");
+    document.head.appendChild(el);
+  }
+  el.setAttribute("href", href);
+}
+
+function upsertStructuredData(data: Record<string, unknown> | undefined) {
+  if (typeof document === "undefined") return;
+  const id = "gaptrack-structured-data";
+  let el = document.getElementById(id) as HTMLScriptElement | null;
+
+  if (!data) {
+    el?.remove();
+    return;
+  }
+
+  if (!el) {
+    el = document.createElement("script");
+    el.id = id;
+    el.type = "application/ld+json";
+    document.head.appendChild(el);
+  }
+
+  el.textContent = JSON.stringify(data);
+}
+
+function seoConfigForRoute(route: AppRoute, lang: LangKey, activeUser?: AppUser | null): SeoConfig {
+  const titleByRoute: Record<AppRoute, string> = {
+    home: "GapTrack – Logiciel d’audit GRC/SSI, preuves et écarts",
+    about: "À propos de GapTrack – Audit GRC/SSI, conformité et preuves",
+    login: "Connexion GapTrack – Accès sécurisé",
+    app: activeUser ? I18N[lang].appTitle : "Connexion GapTrack – Accès sécurisé",
+    "reset-password": "Réinitialisation du mot de passe GapTrack",
+  };
+
+  const descriptionByRoute: Record<AppRoute, string> = {
+    home: "Logiciel d’audit GRC/SSI pour centraliser les preuves, suivre les écarts, piloter les plans d’action et préparer les rapports ISO 27001, NIS2, DORA, RGPD et PGSSI-S.",
+    about: "Découvrez GapTrack, une solution conçue pour simplifier les audits GRC/SSI, la traçabilité des preuves, le suivi des écarts et les plans d’action de conformité.",
+    login: "Accédez à votre espace sécurisé GapTrack pour gérer vos audits, preuves, écarts et plans d’action.",
+    app: "Espace privé GapTrack pour piloter les audits, preuves, écarts, plans d’action et rapports de conformité.",
+    "reset-password": "Définissez un nouveau mot de passe pour retrouver l’accès à votre compte sécurisé GapTrack.",
+  };
+
+  const canonicalPath = route === "about" ? "/a-propos" : pathForRoute(route);
+  const isPublicPage = route === "home" || route === "about";
+  const canonicalUrl = seoAbsoluteUrl(canonicalPath);
+  const homeUrl = seoAbsoluteUrl("/");
+  const imageUrl = seoImageUrl();
+  const title = titleByRoute[route];
+  const description = descriptionByRoute[route];
+
+  const organizationNode = {
+    "@type": "Organization",
+    "@id": `${homeUrl}#organization`,
+    name: "GapTrack",
+    url: homeUrl,
+    logo: imageUrl,
+    sameAs: [],
+    founder: {
+      "@type": "Person",
+      name: "Julien Messaoudi",
+    },
+  };
+
+  const softwareNode = {
+    "@type": "SoftwareApplication",
+    "@id": `${homeUrl}#software`,
+    name: "GapTrack",
+    applicationCategory: "BusinessApplication",
+    applicationSubCategory: "Audit GRC/SSI et conformité",
+    operatingSystem: "Web",
+    url: homeUrl,
+    image: imageUrl,
+    inLanguage: "fr-FR",
+    description: descriptionByRoute.home,
+    publisher: { "@id": `${homeUrl}#organization` },
+    featureList: [
+      "Gestion des audits GRC/SSI",
+      "Centralisation des preuves d’audit",
+      "Suivi des écarts de conformité",
+      "Plans d’action correctifs",
+      "Reporting conformité et indicateurs",
+      "Référentiels ISO 27001, NIS2, DORA, RGPD et PGSSI-S",
+    ],
+    offers: [
+      {
+        "@type": "Offer",
+        name: "GapTrack Free",
+        price: "0",
+        priceCurrency: "EUR",
+        availability: "https://schema.org/InStock",
+      },
+      {
+        "@type": "Offer",
+        name: "GapTrack Premium",
+        priceSpecification: {
+          "@type": "PriceSpecification",
+          priceCurrency: "EUR",
+          price: "0",
+          description: "Sur devis",
+        },
+      },
+    ],
+  };
+
+  const faqNode = {
+    "@type": "FAQPage",
+    "@id": `${homeUrl}#faq`,
+    mainEntity: GAPTRACK_FAQ_ITEMS.map((item) => ({
+      "@type": "Question",
+      name: item.question,
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: item.answer,
+      },
+    })),
+  };
+
+  const websiteNode = {
+    "@type": "WebSite",
+    "@id": `${homeUrl}#website`,
+    name: "GapTrack",
+    url: homeUrl,
+    inLanguage: "fr-FR",
+    publisher: { "@id": `${homeUrl}#organization` },
+  };
+
+  const webPageNode = {
+    "@type": route === "about" ? "AboutPage" : "WebPage",
+    "@id": `${canonicalUrl}#webpage`,
+    url: canonicalUrl,
+    name: title,
+    description,
+    isPartOf: { "@id": `${homeUrl}#website` },
+    about: { "@id": `${homeUrl}#software` },
+    inLanguage: "fr-FR",
+  };
+
+  const graph = route === "home"
+    ? [organizationNode, websiteNode, softwareNode, webPageNode, faqNode]
+    : [organizationNode, websiteNode, softwareNode, webPageNode];
+
+  return {
+    title,
+    description,
+    canonicalPath,
+    robots: isPublicPage ? "index, follow, max-image-preview:large" : "noindex, nofollow",
+    imagePath: "/og-gaptrack.png",
+    structuredData: isPublicPage
+      ? {
+          "@context": "https://schema.org",
+          "@graph": graph,
+        }
+      : undefined,
+  };
+}
+
+function applySeoMetadata(config: SeoConfig) {
+  if (typeof document === "undefined") return;
+
+  const canonicalUrl = seoAbsoluteUrl(config.canonicalPath);
+  const imageUrl = seoImageUrl(config.imagePath);
+  document.documentElement.lang = "fr";
+  document.title = config.title;
+
+  upsertMetaByName("description", config.description);
+  upsertMetaByName("robots", config.robots);
+  upsertMetaByName("author", "Julien Messaoudi");
+  upsertMetaByName("theme-color", "#071126");
+  upsertMetaByName("twitter:card", "summary_large_image");
+  upsertMetaByName("twitter:title", config.title);
+  upsertMetaByName("twitter:description", config.description);
+  upsertMetaByName("twitter:image", imageUrl);
+  upsertMetaByProperty("og:type", "website");
+  upsertMetaByProperty("og:locale", "fr_FR");
+  upsertMetaByProperty("og:site_name", "GapTrack");
+  upsertMetaByProperty("og:title", config.title);
+  upsertMetaByProperty("og:description", config.description);
+  upsertMetaByProperty("og:url", canonicalUrl);
+  upsertMetaByProperty("og:image", imageUrl);
+  upsertMetaByProperty("og:image:width", "1200");
+  upsertMetaByProperty("og:image:height", "630");
+  upsertMetaByProperty("og:image:alt", "GapTrack – logiciel d’audit GRC/SSI pour centraliser les preuves, écarts et plans d’action");
+  upsertCanonicalLink(canonicalUrl);
+  upsertStructuredData(config.structuredData);
+}
+
 function AppRouter() {
   const [route, setRoute] = useState<AppRoute>(() => getCurrentAppRoute());
 
@@ -11004,6 +11244,12 @@ function AppRouter() {
     };
   }, []);
 
+  useEffect(() => {
+    if (route === "reset-password") {
+      applySeoMetadata(seoConfigForRoute("reset-password", "fr"));
+    }
+  }, [route]);
+
   if (route === "reset-password") {
     return <ResetPasswordPage />;
   }
@@ -11033,10 +11279,6 @@ function GapTrackApp({
     setTab("listing");
   }, []);
   
-  useEffect(() => {
-    document.title = I18N[lang].appTitle;
-  }, [lang]);
-
   // Sessions
   const [sessions, setSessions] = useState<Session[]>(()=>loadSessions());
   const [activeSessionId, setActiveSessionId] = useState<string>(()=>loadActiveSessionId() || "");
@@ -11061,6 +11303,10 @@ function GapTrackApp({
     [users, activeUserId]
   );
   const accountDeletionConfirmationHandledRef = useRef(false);
+
+  useEffect(() => {
+    applySeoMetadata(seoConfigForRoute(route, lang, activeUser));
+  }, [route, lang, activeUser]);
 
   useEffect(() => {
     if (activeUser && route !== "app") {

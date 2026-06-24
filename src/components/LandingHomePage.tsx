@@ -26,6 +26,25 @@ type SubscriptionPlan = "free" | "premium";
 
 const PREMIUM_CONTACT_EMAIL = "julien.messaoudi@edu.esiee.fr";
 
+export const GAPTRACK_FAQ_ITEMS = [
+  {
+    question: "Qu’est-ce qu’un audit GRC/SSI ?",
+    answer: "Un audit GRC/SSI évalue la gouvernance, les risques, la conformité et les pratiques de sécurité d’une organisation afin d’identifier les écarts et les actions prioritaires.",
+  },
+  {
+    question: "Comment GapTrack aide à centraliser les preuves d’audit ?",
+    answer: "GapTrack regroupe les preuves, notes, statuts, responsables et plans d’action dans un même espace afin de limiter les fichiers dispersés et de faciliter la traçabilité.",
+  },
+  {
+    question: "Peut-on suivre les écarts de conformité ?",
+    answer: "Oui. La plateforme permet d’identifier les écarts, de les prioriser, de suivre leur statut et de préparer les actions correctives associées.",
+  },
+  {
+    question: "GapTrack peut-il être utilisé pour ISO 27001, NIS2, DORA, RGPD ou PGSSI-S ?",
+    answer: "Oui. GapTrack est pensé pour structurer des audits et suivis de conformité autour de référentiels comme ISO 27001, NIS2, DORA, RGPD ou PGSSI-S.",
+  },
+] as const;
+
 function buildPremiumRequestMailto(source: string): string {
   const subject = "Demande d’activation Premium GapTrack";
   const body = [
@@ -71,6 +90,12 @@ export function LandingHomePage({
     }, 0);
   };
 
+  const handlePageLink = (event: React.MouseEvent<HTMLAnchorElement>, next: LandingPageView) => {
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    openPage(next);
+  };
+
   const openOffers = () => {
     if (page !== "plateforme") {
       setPage("plateforme");
@@ -82,22 +107,28 @@ export function LandingHomePage({
     }, 80);
   };
 
+  const handleOffersLink = (event: React.MouseEvent<HTMLAnchorElement>) => {
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    openOffers();
+  };
+
   return (
     <main className="gth-page">
       <div className="gth-grid-bg" />
       <header className="gth-header">
-        <button className="gth-logo gth-logo-button" type="button" onClick={() => openPage("plateforme")} aria-label="GapTrack accueil">
+        <a className="gth-logo gth-logo-button" href="/" onClick={(event) => handlePageLink(event, "plateforme")} aria-label="GapTrack accueil">
           <ShieldCheck className="gth-logo-icon" />
           <span>
             <strong>GapTrack</strong>
             <small>Audit GRC/SSI</small>
           </span>
-        </button>
+        </a>
 
         <nav className="gth-nav" aria-label="Navigation principale">
-          <button className={page === "plateforme" ? "gth-nav-active" : ""} type="button" onClick={() => openPage("plateforme")}>Accueil</button>
-          <button type="button" onClick={openOffers}>Offres</button>
-          <button className={page === "apropos" ? "gth-nav-active" : ""} type="button" onClick={() => openPage("apropos")}>À propos</button>
+          <a className={page === "plateforme" ? "gth-nav-active" : ""} href="/" onClick={(event) => handlePageLink(event, "plateforme")}>Accueil</a>
+          <a href="/#gth-pricing" onClick={handleOffersLink}>Offres</a>
+          <a className={page === "apropos" ? "gth-nav-active" : ""} href="/a-propos" onClick={(event) => handlePageLink(event, "apropos")}>À propos</a>
         </nav>
 
         <button className="gth-login-button" type="button" onClick={() => onAccess()}>
@@ -131,10 +162,10 @@ function HomePage({
             PLATEFORME SÉCURISÉE
           </div>
 
-          <h1>Centralisez vos preuves <br />et vos écarts <br /><span>dans un espace unique</span></h1>
+          <h1>Logiciel d’audit GRC/SSI <br />pour centraliser vos preuves, <br /><span>écarts et plans d’action</span></h1>
 
           <p className="gth-lead">
-            Une expérience fluide pour piloter vos audits, suivre les actions et partager les preuves avec les bonnes personnes.
+            GapTrack aide les équipes conformité et cybersécurité à piloter leurs audits, tracer les preuves, suivre les écarts et préparer leurs rapports.
           </p>
 
           <div className="gth-benefits" aria-label="Bénéfices principaux">
@@ -148,9 +179,13 @@ function HomePage({
               Découvrir gratuitement
               <ArrowRight aria-hidden="true" />
             </button>
-            <button className="gth-secondary" type="button" onClick={() => openPage("apropos")}>
+            <a className="gth-secondary" href="/a-propos" onClick={(event) => {
+              if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+              event.preventDefault();
+              openPage("apropos");
+            }}>
               En savoir plus
-            </button>
+            </a>
           </div>
         </div>
 
@@ -158,14 +193,16 @@ function HomePage({
       </section>
 
       <section className="gth-features-section" id="gth-features">
-        <h2>Une plateforme complète pour votre conformité</h2>
+        <h2>Une plateforme complète pour l’audit GRC/SSI et la conformité</h2>
         <div className="gth-feature-grid">
-          <Feature icon={<Layers />} title="Gestion des audits" text="Planifiez, exécutez et suivez vos audits de bout en bout." />
-          <Feature icon={<FileText />} title="Gestion des écarts" text="Identifiez les écarts, évaluez leur impact et suivez leur résolution." />
-          <Feature icon={<ClipboardCheck />} title="Plans d’action" text="Définissez, assignez et suivez vos actions correctives." />
-          <Feature icon={<BarChart3 />} title="Reporting & KPIs" text="Visualisez vos indicateurs clés et générez des rapports." />
+          <Feature icon={<Layers />} title="Gestion des audits GRC/SSI" text="Planifiez, exécutez et suivez vos audits ISO 27001, NIS2, DORA, RGPD ou PGSSI-S." />
+          <Feature icon={<FileText />} title="Gestion des écarts de conformité" text="Identifiez les écarts, évaluez leur impact et suivez leur résolution." />
+          <Feature icon={<ClipboardCheck />} title="Preuves et plans d’action" text="Centralisez les justificatifs, assignez les actions correctives et gardez une traçabilité claire." />
+          <Feature icon={<BarChart3 />} title="Reporting conformité & KPIs" text="Visualisez vos indicateurs clés et préparez vos exports d’audit." />
         </div>
       </section>
+
+      <FaqSection />
 
       <PricingSection
         onSelectPlan={onAccess}
@@ -174,6 +211,33 @@ function HomePage({
         }}
       />
     </>
+  );
+}
+
+
+function FaqSection() {
+  const questions = GAPTRACK_FAQ_ITEMS;
+
+  return (
+    <section className="gth-faq-section" id="gth-faq" aria-labelledby="gth-faq-title">
+      <div className="gth-faq-heading">
+        <div className="gth-kicker">
+          <Lightbulb aria-hidden="true" />
+          QUESTIONS FRÉQUENTES
+        </div>
+        <h2 id="gth-faq-title">Audit GRC/SSI, preuves et conformité : les réponses clés</h2>
+        <p>Quelques repères pour comprendre comment GapTrack simplifie la préparation, l’exécution et le suivi des audits.</p>
+      </div>
+
+      <div className="gth-faq-grid">
+        {questions.map((item) => (
+          <article className="gth-faq-card" key={item.question}>
+            <h3>{item.question}</h3>
+            <p>{item.answer}</p>
+          </article>
+        ))}
+      </div>
+    </section>
   );
 }
 
