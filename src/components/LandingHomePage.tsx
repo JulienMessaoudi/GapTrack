@@ -47,6 +47,24 @@ function buildPremiumRequestMailto(source: string): string {
   return `mailto:${PREMIUM_CONTACT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
 
+function handleSeoLinkClick(event: React.MouseEvent<HTMLAnchorElement>, action: () => void): void {
+  // Let the browser keep native link behaviours such as open in a new tab,
+  // copy link address, or download/search-engine discovery through href.
+  if (
+    event.defaultPrevented ||
+    event.button !== 0 ||
+    event.metaKey ||
+    event.ctrlKey ||
+    event.shiftKey ||
+    event.altKey
+  ) {
+    return;
+  }
+
+  event.preventDefault();
+  action();
+}
+
 export function LandingHomePage({
   onAccess,
   initialPage = "plateforme",
@@ -86,24 +104,29 @@ export function LandingHomePage({
     <main className="gth-page">
       <div className="gth-grid-bg" />
       <header className="gth-header">
-        <button className="gth-logo gth-logo-button" type="button" onClick={() => openPage("plateforme")} aria-label="GapTrack accueil">
+        <a
+          className="gth-logo gth-logo-button"
+          href="/"
+          onClick={(event) => handleSeoLinkClick(event, () => openPage("plateforme"))}
+          aria-label="GapTrack accueil"
+        >
           <ShieldCheck className="gth-logo-icon" />
           <span>
             <strong>GapTrack</strong>
             <small>Audit GRC/SSI</small>
           </span>
-        </button>
+        </a>
 
         <nav className="gth-nav" aria-label="Navigation principale">
-          <button className={page === "plateforme" ? "gth-nav-active" : ""} type="button" onClick={() => openPage("plateforme")}>Accueil</button>
-          <button type="button" onClick={openOffers}>Offres</button>
-          <button className={page === "apropos" ? "gth-nav-active" : ""} type="button" onClick={() => openPage("apropos")}>À propos</button>
+          <a className={page === "plateforme" ? "gth-nav-active" : ""} href="/" onClick={(event) => handleSeoLinkClick(event, () => openPage("plateforme"))}>Accueil</a>
+          <a href="/#gth-pricing" onClick={(event) => handleSeoLinkClick(event, openOffers)}>Offres</a>
+          <a className={page === "apropos" ? "gth-nav-active" : ""} href="/a-propos" onClick={(event) => handleSeoLinkClick(event, () => openPage("apropos"))}>À propos</a>
         </nav>
 
-        <button className="gth-login-button" type="button" onClick={() => onAccess()}>
+        <a className="gth-login-button" href="/login" onClick={(event) => handleSeoLinkClick(event, () => onAccess())}>
           Se connecter
           <ArrowRight aria-hidden="true" />
-        </button>
+        </a>
       </header>
 
       {page === "apropos" ? <AboutPage /> : <HomePage onAccess={onAccess} openPage={openPage} />}
@@ -144,13 +167,13 @@ function HomePage({
           </div>
 
           <div className="gth-hero-actions">
-            <button className="gth-primary" type="button" onClick={() => onAccess("free")}>
+            <a className="gth-primary" href="/login" onClick={(event) => handleSeoLinkClick(event, () => onAccess("free"))}>
               Découvrir gratuitement
               <ArrowRight aria-hidden="true" />
-            </button>
-            <button className="gth-secondary" type="button" onClick={() => openPage("apropos")}>
+            </a>
+            <a className="gth-secondary" href="/a-propos" onClick={(event) => handleSeoLinkClick(event, () => openPage("apropos"))}>
               En savoir plus
-            </button>
+            </a>
           </div>
         </div>
 
@@ -254,14 +277,14 @@ function PricingSection({ onSelectPlan, onRequestPremium }: { onSelectPlan: (pla
                 ))}
               </div>
             ) : null}
-            <button
+            <a
               className={plan.highlighted ? "gth-primary" : "gth-secondary"}
-              type="button"
-              onClick={() => plan.key === "premium" ? onRequestPremium() : onSelectPlan(plan.key)}
+              href={plan.key === "premium" ? buildPremiumRequestMailto("Landing page GapTrack") : "/login"}
+              onClick={(event) => handleSeoLinkClick(event, () => plan.key === "premium" ? onRequestPremium() : onSelectPlan(plan.key))}
             >
               {plan.cta}
               {plan.key === "premium" ? <Mail aria-hidden="true" /> : <ArrowRight aria-hidden="true" />}
-            </button>
+            </a>
           </article>
         ))}
       </div>

@@ -112,6 +112,7 @@
 
 .gth-login-button {
   justify-self: end;
+  text-decoration: none;
   min-width: 190px;
   height: 46px;
   padding: 0 26px;
@@ -242,6 +243,7 @@
 .gth-primary,
 .gth-secondary {
   height: 48px;
+  text-decoration: none;
   min-width: 260px;
   padding: 0 28px;
   border-radius: 8px;
@@ -824,8 +826,11 @@
   background: transparent;
   cursor: pointer;
   font: inherit;
+  color: inherit;
+  text-decoration: none;
 }
 
+.gth-nav a,
 .gth-nav button {
   position: relative;
   display: inline-flex;
@@ -842,6 +847,7 @@
   font: inherit;
 }
 
+.gth-nav a:hover,
 .gth-nav button:hover {
   color: #ffffff;
 }
@@ -1222,6 +1228,7 @@
 }
 
 @media (max-width: 820px) {
+  .gth-nav a,
   .gth-nav button {
     white-space: nowrap;
   }

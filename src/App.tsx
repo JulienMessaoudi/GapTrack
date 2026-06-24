@@ -10971,6 +10971,113 @@ function getCurrentAppRoute(): AppRoute {
   return "home";
 }
 
+
+type SeoRouteConfig = {
+  title: string;
+  description: string;
+  path: string;
+  robots: "index, follow" | "noindex, follow";
+};
+
+const SEO_ROUTE_CONFIG: Record<AppRoute, SeoRouteConfig> = {
+  home: {
+    title: "GapTrack — Plateforme d’audit GRC/SSI et gestion des preuves",
+    description: "Centralisez vos audits GRC/SSI, preuves, écarts et plans d’action dans une plateforme sécurisée pensée pour ISO 27001, NIS2, DORA et RGPD.",
+    path: "/",
+    robots: "index, follow",
+  },
+  about: {
+    title: "À propos de GapTrack — Audit GRC/SSI, conformité et preuves",
+    description: "Découvrez GapTrack, un projet conçu pour simplifier l’audit GRC/SSI, la conformité, la gestion des preuves, le suivi des écarts et les plans d’action.",
+    path: "/a-propos",
+    robots: "index, follow",
+  },
+  login: {
+    title: "Connexion GapTrack",
+    description: "Accédez à votre espace GapTrack pour gérer vos audits GRC/SSI, preuves, écarts et plans d’action.",
+    path: "/login",
+    robots: "noindex, follow",
+  },
+  app: {
+    title: I18N.fr.appTitle,
+    description: "Espace applicatif privé GapTrack réservé aux utilisateurs connectés.",
+    path: "/app",
+    robots: "noindex, follow",
+  },
+  "reset-password": {
+    title: "Réinitialisation du mot de passe GapTrack",
+    description: "Page sécurisée de réinitialisation du mot de passe GapTrack.",
+    path: "/reset-password",
+    robots: "noindex, follow",
+  },
+};
+
+function siteOrigin(): string {
+  if (typeof window === "undefined" || !window.location?.origin) return "";
+  return window.location.origin;
+}
+
+function absoluteRouteUrl(path: string): string {
+  const origin = siteOrigin();
+  return origin ? `${origin}${path}` : path;
+}
+
+function upsertMetaTag(attribute: "name" | "property", key: string, content: string): void {
+  if (typeof document === "undefined") return;
+
+  const selector = `meta[${attribute}="${key}"]`;
+  let element = document.head.querySelector<HTMLMetaElement>(selector);
+
+  if (!element) {
+    element = document.createElement("meta");
+    element.setAttribute(attribute, key);
+    document.head.appendChild(element);
+  }
+
+  element.setAttribute("content", content);
+}
+
+function upsertCanonicalLink(href: string): void {
+  if (typeof document === "undefined") return;
+
+  let element = document.head.querySelector<HTMLLinkElement>('link[rel="canonical"]');
+
+  if (!element) {
+    element = document.createElement("link");
+    element.setAttribute("rel", "canonical");
+    document.head.appendChild(element);
+  }
+
+  element.setAttribute("href", href);
+}
+
+function applyRouteSeo(route: AppRoute, lang: LangKey = "fr"): void {
+  if (typeof document === "undefined") return;
+
+  const config = SEO_ROUTE_CONFIG[route] || SEO_ROUTE_CONFIG.home;
+  const title = route === "app" ? I18N[lang].appTitle : config.title;
+  const canonicalUrl = absoluteRouteUrl(config.path);
+
+  document.documentElement.lang = lang;
+  document.title = title;
+
+  upsertMetaTag("name", "description", config.description);
+  upsertMetaTag("name", "robots", config.robots);
+
+  upsertCanonicalLink(canonicalUrl);
+
+  upsertMetaTag("property", "og:site_name", "GapTrack");
+  upsertMetaTag("property", "og:type", "website");
+  upsertMetaTag("property", "og:title", title);
+  upsertMetaTag("property", "og:description", config.description);
+  upsertMetaTag("property", "og:url", canonicalUrl);
+  upsertMetaTag("property", "og:locale", lang === "fr" ? "fr_FR" : "en_US");
+
+  upsertMetaTag("name", "twitter:card", "summary_large_image");
+  upsertMetaTag("name", "twitter:title", title);
+  upsertMetaTag("name", "twitter:description", config.description);
+}
+
 function AppRouter() {
   const [route, setRoute] = useState<AppRoute>(() => getCurrentAppRoute());
 
@@ -11004,6 +11111,10 @@ function AppRouter() {
     };
   }, []);
 
+  useEffect(() => {
+    applyRouteSeo(route);
+  }, [route]);
+
   if (route === "reset-password") {
     return <ResetPasswordPage />;
   }
@@ -11034,8 +11145,8 @@ function GapTrackApp({
   }, []);
   
   useEffect(() => {
-    document.title = I18N[lang].appTitle;
-  }, [lang]);
+    applyRouteSeo(route, lang);
+  }, [route, lang]);
 
   // Sessions
   const [sessions, setSessions] = useState<Session[]>(()=>loadSessions());
