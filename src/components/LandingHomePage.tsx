@@ -332,10 +332,6 @@ function FaqSection() {
       question: "Comment GapTrack aide-t-il à suivre les écarts de conformité ?",
       answer: "La plateforme permet d’identifier les écarts, de les prioriser, de suivre leur statut et de rattacher des plans d’action afin de piloter la remédiation dans le temps.",
     },
-    {
-      question: "Les preuves d’audit sont-elles traçables ?",
-      answer: "Oui. GapTrack est conçu pour associer les preuves aux contrôles, suivre leur état, conserver le contexte et faciliter la validation ou le refus des éléments fournis selon l’organisation.",
-    },
   ];
 
   return (
