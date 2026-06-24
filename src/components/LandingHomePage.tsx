@@ -100,6 +100,17 @@ export function LandingHomePage({
     }, 80);
   };
 
+  const openFaq = () => {
+    if (page !== "plateforme") {
+      setPage("plateforme");
+      onNavigate?.("plateforme");
+    }
+
+    window.setTimeout(() => {
+      document.getElementById("faq")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 80);
+  };
+
   return (
     <main className="gth-page">
       <div className="gth-grid-bg" />
@@ -120,6 +131,7 @@ export function LandingHomePage({
         <nav className="gth-nav" aria-label="Navigation principale">
           <a className={page === "plateforme" ? "gth-nav-active" : ""} href="/" onClick={(event) => handleSeoLinkClick(event, () => openPage("plateforme"))}>Accueil</a>
           <a href="/#gth-pricing" onClick={(event) => handleSeoLinkClick(event, openOffers)}>Offres</a>
+          <a href="/#faq" onClick={(event) => handleSeoLinkClick(event, openFaq)}>FAQ</a>
           <a className={page === "apropos" ? "gth-nav-active" : ""} href="/a-propos" onClick={(event) => handleSeoLinkClick(event, () => openPage("apropos"))}>À propos</a>
         </nav>
 
@@ -196,6 +208,8 @@ function HomePage({
           window.location.href = buildPremiumRequestMailto("Landing page GapTrack");
         }}
       />
+
+      <FaqSection />
     </>
   );
 }
@@ -295,6 +309,53 @@ function PricingSection({ onSelectPlan, onRequestPremium }: { onSelectPlan: (pla
           <strong>Pas besoin d’attendre Premium pour démarrer.</strong>
           <span>Free reste le point d’entrée immédiat ; Premium s’active ensuite proprement côté serveur sur le même compte, avec vos données conservées.</span>
         </div>
+      </div>
+    </section>
+  );
+}
+
+function FaqSection() {
+  const faqs = [
+    {
+      question: "À quoi sert GapTrack ?",
+      answer: "GapTrack est un logiciel d’audit GRC/SSI qui aide à centraliser les audits, les preuves, les écarts, les plans d’action et les indicateurs de conformité dans un espace sécurisé.",
+    },
+    {
+      question: "GapTrack peut-il aider pour ISO 27001, NIS2, DORA, RGPD ou PGSSI-S ?",
+      answer: "Oui. GapTrack permet de structurer le suivi de conformité autour de référentiels comme ISO 27001, NIS2, DORA, RGPD ou PGSSI-S, avec des preuves, statuts, responsables et actions correctives associés à chaque contrôle.",
+    },
+    {
+      question: "Quelle est la différence entre GapTrack Free et GapTrack Premium ?",
+      answer: "Free permet de démarrer avec un audit et un utilisateur. Premium ajoute les audits illimités, les exports PDF et CSV, les utilisateurs et rôles avancés, le stockage cloud sécurisé, la validation des preuves et les modèles personnalisés.",
+    },
+    {
+      question: "Comment GapTrack aide-t-il à suivre les écarts de conformité ?",
+      answer: "La plateforme permet d’identifier les écarts, de les prioriser, de suivre leur statut et de rattacher des plans d’action afin de piloter la remédiation dans le temps.",
+    },
+    {
+      question: "Les preuves d’audit sont-elles traçables ?",
+      answer: "Oui. GapTrack est conçu pour associer les preuves aux contrôles, suivre leur état, conserver le contexte et faciliter la validation ou le refus des éléments fournis selon l’organisation.",
+    },
+  ];
+
+  return (
+    <section className="gth-faq-section" id="faq" aria-labelledby="gth-faq-title">
+      <div className="gth-faq-heading">
+        <div className="gth-kicker">
+          <Lightbulb aria-hidden="true" />
+          FAQ AUDIT GRC/SSI
+        </div>
+        <h2 id="gth-faq-title">Questions fréquentes sur GapTrack</h2>
+        <p>Des réponses claires pour comprendre comment GapTrack accompagne les audits GRC/SSI, la gestion des preuves, le suivi des écarts et la conformité.</p>
+      </div>
+
+      <div className="gth-faq-grid">
+        {faqs.map((faq) => (
+          <article className="gth-faq-card" key={faq.question}>
+            <h3>{faq.question}</h3>
+            <p>{faq.answer}</p>
+          </article>
+        ))}
       </div>
     </section>
   );
