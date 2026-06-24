@@ -154,7 +154,7 @@ function HomePage({
             PLATEFORME SÉCURISÉE
           </div>
 
-          <h1>Centralisez vos preuves <br />et vos écarts <br /><span>dans un espace unique</span></h1>
+          <h1>Logiciel d’audit GRC/SSI pour centraliser <br />vos preuves, écarts <br /><span>et plans d’action</span></h1>
 
           <p className="gth-lead">
             Une expérience fluide pour piloter vos audits, suivre les actions et partager les preuves avec les bonnes personnes.
