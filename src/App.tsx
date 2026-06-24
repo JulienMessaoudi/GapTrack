@@ -10971,6 +10971,147 @@ function getCurrentAppRoute(): AppRoute {
   return "home";
 }
 
+
+interface SeoConfig {
+  title: string;
+  description: string;
+  canonicalPath: string;
+  robots: string;
+  structuredData?: Record<string, unknown>;
+}
+
+function seoSiteOrigin(): string {
+  if (typeof window === "undefined") return "";
+  return window.location.origin;
+}
+
+function seoAbsoluteUrl(path: string): string {
+  const origin = seoSiteOrigin();
+  if (!origin) return path;
+  return `${origin}${path}`;
+}
+
+function upsertMetaByName(name: string, content: string) {
+  if (typeof document === "undefined") return;
+  let el = document.head.querySelector(`meta[name="${name}"]`) as HTMLMetaElement | null;
+  if (!el) {
+    el = document.createElement("meta");
+    el.setAttribute("name", name);
+    document.head.appendChild(el);
+  }
+  el.setAttribute("content", content);
+}
+
+function upsertMetaByProperty(property: string, content: string) {
+  if (typeof document === "undefined") return;
+  let el = document.head.querySelector(`meta[property="${property}"]`) as HTMLMetaElement | null;
+  if (!el) {
+    el = document.createElement("meta");
+    el.setAttribute("property", property);
+    document.head.appendChild(el);
+  }
+  el.setAttribute("content", content);
+}
+
+function upsertCanonicalLink(href: string) {
+  if (typeof document === "undefined") return;
+  let el = document.head.querySelector('link[rel="canonical"]') as HTMLLinkElement | null;
+  if (!el) {
+    el = document.createElement("link");
+    el.setAttribute("rel", "canonical");
+    document.head.appendChild(el);
+  }
+  el.setAttribute("href", href);
+}
+
+function upsertStructuredData(data: Record<string, unknown> | undefined) {
+  if (typeof document === "undefined") return;
+  const id = "gaptrack-structured-data";
+  let el = document.getElementById(id) as HTMLScriptElement | null;
+
+  if (!data) {
+    el?.remove();
+    return;
+  }
+
+  if (!el) {
+    el = document.createElement("script");
+    el.id = id;
+    el.type = "application/ld+json";
+    document.head.appendChild(el);
+  }
+
+  el.textContent = JSON.stringify(data);
+}
+
+function seoConfigForRoute(route: AppRoute, lang: LangKey, activeUser?: AppUser | null): SeoConfig {
+  const titleByRoute: Record<AppRoute, string> = {
+    home: "GapTrack – Logiciel d’audit GRC/SSI et gestion des preuves",
+    about: "À propos de GapTrack – Audit GRC/SSI, conformité et preuves",
+    login: "Connexion GapTrack – Accès sécurisé",
+    app: activeUser ? I18N[lang].appTitle : "Connexion GapTrack – Accès sécurisé",
+    "reset-password": "Réinitialisation du mot de passe GapTrack",
+  };
+
+  const descriptionByRoute: Record<AppRoute, string> = {
+    home: "GapTrack centralise vos audits GRC/SSI, preuves, écarts et plans d’action dans une plateforme sécurisée pour piloter votre conformité.",
+    about: "Découvrez GapTrack, une solution conçue pour simplifier les audits GRC/SSI, la traçabilité des preuves, le suivi des écarts et les plans d’action.",
+    login: "Accédez à votre espace sécurisé GapTrack pour gérer vos audits, preuves, écarts et plans d’action.",
+    app: "Espace privé GapTrack pour piloter les audits, preuves, écarts, plans d’action et rapports de conformité.",
+    "reset-password": "Définissez un nouveau mot de passe pour retrouver l’accès à votre compte sécurisé GapTrack.",
+  };
+
+  const canonicalPath = route === "about" ? "/a-propos" : pathForRoute(route);
+  const isPublicPage = route === "home" || route === "about";
+  const canonicalUrl = seoAbsoluteUrl(canonicalPath);
+  const title = titleByRoute[route];
+  const description = descriptionByRoute[route];
+
+  return {
+    title,
+    description,
+    canonicalPath,
+    robots: isPublicPage ? "index, follow" : "noindex, nofollow",
+    structuredData: isPublicPage
+      ? {
+          "@context": "https://schema.org",
+          "@type": "SoftwareApplication",
+          name: "GapTrack",
+          applicationCategory: "BusinessApplication",
+          operatingSystem: "Web",
+          url: canonicalUrl,
+          description,
+          offers: {
+            "@type": "Offer",
+            price: "0",
+            priceCurrency: "EUR",
+          },
+        }
+      : undefined,
+  };
+}
+
+function applySeoMetadata(config: SeoConfig) {
+  if (typeof document === "undefined") return;
+
+  const canonicalUrl = seoAbsoluteUrl(config.canonicalPath);
+  document.documentElement.lang = "fr";
+  document.title = config.title;
+
+  upsertMetaByName("description", config.description);
+  upsertMetaByName("robots", config.robots);
+  upsertMetaByName("twitter:card", "summary_large_image");
+  upsertMetaByName("twitter:title", config.title);
+  upsertMetaByName("twitter:description", config.description);
+  upsertMetaByProperty("og:type", "website");
+  upsertMetaByProperty("og:site_name", "GapTrack");
+  upsertMetaByProperty("og:title", config.title);
+  upsertMetaByProperty("og:description", config.description);
+  upsertMetaByProperty("og:url", canonicalUrl);
+  upsertCanonicalLink(canonicalUrl);
+  upsertStructuredData(config.structuredData);
+}
+
 function AppRouter() {
   const [route, setRoute] = useState<AppRoute>(() => getCurrentAppRoute());
 
@@ -11004,6 +11145,12 @@ function AppRouter() {
     };
   }, []);
 
+  useEffect(() => {
+    if (route === "reset-password") {
+      applySeoMetadata(seoConfigForRoute("reset-password", "fr"));
+    }
+  }, [route]);
+
   if (route === "reset-password") {
     return <ResetPasswordPage />;
   }
@@ -11033,10 +11180,6 @@ function GapTrackApp({
     setTab("listing");
   }, []);
   
-  useEffect(() => {
-    document.title = I18N[lang].appTitle;
-  }, [lang]);
-
   // Sessions
   const [sessions, setSessions] = useState<Session[]>(()=>loadSessions());
   const [activeSessionId, setActiveSessionId] = useState<string>(()=>loadActiveSessionId() || "");
@@ -11061,6 +11204,10 @@ function GapTrackApp({
     [users, activeUserId]
   );
   const accountDeletionConfirmationHandledRef = useRef(false);
+
+  useEffect(() => {
+    applySeoMetadata(seoConfigForRoute(route, lang, activeUser));
+  }, [route, lang, activeUser]);
 
   useEffect(() => {
     if (activeUser && route !== "app") {
