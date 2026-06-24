@@ -580,7 +580,7 @@ export function LoginAccessPage({
             <ShieldCheck className="gt-brand-icon" aria-hidden="true" />
             <div>
               <div className="gt-brand-name">GapTrack</div>
-              <div className="gt-brand-subtitle">Audit GRC/SSI</div>
+              <div className="gt-brand-subtitle">Audit SSI</div>
             </div>
           </div>
 
