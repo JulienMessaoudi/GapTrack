@@ -162,10 +162,10 @@ function HomePage({
             PLATEFORME SÉCURISÉE
           </div>
 
-          <h1>Logiciel d’audit GRC/SSI <br />pour centraliser vos preuves, <br /><span>écarts et plans d’action</span></h1>
+          <h1>Centralisez vos <br />preuves <br />et vos écarts <br /><span>dans un espace <br />unique</span></h1>
 
           <p className="gth-lead">
-            GapTrack aide les équipes conformité et cybersécurité à piloter leurs audits, tracer les preuves, suivre les écarts et préparer leurs rapports.
+            Une expérience fluide pour piloter vos audits GRC/SSI, suivre les actions et partager les preuves avec les bonnes personnes.
           </p>
 
           <div className="gth-benefits" aria-label="Bénéfices principaux">
@@ -193,16 +193,14 @@ function HomePage({
       </section>
 
       <section className="gth-features-section" id="gth-features">
-        <h2>Une plateforme complète pour l’audit GRC/SSI et la conformité</h2>
+        <h2>Une plateforme complète pour votre conformité</h2>
         <div className="gth-feature-grid">
-          <Feature icon={<Layers />} title="Gestion des audits GRC/SSI" text="Planifiez, exécutez et suivez vos audits ISO 27001, NIS2, DORA, RGPD ou PGSSI-S." />
-          <Feature icon={<FileText />} title="Gestion des écarts de conformité" text="Identifiez les écarts, évaluez leur impact et suivez leur résolution." />
-          <Feature icon={<ClipboardCheck />} title="Preuves et plans d’action" text="Centralisez les justificatifs, assignez les actions correctives et gardez une traçabilité claire." />
-          <Feature icon={<BarChart3 />} title="Reporting conformité & KPIs" text="Visualisez vos indicateurs clés et préparez vos exports d’audit." />
+          <Feature icon={<Layers />} title="Gestion des audits" text="Planifiez, exécutez et suivez vos audits de bout en bout." />
+          <Feature icon={<FileText />} title="Gestion des écarts" text="Identifiez les écarts, évaluez leur impact et suivez leur résolution." />
+          <Feature icon={<ClipboardCheck />} title="Plans d’action" text="Définissez, assignez et suivez vos actions correctives." />
+          <Feature icon={<BarChart3 />} title="Reporting & KPIs" text="Visualisez vos indicateurs clés et générez des rapports." />
         </div>
       </section>
-
-      <FaqSection />
 
       <PricingSection
         onSelectPlan={onAccess}
@@ -210,6 +208,8 @@ function HomePage({
           window.location.href = buildPremiumRequestMailto("Landing page GapTrack");
         }}
       />
+
+      <FaqSection />
     </>
   );
 }
