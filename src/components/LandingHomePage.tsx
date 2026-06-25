@@ -319,7 +319,7 @@ export function LandingHomePage({
           onClick={(event) => handleSeoLinkClick(event, () => openPage("plateforme"))}
           aria-label="GapTrack accueil"
         >
-          <ShieldCheck className="gth-logo-icon" />
+          <img src="/icon-192.png" alt="" className="gth-logo-icon" aria-hidden="true" loading="eager" decoding="async" />
           <span>
             <strong>GapTrack</strong>
             <small>Audit SSI</small>
