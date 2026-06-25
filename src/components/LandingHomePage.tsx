@@ -65,6 +65,78 @@ function handleSeoLinkClick(event: React.MouseEvent<HTMLAnchorElement>, action: 
   action();
 }
 
+const GAPTRACK_FAQS = [
+  {
+    question: "À quoi sert GapTrack ?",
+    answer: "GapTrack est un logiciel d’audit SSI qui aide à centraliser les audits, les preuves, les écarts, les plans d’action et les indicateurs de conformité dans un espace sécurisé.",
+  },
+  {
+    question: "GapTrack peut-il aider pour ISO 27001, NIS2, DORA, RGPD ou PGSSI-S ?",
+    answer: "Oui. GapTrack permet de structurer le suivi de conformité autour de référentiels comme ISO 27001, NIS2, DORA, RGPD ou PGSSI-S, avec des preuves, statuts, responsables et actions correctives associés à chaque contrôle.",
+  },
+  {
+    question: "Quelle est la différence entre GapTrack Free et GapTrack Premium ?",
+    answer: "Free permet de démarrer avec un audit et un utilisateur. Premium ajoute les audits illimités, les exports PDF et CSV, les utilisateurs et rôles avancés, le stockage cloud sécurisé, la validation des preuves et les modèles personnalisés.",
+  },
+  {
+    question: "Comment GapTrack aide-t-il à suivre les écarts de conformité ?",
+    answer: "La plateforme permet d’identifier les écarts, de les prioriser, de suivre leur statut et de rattacher des plans d’action afin de piloter la remédiation dans le temps.",
+  },
+];
+
+function JsonLd() {
+  const softwareApplicationSchema = {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    name: "GapTrack",
+    applicationCategory: "BusinessApplication",
+    operatingSystem: "Web",
+    url: "https://gaptrack-ssi.vercel.app/",
+    description:
+      "GapTrack est un logiciel d’audit SSI pour centraliser les audits, les preuves, les écarts et les plans d’action de conformité.",
+    offers: {
+      "@type": "Offer",
+      price: "0",
+      priceCurrency: "EUR",
+    },
+    publisher: {
+      "@type": "Organization",
+      name: "GapTrack",
+      url: "https://gaptrack-ssi.vercel.app/",
+    },
+  };
+
+  const faqSchema = {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: GAPTRACK_FAQS.map((faq) => ({
+      "@type": "Question",
+      name: faq.question,
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: faq.answer,
+      },
+    })),
+  };
+
+  return (
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(softwareApplicationSchema),
+        }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(faqSchema),
+        }}
+      />
+    </>
+  );
+}
+
 export function LandingHomePage({
   onAccess,
   initialPage = "plateforme",
@@ -159,6 +231,8 @@ function HomePage({
 }) {
   return (
     <>
+      <JsonLd />
+
       <section className="gth-hero" id="top">
         <div className="gth-hero-copy">
           <div className="gth-kicker">
@@ -315,24 +389,7 @@ function PricingSection({ onSelectPlan, onRequestPremium }: { onSelectPlan: (pla
 }
 
 function FaqSection() {
-  const faqs = [
-    {
-      question: "À quoi sert GapTrack ?",
-      answer: "GapTrack est un logiciel d’audit SSI qui aide à centraliser les audits, les preuves, les écarts, les plans d’action et les indicateurs de conformité dans un espace sécurisé.",
-    },
-    {
-      question: "GapTrack peut-il aider pour ISO 27001, NIS2, DORA, RGPD ou PGSSI-S ?",
-      answer: "Oui. GapTrack permet de structurer le suivi de conformité autour de référentiels comme ISO 27001, NIS2, DORA, RGPD ou PGSSI-S, avec des preuves, statuts, responsables et actions correctives associés à chaque contrôle.",
-    },
-    {
-      question: "Quelle est la différence entre GapTrack Free et GapTrack Premium ?",
-      answer: "Free permet de démarrer avec un audit et un utilisateur. Premium ajoute les audits illimités, les exports PDF et CSV, les utilisateurs et rôles avancés, le stockage cloud sécurisé, la validation des preuves et les modèles personnalisés.",
-    },
-    {
-      question: "Comment GapTrack aide-t-il à suivre les écarts de conformité ?",
-      answer: "La plateforme permet d’identifier les écarts, de les prioriser, de suivre leur statut et de rattacher des plans d’action afin de piloter la remédiation dans le temps.",
-    },
-  ];
+  const faqs = GAPTRACK_FAQS;
 
   return (
     <section className="gth-faq-section" id="faq" aria-labelledby="gth-faq-title">
