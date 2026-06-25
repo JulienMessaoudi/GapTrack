@@ -65,6 +65,52 @@ function handleSeoLinkClick(event: React.MouseEvent<HTMLAnchorElement>, action: 
   action();
 }
 
+function prefersReducedMotion(): boolean {
+  return typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+function scrollToLandingSection(id: string, delay = 0): void {
+  window.setTimeout(() => {
+    document.getElementById(id)?.scrollIntoView({
+      behavior: prefersReducedMotion() ? "auto" : "smooth",
+      block: "start",
+    });
+  }, delay);
+}
+
+function getInitialMediaQueryMatch(query: string): boolean {
+  return typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia(query).matches;
+}
+
+function useMediaQuery(query: string): boolean {
+  const [matches, setMatches] = useState(() => getInitialMediaQueryMatch(query));
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+      return;
+    }
+
+    const media = window.matchMedia(query);
+    const update = () => setMatches(media.matches);
+
+    update();
+
+    if (typeof media.addEventListener === "function") {
+      media.addEventListener("change", update);
+      return () => media.removeEventListener("change", update);
+    }
+
+    media.addListener(update);
+    return () => media.removeListener(update);
+  }, [query]);
+
+  return matches;
+}
+
 const GAPTRACK_FAQS = [
   {
     question: "À quoi sert GapTrack ?",
@@ -156,9 +202,7 @@ export function LandingHomePage({
     setPage(next);
     onNavigate?.(next);
 
-    window.setTimeout(() => {
-      document.getElementById("top")?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 0);
+    scrollToLandingSection("top");
   };
 
   const openOffers = () => {
@@ -167,9 +211,7 @@ export function LandingHomePage({
       onNavigate?.("plateforme");
     }
 
-    window.setTimeout(() => {
-      document.getElementById("gth-pricing")?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 80);
+    scrollToLandingSection("gth-pricing", 80);
   };
 
   const openFaq = () => {
@@ -178,9 +220,7 @@ export function LandingHomePage({
       onNavigate?.("plateforme");
     }
 
-    window.setTimeout(() => {
-      document.getElementById("faq")?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 80);
+    scrollToLandingSection("faq", 80);
   };
 
   return (
@@ -229,6 +269,8 @@ function HomePage({
   onAccess: (plan?: SubscriptionPlan) => void;
   openPage: (page: LandingPageView) => void;
 }) {
+  const isCompactViewport = useMediaQuery("(max-width: 820px)");
+
   return (
     <>
       <JsonLd />
@@ -263,7 +305,7 @@ function HomePage({
           </div>
         </div>
 
-        <DashboardMock />
+        {!isCompactViewport ? <DashboardMock /> : null}
       </section>
 
       <section className="gth-features-section" id="gth-features">

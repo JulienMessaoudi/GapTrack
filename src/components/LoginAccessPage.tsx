@@ -259,6 +259,37 @@ function readSelectedPlan(): SubscriptionPlan {
   return "free";
 }
 
+function getInitialMediaQueryMatch(query: string): boolean {
+  return typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia(query).matches;
+}
+
+function useMediaQuery(query: string): boolean {
+  const [matches, setMatches] = useState(() => getInitialMediaQueryMatch(query));
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+      return;
+    }
+
+    const media = window.matchMedia(query);
+    const update = () => setMatches(media.matches);
+
+    update();
+
+    if (typeof media.addEventListener === "function") {
+      media.addEventListener("change", update);
+      return () => media.removeEventListener("change", update);
+    }
+
+    media.addListener(update);
+    return () => media.removeListener(update);
+  }, [query]);
+
+  return matches;
+}
+
 export function LoginAccessPage({
   mode,
   lang,
@@ -325,6 +356,7 @@ export function LoginAccessPage({
   }, [selectedPlan]);
 
   const isSetup = authView === "signup";
+  const isCompactViewport = useMediaQuery("(max-width: 780px)");
 
   function goBackToHome() {
     if (onBackHome) {
@@ -611,7 +643,7 @@ export function LoginAccessPage({
             />
           </div>
 
-          <DashboardPreview />
+          {!isCompactViewport ? <DashboardPreview /> : null}
         </section>
 
         <section className="gt-login-card" aria-label={isSetup ? "Création du compte" : "Connexion"}>

@@ -1827,3 +1827,111 @@
   }
 }
 
+
+
+/* =========================================================
+   Mobile performance optimizations
+   ========================================================= */
+@supports (content-visibility: auto) {
+  .gth-features-section,
+  .gth-pricing-section,
+  .gth-faq-section,
+  .gth-about-section,
+  .gth-about-cta {
+    content-visibility: auto;
+    contain-intrinsic-size: 1px 720px;
+  }
+}
+
+@media (max-width: 820px) {
+  .gth-page {
+    background: linear-gradient(135deg, #071126 0%, #050a18 52%, #07142b 100%);
+  }
+
+  .gth-grid-bg {
+    display: none;
+  }
+
+  .gth-hero {
+    min-height: auto;
+    margin-top: 18px;
+    gap: 24px;
+    padding-bottom: 28px;
+  }
+
+  .gth-hero h1 {
+    font-size: clamp(38px, 10.8vw, 44px);
+    letter-spacing: -1.7px;
+  }
+
+  .gth-lead {
+    margin: 20px 0 24px;
+    font-size: 17px;
+    line-height: 1.52;
+  }
+
+  .gth-benefits {
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+
+  .gth-logo-icon,
+  .gth-benefit-icon svg,
+  .gth-principle-icon svg,
+  .gth-about-card-icon svg {
+    filter: none !important;
+  }
+
+  .gth-header,
+  .gth-hero,
+  .gth-features-section,
+  .gth-pricing-section,
+  .gth-faq-section,
+  .gth-about,
+  .gth-signature {
+    width: min(100%, calc(100% - 32px));
+  }
+
+  .gth-features-section,
+  .gth-pricing-section,
+  .gth-faq-section {
+    border-radius: 18px;
+    box-shadow: none;
+    background: rgba(9, 20, 44, .72);
+  }
+
+  .gth-feature-card,
+  .gth-price-card,
+  .gth-faq-card,
+  .gth-principle,
+  .gth-about-card {
+    box-shadow: none !important;
+  }
+
+  .gth-feature-icon,
+  .gth-price-topline strong,
+  .gth-premium-reassurance span,
+  .gth-pricing-reassurance,
+  .gth-about-cta {
+    background-image: none !important;
+  }
+
+  .gth-nav {
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .gth-nav::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gth-page *,
+  .gaptrack-auth * {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: .01ms !important;
+  }
+}

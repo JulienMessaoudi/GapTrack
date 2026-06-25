@@ -1209,3 +1209,52 @@
   opacity: .65;
   cursor: not-allowed;
 }
+
+
+/* =========================================================
+   Mobile performance optimizations
+   ========================================================= */
+@supports (content-visibility: auto) {
+  .gt-login-card,
+  .gt-protection,
+  .gt-plan-selection,
+  .gt-premium-info,
+  .gt-confirmation-card,
+  .gt-existing-account-card {
+    content-visibility: auto;
+    contain-intrinsic-size: 1px 520px;
+  }
+}
+
+@media (max-width: 780px) {
+  .gaptrack-auth {
+    background: linear-gradient(135deg, #081126 0%, #050a18 54%, #07152d 100%);
+  }
+
+  .gt-bg-grid {
+    display: none;
+  }
+
+  .gt-brand-icon,
+  .gt-feature-icon svg,
+  .gt-secure-badge svg,
+  .gt-protection-icon svg {
+    filter: none !important;
+  }
+
+  .gt-feature-card,
+  .gt-login-card,
+  .gt-plan-option,
+  .gt-protection,
+  .gt-confirmation-card,
+  .gt-existing-account-card {
+    box-shadow: none !important;
+  }
+
+  .gt-feature-card,
+  .gt-login-card,
+  .gt-plan-option,
+  .gt-protection {
+    background-image: none !important;
+  }
+}
