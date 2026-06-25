@@ -1148,7 +1148,7 @@ function evidenceStatusClass(status: EvidenceStatus): string {
 
 const I18N = {
   fr: {
-    appTitle: "Plateforme GRC/SSI - Évaluations & Tableaux de bord",
+    appTitle: "Plateforme SSI - Évaluations & Tableaux de bord",
     listing: "Listing",
     dashboard: "Tableau de bord",
     bulkDone: "Marquer les visibles conformes",
@@ -4994,7 +4994,7 @@ function Sidebar({ current, onNavigate, lang }: { current: string; onNavigate: (
             height: 58,
             flexShrink: 0,
             borderRadius: 14,
-            objectFit: "cover",
+            objectFit: "contain",
             display: "block",
           }}
         />
@@ -5003,7 +5003,7 @@ function Sidebar({ current, onNavigate, lang }: { current: string; onNavigate: (
             GapTrack
           </div>
           <div style={{ marginTop: 6, fontSize: 13, color: "#94a3b8", lineHeight: 1.2 }}>
-            Audit GRC/SSI
+            Audit SSI
           </div>
         </div>
       </div>
@@ -5222,12 +5222,12 @@ function Toolbar({
               src="/icon-192.png"
               alt=""
               aria-hidden="true"
-              className="h-7 w-7 shrink-0 rounded-md object-cover"
+              className="h-7 w-7 shrink-0 rounded-md object-contain"
               loading="eager"
               decoding="async"
             />
             <span className="font-semibold text-sm">GapTrack</span>
-            <span className="text-xs text-muted-foreground hidden sm:inline">Audit GRC/SSI</span>
+            <span className="text-xs text-muted-foreground hidden sm:inline">Audit SSI</span>
           </div>
 
           <div className="flex items-center gap-2">
@@ -10772,7 +10772,7 @@ function PrintExecutive({
       <section className="page p-10">
         <div className="report-cover flex items-center justify-between">
           <div>
-            <div className="report-brand">GapTrack · {lang === "fr" ? "Audit GRC/SSI" : "GRC/Sec Audit"}</div>
+            <div className="report-brand">GapTrack · {lang === "fr" ? "Audit SSI" : "GRC/Sec Audit"}</div>
             <h1>{lang === "fr" ? "Rapport d’audit sécurité" : "Security audit report"}</h1>
             <p className="report-subtitle">
               {sessionName} · {sessionFrameworkLabel(session, lang)} · {formatAuditDate(session?.auditDate, lang)}
@@ -11150,20 +11150,20 @@ type SeoRouteConfig = {
 
 const SEO_ROUTE_CONFIG: Record<AppRoute, SeoRouteConfig> = {
   home: {
-    title: "GapTrack — Plateforme d’audit GRC/SSI et gestion des preuves",
-    description: "Centralisez vos audits GRC/SSI, preuves, écarts et plans d’action dans une plateforme sécurisée pensée pour ISO 27001, NIS2, DORA et RGPD.",
+    title: "GapTrack — Plateforme d’audit SSI et gestion des preuves",
+    description: "Centralisez vos audits SSI, preuves, écarts et plans d’action dans une plateforme sécurisée pensée pour ISO 27001, NIS2, DORA et RGPD.",
     path: "/",
     robots: "index, follow",
   },
   about: {
-    title: "À propos de GapTrack — Audit GRC/SSI, conformité et preuves",
-    description: "Découvrez GapTrack, un projet conçu pour simplifier l’audit GRC/SSI, la conformité, la gestion des preuves, le suivi des écarts et les plans d’action.",
+    title: "À propos de GapTrack — Audit SSI, conformité et preuves",
+    description: "Découvrez GapTrack, un projet conçu pour simplifier l’audit SSI, la conformité, la gestion des preuves, le suivi des écarts et les plans d’action.",
     path: "/a-propos",
     robots: "index, follow",
   },
   login: {
     title: "Connexion GapTrack",
-    description: "Accédez à votre espace GapTrack pour gérer vos audits GRC/SSI, preuves, écarts et plans d’action.",
+    description: "Accédez à votre espace GapTrack pour gérer vos audits SSI, preuves, écarts et plans d’action.",
     path: "/login",
     robots: "noindex, follow",
   },
