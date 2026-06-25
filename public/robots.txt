@@ -3,7 +3,5 @@ Allow: /
 
 # Pages privées : elles restent aussi en noindex côté application.
 Disallow: /app
-Disallow: /login
-Disallow: /reset-password
 
 Sitemap: https://gaptrack-ssi.vercel.app/sitemap.xml
