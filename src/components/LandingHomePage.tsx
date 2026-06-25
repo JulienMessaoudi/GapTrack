@@ -130,6 +130,104 @@ const GAPTRACK_FAQS = [
   },
 ];
 
+const APPLE_STORY_STEPS = [
+  {
+    eyebrow: "01",
+    title: "Cadrez",
+    text: "Choisissez un référentiel, le périmètre et les responsabilités sans perdre le fil de l'audit.",
+  },
+  {
+    eyebrow: "02",
+    title: "Prouvez",
+    text: "Rattachez les preuves, visualisez les statuts et gardez une traçabilité claire pour chaque contrôle.",
+  },
+  {
+    eyebrow: "03",
+    title: "Pilotez",
+    text: "Transformez les écarts en plans d'action priorisés, suivis dans le temps et prêts à être partagés.",
+  },
+];
+
+function useAppleLikeLandingEffects(activePage: LandingPageView): void {
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const root = document.querySelector<HTMLElement>(".gth-page");
+    if (!root) return;
+
+    const reducedMotion = prefersReducedMotion();
+    const revealElements = Array.from(root.querySelectorAll<HTMLElement>(".gth-reveal"));
+
+    if (reducedMotion || typeof IntersectionObserver === "undefined") {
+      revealElements.forEach((element) => element.classList.add("is-visible"));
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting) return;
+          entry.target.classList.add("is-visible");
+          observer.unobserve(entry.target);
+        });
+      },
+      {
+        root,
+        threshold: 0.14,
+        rootMargin: "0px 0px -80px 0px",
+      }
+    );
+
+    revealElements.forEach((element, index) => {
+      element.style.setProperty("--gth-reveal-delay", `${Math.min(index * 38, 260)}ms`);
+      observer.observe(element);
+    });
+
+    const updateScrollProgress = () => {
+      const maxScroll = Math.max(1, root.scrollHeight - root.clientHeight);
+      const pageProgress = root.scrollTop / maxScroll;
+      root.style.setProperty("--gth-page-scroll", pageProgress.toFixed(4));
+
+      const story = root.querySelector<HTMLElement>(".gth-scroll-story");
+      if (!story) return;
+
+      const storyMax = Math.max(1, story.offsetHeight - root.clientHeight);
+      const storyProgress = Math.min(1, Math.max(0, (root.scrollTop - story.offsetTop) / storyMax));
+      const stepOneOpacity = Math.max(0.62, 1 - Math.max(0, storyProgress - 0.33) * 0.9);
+      const stepTwoAlpha = 0.16 + storyProgress * 0.34;
+      const stepThreeOffset = (storyProgress - 0.55) * 18;
+
+      root.style.setProperty("--gth-story-progress", storyProgress.toFixed(4));
+      root.style.setProperty("--gth-story-rotate-y", `${-10 + storyProgress * 8}deg`);
+      root.style.setProperty("--gth-story-rotate-x", `${6 - storyProgress * 5}deg`);
+      root.style.setProperty("--gth-story-translate-y", `${42 - storyProgress * 82}px`);
+      root.style.setProperty("--gth-story-scale", `${0.88 + storyProgress * 0.13}`);
+      root.style.setProperty("--gth-story-card-y", `${28 - storyProgress * 48}px`);
+      root.style.setProperty("--gth-story-glow-opacity", `${0.25 + storyProgress * 0.55}`);
+      root.style.setProperty("--gth-story-step-one-opacity", stepOneOpacity.toFixed(3));
+      root.style.setProperty("--gth-story-step-two-alpha", stepTwoAlpha.toFixed(3));
+      root.style.setProperty("--gth-story-step-three-x", `${stepThreeOffset}px`);
+    };
+
+    const updatePointerGlow = (event: PointerEvent) => {
+      const rect = root.getBoundingClientRect();
+      root.style.setProperty("--gth-cursor-x", `${event.clientX - rect.left}px`);
+      root.style.setProperty("--gth-cursor-y", `${event.clientY - rect.top}px`);
+    };
+
+    updateScrollProgress();
+    root.addEventListener("scroll", updateScrollProgress, { passive: true });
+    root.addEventListener("pointermove", updatePointerGlow, { passive: true });
+
+    return () => {
+      observer.disconnect();
+      root.removeEventListener("scroll", updateScrollProgress);
+      root.removeEventListener("pointermove", updatePointerGlow);
+    };
+  }, [activePage]);
+}
+
+
 function JsonLd() {
   const softwareApplicationSchema = {
     "@context": "https://schema.org",
@@ -198,6 +296,8 @@ export function LandingHomePage({
     setPage(initialPage);
   }, [initialPage]);
 
+  useAppleLikeLandingEffects(page);
+
   const openPage = (next: LandingPageView) => {
     setPage(next);
     onNavigate?.(next);
@@ -226,7 +326,10 @@ export function LandingHomePage({
   return (
     <main className="gth-page">
       <div className="gth-grid-bg" />
-      <header className="gth-header">
+      <div className="gth-aurora gth-aurora-one" aria-hidden="true" />
+      <div className="gth-aurora gth-aurora-two" aria-hidden="true" />
+      <div className="gth-scroll-progress" aria-hidden="true" />
+      <header className="gth-header gth-reveal">
         <a
           className="gth-logo gth-logo-button"
           href="/"
@@ -253,7 +356,9 @@ export function LandingHomePage({
         </a>
       </header>
 
-      {page === "apropos" ? <AboutPage /> : <HomePage onAccess={onAccess} openPage={openPage} />}
+      <div key={page} className="gth-route-panel">
+        {page === "apropos" ? <AboutPage /> : <HomePage onAccess={onAccess} openPage={openPage} />}
+      </div>
 
       <footer className="gth-signature" aria-label="Crédits">
         Conçu et développé par Julien Messaoudi
@@ -276,7 +381,7 @@ function HomePage({
       <JsonLd />
 
       <section className="gth-hero" id="top">
-        <div className="gth-hero-copy">
+        <div className="gth-hero-copy gth-reveal">
           <div className="gth-kicker">
             <ShieldCheck aria-hidden="true" />
             PLATEFORME SÉCURISÉE
@@ -305,10 +410,13 @@ function HomePage({
           </div>
         </div>
 
-        {!isCompactViewport ? <DashboardMock /> : null}
+        {!isCompactViewport ? <DashboardMock variant="hero" gradientId="gthLineFillHero" /> : null}
+        <div className="gth-scroll-cue" aria-hidden="true"><span /></div>
       </section>
 
-      <section className="gth-features-section" id="gth-features">
+      <ProductStorySection isCompactViewport={isCompactViewport} />
+
+      <section className="gth-features-section gth-reveal" id="gth-features">
         <h2>Une plateforme complète pour votre conformité</h2>
         <div className="gth-feature-grid">
           <Feature icon={<Layers />} title="Gestion des audits" text="Planifiez, exécutez et suivez vos audits de bout en bout." />
@@ -327,6 +435,47 @@ function HomePage({
 
       <FaqSection />
     </>
+  );
+}
+
+
+function ProductStorySection({ isCompactViewport }: { isCompactViewport: boolean }) {
+  return (
+    <section className="gth-scroll-story gth-reveal" id="gth-story" aria-label="Présentation dynamique du parcours d'audit GapTrack">
+      <div className="gth-story-sticky">
+        <div className="gth-story-copy">
+          <div className="gth-kicker">
+            <Layers aria-hidden="true" />
+            EXPÉRIENCE GUIDÉE
+          </div>
+          <h2>Un audit qui se déroule comme une histoire claire.</h2>
+          <p>
+            GapTrack transforme la conformité en parcours visuel : cadrer, prouver, piloter. Chaque étape gagne en lisibilité au fur et à mesure de la navigation.
+          </p>
+
+          <div className="gth-story-steps" aria-label="Parcours GapTrack en trois étapes">
+            {APPLE_STORY_STEPS.map((step) => (
+              <article className="gth-story-step" key={step.title}>
+                <span>{step.eyebrow}</span>
+                <h3>{step.title}</h3>
+                <p>{step.text}</p>
+              </article>
+            ))}
+          </div>
+        </div>
+
+        {!isCompactViewport ? (
+          <div className="gth-story-visual" aria-hidden="true">
+            <DashboardMock variant="story" gradientId="gthLineFillStory" />
+            <div className="gth-story-floating-card">
+              <span>Score projeté</span>
+              <strong>+18%</strong>
+              <small>après remédiation</small>
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </section>
   );
 }
 
@@ -371,7 +520,7 @@ function PricingSection({ onSelectPlan, onRequestPremium }: { onSelectPlan: (pla
   ];
 
   return (
-    <section className="gth-pricing-section" id="gth-pricing" aria-label="Offres GapTrack Free et Premium">
+    <section className="gth-pricing-section gth-reveal" id="gth-pricing" aria-label="Offres GapTrack Free et Premium">
       <div className="gth-pricing-heading">
         <div className="gth-kicker">
           <Star aria-hidden="true" />
@@ -383,7 +532,7 @@ function PricingSection({ onSelectPlan, onRequestPremium }: { onSelectPlan: (pla
 
       <div className="gth-pricing-grid">
         {plans.map((plan) => (
-          <article key={plan.key} className={`gth-price-card${plan.highlighted ? " gth-price-card-premium" : ""}`}>
+          <article key={plan.key} className={`gth-price-card gth-reveal${plan.highlighted ? " gth-price-card-premium" : ""}`}>
             <div className="gth-price-topline">
               <span>{plan.badge}</span>
               {plan.highlighted ? <strong>Recommandé</strong> : null}
@@ -434,7 +583,7 @@ function FaqSection() {
   const faqs = GAPTRACK_FAQS;
 
   return (
-    <section className="gth-faq-section" id="faq" aria-labelledby="gth-faq-title">
+    <section className="gth-faq-section gth-reveal" id="faq" aria-labelledby="gth-faq-title">
       <div className="gth-faq-heading">
         <div className="gth-kicker">
           <Lightbulb aria-hidden="true" />
@@ -446,7 +595,7 @@ function FaqSection() {
 
       <div className="gth-faq-grid">
         {faqs.map((faq) => (
-          <article className="gth-faq-card" key={faq.question}>
+          <article className="gth-faq-card gth-reveal" key={faq.question}>
             <h3>{faq.question}</h3>
             <p>{faq.answer}</p>
           </article>
@@ -459,7 +608,7 @@ function FaqSection() {
 function AboutPage() {
   return (
     <section className="gth-about" id="top">
-      <div className="gth-about-hero">
+      <div className="gth-about-hero gth-reveal">
         <div className="gth-about-copy">
           <div className="gth-kicker gth-about-kicker">
             <Users aria-hidden="true" />
@@ -509,7 +658,7 @@ function AboutPage() {
         </div>
       </div>
 
-      <div className="gth-about-section" id="gth-about-values">
+      <div className="gth-about-section gth-reveal" id="gth-about-values">
         <h2>Ce qui anime<br />le projet</h2>
         <div className="gth-about-cards three">
           <AboutValue icon={<Lightbulb />} title="Clarté" text="GapTrack rend la conformité plus lisible et actionnable pour les équipes." tone="blue" />
@@ -518,7 +667,7 @@ function AboutPage() {
         </div>
       </div>
 
-      <div className="gth-about-section gth-about-approach">
+      <div className="gth-about-section gth-about-approach gth-reveal">
         <h2>Approche</h2>
         <div className="gth-about-flow">
           <AboutValue icon={<Ear />} title="Comprendre" text="Partir des besoins terrain des équipes audit, risque et sécurité." tone="blue" />
@@ -529,7 +678,7 @@ function AboutPage() {
         </div>
       </div>
 
-      <div className="gth-about-cta gth-about-cta-simple">
+      <div className="gth-about-cta gth-about-cta-simple gth-reveal">
         <div className="gth-network" aria-hidden="true" />
         <strong>Un outil pensé pour une conformité plus simple, plus fiable et plus utile.</strong>
         <div className="gth-cta-shield" aria-hidden="true"><ShieldCheck /></div>
@@ -552,7 +701,7 @@ function Principle({
   color: "blue" | "purple" | "teal";
 }) {
   return (
-    <article className={`gth-principle gth-principle-${color}`}>
+    <article className={`gth-principle gth-principle-${color} gth-reveal`}>
       <div className="gth-principle-icon">{icon}</div>
       <h3>{title}</h3>
       <p>{text}</p>
@@ -567,7 +716,7 @@ function Principle({
 
 function AboutValue({ icon, title, text, tone }: { icon: React.ReactNode; title: string; text: string; tone: "blue" | "purple" | "teal" }) {
   return (
-    <article className={`gth-about-card gth-about-card-${tone}`}>
+    <article className={`gth-about-card gth-about-card-${tone} gth-reveal`}>
       <div className="gth-about-card-icon">{icon}</div>
       <div>
         <h3>{title}</h3>
@@ -579,7 +728,7 @@ function AboutValue({ icon, title, text, tone }: { icon: React.ReactNode; title:
 
 function Benefit({ icon, title, text }: { icon: React.ReactNode; title: string; text: string }) {
   return (
-    <div className="gth-benefit">
+    <div className="gth-benefit gth-reveal">
       <span className="gth-benefit-icon">{icon}</span>
       <span>
         <strong>{title}</strong>
@@ -591,7 +740,7 @@ function Benefit({ icon, title, text }: { icon: React.ReactNode; title: string; 
 
 function Feature({ icon, title, text }: { icon: React.ReactNode; title: string; text: string }) {
   return (
-    <article className="gth-feature-card">
+    <article className="gth-feature-card gth-reveal">
       <div className="gth-feature-icon">{icon}</div>
       <div>
         <h3>{title}</h3>
@@ -602,9 +751,15 @@ function Feature({ icon, title, text }: { icon: React.ReactNode; title: string; 
   );
 }
 
-function DashboardMock() {
+function DashboardMock({
+  variant = "hero",
+  gradientId = "gthLineFill",
+}: {
+  variant?: "hero" | "story";
+  gradientId?: string;
+}) {
   return (
-    <section className="gth-dashboard" aria-label="Aperçu du tableau de bord GapTrack">
+    <section className={`gth-dashboard gth-dashboard-${variant} gth-reveal`} aria-label="Aperçu du tableau de bord GapTrack">
       <aside className="gth-dash-sidebar">
         <div className="gth-dash-logo"><ShieldCheck /> GapTrack</div>
         <nav>
@@ -648,13 +803,13 @@ function DashboardMock() {
             <div className="gth-chart-area">
               <svg viewBox="0 0 420 190" preserveAspectRatio="none">
                 <defs>
-                  <linearGradient id="gthLineFill" x1="0" x2="0" y1="0" y2="1">
+                  <linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1">
                     <stop offset="0%" stopColor="rgba(51, 118, 255, .42)" />
                     <stop offset="100%" stopColor="rgba(51, 118, 255, 0)" />
                   </linearGradient>
                 </defs>
                 {[25, 50, 75, 100].map((v) => <line key={v} x1="0" x2="420" y1={190 - v * 1.7} y2={190 - v * 1.7} />)}
-                <path d="M0 170 L45 145 L90 118 L135 98 L180 70 L225 58 L270 78 L315 49 L360 35 L420 20 L420 190 L0 190 Z" />
+                <path d="M0 170 L45 145 L90 118 L135 98 L180 70 L225 58 L270 78 L315 49 L360 35 L420 20 L420 190 L0 190 Z" fill={`url(#${gradientId})`} />
                 <polyline points="0,170 45,145 90,118 135,98 180,70 225,58 270,78 315,49 360,35 420,20" />
               </svg>
               <div className="gth-months"><span>Janv.</span><span>Févr.</span><span>Mars</span><span>Avr.</span><span>Mai</span><span>Juin</span><span>Juil.</span></div>
