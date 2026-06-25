@@ -610,7 +610,7 @@ export function LoginAccessPage({
         <section className="gt-hero" aria-label="Présentation GapTrack">
           <div className="gt-brand">
             <img
-              src="/gaptrack-logo-transparent.png"
+              src="/icon-192.png"
               alt=""
               className="gt-brand-icon"
               aria-hidden="true"
