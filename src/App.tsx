@@ -2871,7 +2871,13 @@ const THEME_CSS = `
   --primary:#60a5fa;
   --primary-foreground:#0b1220;
 }
-html,body{background:var(--background);color:var(--foreground);} 
+html,body{background:var(--background);color:var(--foreground);width:100%;max-width:100%;overflow-x:hidden;} 
+#root{width:100%;max-width:100%;overflow-x:hidden;}
+*{min-width:0;}
+@supports (overflow: clip){
+  html,body,#root{overflow-x:clip;}
+}
+
 .bg-background{background-color:var(--background)!important;}
 .text-foreground{color:var(--foreground)!important;}
 .text-muted-foreground{color:var(--muted-foreground)!important;}
@@ -2893,6 +2899,10 @@ html,body{background:var(--background);color:var(--foreground);}
 
 /* Premium SaaS / glassmorphism layer */
 .app-shell{
+  width:100%;
+  max-width:100%;
+  min-width:0;
+  overflow-x:hidden;
   min-height:100vh;
   background:
     radial-gradient(circle at 18% -10%, color-mix(in srgb, var(--primary) 18%, transparent), transparent 34rem),
@@ -3095,6 +3105,75 @@ html,body{background:var(--background);color:var(--foreground);}
     width:100%;
   }
 }
+
+.line-clamp-2,.line-clamp-3{display:-webkit-box;-webkit-box-orient:vertical;overflow:hidden;}
+.line-clamp-2{-webkit-line-clamp:2;}
+.line-clamp-3{-webkit-line-clamp:3;}
+
+/* Mobile app layout fixes: prevent body-wide horizontal scroll and keep wide tables inside local scrollers. */
+.screen-only,
+.screen-only > .flex,
+.main-surface{
+  width:100%;
+  max-width:100%;
+  min-width:0;
+}
+.main-surface{
+  flex:1 1 auto;
+  overflow-x:hidden;
+}
+.main-surface > *{
+  max-width:100%;
+}
+.overflow-x-auto{
+  max-width:100%;
+  -webkit-overflow-scrolling:touch;
+  overscroll-behavior-x:contain;
+}
+
+@media (max-width: 767px){
+  .toolbar-shell,
+  .page-header-shell,
+  .mobile-nav-shell{
+    width:100%;
+    max-width:100vw;
+    overflow-x:hidden;
+  }
+
+  .main-surface{
+    flex-basis:100%;
+    max-width:100vw;
+    padding-bottom:calc(92px + env(safe-area-inset-bottom));
+  }
+
+  .main-surface .p-4,
+  .main-surface .p-5,
+  .main-surface .p-6{
+    padding-left:14px!important;
+    padding-right:14px!important;
+  }
+
+  .toolbar-shell .p-2{
+    padding-left:12px;
+    padding-right:12px;
+  }
+
+  .mobile-nav-shell > div{
+    max-width:100%;
+    overflow-x:auto;
+    scrollbar-width:none;
+  }
+  .mobile-nav-shell > div::-webkit-scrollbar{display:none;}
+  .mobile-nav-shell button{
+    min-width:64px;
+    flex:0 0 auto;
+  }
+
+  .detail-panel{
+    border-radius:18px;
+  }
+}
+
 /* Print */
 .no-print{}
 .print-only{display:none}
@@ -7166,10 +7245,81 @@ function ListingView({ rows, setRows, lang, onOpenEvidence, evidenceCountFor, ev
 
 		
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-		  {/* Table (2/3) */}
+		  {/* Table / mobile cards (2/3) */}
 		  <div className="lg:col-span-2 rounded-2xl overflow-hidden border">
-			<div className="overflow-x-auto">
-<div ref={listingSentinelRef} className="h-px" />
+            <div ref={listingSentinelRef} className="h-px" />
+            <div className="md:hidden p-3 space-y-2">
+              {filtered.length === 0 && (
+                <div className="rounded-xl border bg-muted/20 p-4 text-center text-sm text-muted-foreground">{t.empty}</div>
+              )}
+              {sorted.map((r, idx) => {
+                const isSelected = (selId ? r.id === selId : idx === selIndex);
+                const evidenceCount = evidenceCountFor(r.id);
+                const ps = planStatusFor(r.id);
+                return (
+                  <button
+                    key={r.id}
+                    type="button"
+                    className={"w-full rounded-2xl border p-3 text-left transition " + (isSelected ? "border-primary bg-primary/10" : "bg-background/45")}
+                    onClick={() => { setSelIndex(idx); setSelId(r.id); }}
+                    aria-current={isSelected ? "true" : undefined}
+                    data-rowid={r.id}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="font-semibold leading-tight">{r.ref}</div>
+                        <div className="mt-1 text-xs text-muted-foreground line-clamp-2">{r.domain}</div>
+                      </div>
+                      <span
+                        style={{
+                          ...impactStyle(r.impact),
+                          borderWidth: "1px",
+                          borderStyle: "solid",
+                          borderRadius: "9999px",
+                          padding: "2px 8px",
+                          fontSize: "12px",
+                          fontWeight: 700,
+                          display: "inline-flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          minWidth: "30px",
+                          flexShrink: 0,
+                        }}
+                        title={(lang === "fr" ? "Impact " : "Impact ") + r.impact}
+                      >
+                        {r.impact}
+                      </span>
+                    </div>
+
+                    <div className="mt-3 text-sm leading-snug line-clamp-3">{r.description}</div>
+
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <Badge variant="outline" className={"rounded-full px-2.5 py-1 text-xs " + controlStatusClass(r.realized)}>
+                        {controlStatusLabel(r.realized, lang, true)}
+                      </Badge>
+                      <Badge variant="outline" className={"rounded-full px-2.5 py-1 text-xs " + evidenceStatusClass(proofStatusFor(r.id))}>
+                        {evidenceStatusLabel(proofStatusFor(r.id), lang)}
+                      </Badge>
+                      {evidenceCount > 0 && <span className="kpi text-xs">{evidenceCount} file(s)</span>}
+                      {ps !== "none" && (
+                        <Badge
+                          variant="outline"
+                          className={
+                            "rounded-full px-2.5 py-1 text-xs " +
+                            (ps === "complete"
+                              ? "border-emerald-500/50 text-emerald-700 dark:text-emerald-300"
+                              : "border-amber-500/50 text-amber-700 dark:text-amber-300")
+                          }
+                        >
+                          {ps === "complete" ? "Plan ✓" : "Plan…"}
+                        </Badge>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+			<div className="hidden md:block overflow-x-auto">
           <table className="w-full text-sm">
 			  <thead className={"sticky top-0 z-10 bg-background/70 backdrop-blur border-b border-border/40 dark:border-white/5 " + (listingStuck ? "shadow-sm shadow-black/20 dark:shadow-black/40" : "")}>
 				<tr>
