@@ -4985,7 +4985,19 @@ function Sidebar({ current, onNavigate, lang }: { current: string; onNavigate: (
       }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 28 }}>
-        <Shield style={{ width: 28, height: 28, flexShrink: 0 }} />
+        <img
+          src="/icon-192.png"
+          alt=""
+          aria-hidden="true"
+          style={{
+            width: 58,
+            height: 58,
+            flexShrink: 0,
+            borderRadius: 14,
+            objectFit: "cover",
+            display: "block",
+          }}
+        />
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 18, fontWeight: 800, color: "#f8fbff", lineHeight: 1 }}>
             GapTrack
@@ -5206,7 +5218,14 @@ function Toolbar({
         {/* Row 1: brand + quick toggles */}
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <Shield className="h-4 w-4" />
+            <img
+              src="/icon-192.png"
+              alt=""
+              aria-hidden="true"
+              className="h-7 w-7 shrink-0 rounded-md object-cover"
+              loading="eager"
+              decoding="async"
+            />
             <span className="font-semibold text-sm">GapTrack</span>
             <span className="text-xs text-muted-foreground hidden sm:inline">Audit GRC/SSI</span>
           </div>
