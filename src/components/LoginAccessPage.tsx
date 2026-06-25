@@ -609,7 +609,14 @@ export function LoginAccessPage({
       <main className="gt-shell">
         <section className="gt-hero" aria-label="Présentation GapTrack">
           <div className="gt-brand">
-            <ShieldCheck className="gt-brand-icon" aria-hidden="true" />
+            <img
+              src="/gaptrack-logo-transparent.png"
+              alt=""
+              className="gt-brand-icon"
+              aria-hidden="true"
+              loading="eager"
+              decoding="async"
+            />
             <div>
               <div className="gt-brand-name">GapTrack</div>
               <div className="gt-brand-subtitle">Audit SSI</div>
@@ -958,7 +965,10 @@ function DashboardPreview() {
   return (
     <div className="gt-dashboard" aria-hidden="true">
       <aside>
-        <div className="gt-mini-logo"><ShieldCheck />GapTrack</div>
+        <div className="gt-mini-logo">
+          <img src="/gaptrack-logo-transparent.png" alt="" className="gt-mini-logo-icon" aria-hidden="true" loading="lazy" decoding="async" />
+          GapTrack
+        </div>
         <nav>
           <span className="active">Vue d’ensemble</span>
           <span>Audits</span>

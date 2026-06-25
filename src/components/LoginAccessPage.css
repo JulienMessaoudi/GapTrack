@@ -64,6 +64,8 @@
 .gt-brand-icon {
   width: 54px;
   height: 54px;
+  display: block;
+  object-fit: contain;
   color: #fff;
   filter: drop-shadow(0 0 14px rgba(74,130,255,.24));
 }
@@ -182,6 +184,13 @@
 .gt-mini-logo svg {
   width: 16px;
   height: 16px;
+}
+
+.gt-mini-logo-icon {
+  width: 18px;
+  height: 18px;
+  display: block;
+  object-fit: contain;
 }
 
 .gt-dashboard nav {
