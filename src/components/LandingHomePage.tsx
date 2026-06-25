@@ -130,23 +130,6 @@ const GAPTRACK_FAQS = [
   },
 ];
 
-const APPLE_STORY_STEPS = [
-  {
-    eyebrow: "01",
-    title: "Cadrez",
-    text: "Choisissez un référentiel, le périmètre et les responsabilités sans perdre le fil de l'audit.",
-  },
-  {
-    eyebrow: "02",
-    title: "Prouvez",
-    text: "Rattachez les preuves, visualisez les statuts et gardez une traçabilité claire pour chaque contrôle.",
-  },
-  {
-    eyebrow: "03",
-    title: "Pilotez",
-    text: "Transformez les écarts en plans d'action priorisés, suivis dans le temps et prêts à être partagés.",
-  },
-];
 
 function useAppleLikeLandingEffects(activePage: LandingPageView): void {
   useEffect(() => {
@@ -414,8 +397,6 @@ function HomePage({
         <div className="gth-scroll-cue" aria-hidden="true"><span /></div>
       </section>
 
-      <ProductStorySection isCompactViewport={isCompactViewport} />
-
       <section className="gth-features-section gth-reveal" id="gth-features">
         <h2>Une plateforme complète pour votre conformité</h2>
         <div className="gth-feature-grid">
@@ -438,46 +419,6 @@ function HomePage({
   );
 }
 
-
-function ProductStorySection({ isCompactViewport }: { isCompactViewport: boolean }) {
-  return (
-    <section className="gth-scroll-story gth-reveal" id="gth-story" aria-label="Présentation dynamique du parcours d'audit GapTrack">
-      <div className="gth-story-sticky">
-        <div className="gth-story-copy">
-          <div className="gth-kicker">
-            <Layers aria-hidden="true" />
-            EXPÉRIENCE GUIDÉE
-          </div>
-          <h2>Un audit qui se déroule comme une histoire claire.</h2>
-          <p>
-            GapTrack transforme la conformité en parcours visuel : cadrer, prouver, piloter. Chaque étape gagne en lisibilité au fur et à mesure de la navigation.
-          </p>
-
-          <div className="gth-story-steps" aria-label="Parcours GapTrack en trois étapes">
-            {APPLE_STORY_STEPS.map((step) => (
-              <article className="gth-story-step" key={step.title}>
-                <span>{step.eyebrow}</span>
-                <h3>{step.title}</h3>
-                <p>{step.text}</p>
-              </article>
-            ))}
-          </div>
-        </div>
-
-        {!isCompactViewport ? (
-          <div className="gth-story-visual" aria-hidden="true">
-            <DashboardMock variant="story" gradientId="gthLineFillStory" />
-            <div className="gth-story-floating-card">
-              <span>Score projeté</span>
-              <strong>+18%</strong>
-              <small>après remédiation</small>
-            </div>
-          </div>
-        ) : null}
-      </div>
-    </section>
-  );
-}
 
 function PricingSection({ onSelectPlan, onRequestPremium }: { onSelectPlan: (plan: SubscriptionPlan) => void; onRequestPremium: () => void }) {
   const plans: Array<{
