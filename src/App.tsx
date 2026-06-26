@@ -1203,7 +1203,7 @@ const I18N = {
 	actionPlan: "Plan d’action",
   },
   en: {
-    appTitle: "GRC/Sec Platform - Assessments & Dashboards",
+    appTitle: "Sec Platform - Assessments & Dashboards",
     listing: "Listing",
     dashboard: "Dashboard",
     bulkDone: "Mark visible compliant",
@@ -10772,7 +10772,7 @@ function PrintExecutive({
       <section className="page p-10">
         <div className="report-cover flex items-center justify-between">
           <div>
-            <div className="report-brand">GapTrack · {lang === "fr" ? "Audit SSI" : "GRC/Sec Audit"}</div>
+            <div className="report-brand">GapTrack · {lang === "fr" ? "Audit SSI" : "Sec Audit"}</div>
             <h1>{lang === "fr" ? "Rapport d’audit sécurité" : "Security audit report"}</h1>
             <p className="report-subtitle">
               {sessionName} · {sessionFrameworkLabel(session, lang)} · {formatAuditDate(session?.auditDate, lang)}
