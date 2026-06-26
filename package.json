@@ -4,21 +4,23 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently \"npm run dev --prefix backend\" \"vite\"",
-    "dev:front": "vite",
+    "dev": "concurrently \"npm run dev --prefix backend\" \"astro dev\"",
+    "dev:front": "astro dev",
     "dev:back": "npm run dev --prefix backend",
-    "build": "tsc -b && vite build",
+    "build": "astro build",
     "lint": "eslint src --ext .ts,.tsx",
     "format": "prettier -w .",
-    "preview": "vite preview"
+    "preview": "astro preview"
   },
   "dependencies": {
+    "@astrojs/react": "^6.0.0",
     "@gsap/react": "^2.1.2",
     "@radix-ui/react-select": "^2.2.6",
     "@radix-ui/react-slot": "^1.2.3",
     "@radix-ui/react-switch": "^1.2.6",
     "@radix-ui/react-tabs": "^1.1.13",
     "@supabase/supabase-js": "^2.107.0",
+    "astro": "^7.0.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "gsap": "^3.15.0",

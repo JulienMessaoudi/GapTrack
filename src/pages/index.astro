@@ -1,0 +1,12 @@
+---
+import PublicLayout from "../layouts/PublicLayout.astro";
+import LandingHomePageClient from "../components/LandingHomePageClient";
+---
+
+<PublicLayout
+  title="GapTrack — Plateforme d’audit GRC/SSI et gestion des preuves"
+  description="Centralisez vos audits GRC/SSI, preuves, écarts et plans d’action dans une plateforme sécurisée pensée pour ISO 27001, NIS2, DORA et RGPD."
+  canonicalPath="/"
+>
+  <LandingHomePageClient client:load initialPage="plateforme" />
+</PublicLayout>

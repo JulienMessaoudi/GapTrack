@@ -1,0 +1,12 @@
+---
+import PublicLayout from "../layouts/PublicLayout.astro";
+import LandingHomePageClient from "../components/LandingHomePageClient";
+---
+
+<PublicLayout
+  title="À propos de GapTrack — Audit GRC/SSI, conformité et preuves"
+  description="Découvrez GapTrack, un projet conçu pour simplifier l’audit GRC/SSI, la conformité, la gestion des preuves, le suivi des écarts et les plans d’action."
+  canonicalPath="/a-propos"
+>
+  <LandingHomePageClient client:load initialPage="apropos" />
+</PublicLayout>

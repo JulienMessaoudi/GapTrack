@@ -4,11 +4,12 @@
 }
 
 .gth-page {
-  position: fixed;
-  inset: 0;
-  z-index: 9998;
+  position: relative;
+  z-index: 0;
   min-height: 100dvh;
-  overflow: auto;
+  height: 100dvh;
+  overflow-x: hidden;
+  overflow-y: auto;
   color: #f8fbff;
   background:
     radial-gradient(circle at 85% 12%, rgba(45, 105, 255, .28), transparent 30%),
@@ -31,15 +32,25 @@
 }
 
 .gth-header {
-  position: relative;
-  z-index: 2;
+  position: sticky;
+  top: 0;
+  z-index: 100;
   width: min(1680px, calc(100% - 112px));
   margin: 0 auto;
   height: 88px;
   display: grid;
   grid-template-columns: 320px 1fr 220px;
   align-items: center;
-  border-bottom: 1px solid rgba(160, 180, 220, .10);
+  border-bottom: 1px solid rgba(160, 180, 220, .14);
+  border-radius: 0 0 28px 28px;
+  background:
+    linear-gradient(180deg, rgba(7, 17, 38, .96), rgba(7, 17, 38, .86)),
+    rgba(7, 17, 38, .88);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+  box-shadow:
+    0 18px 50px rgba(0, 0, 0, .22),
+    inset 0 1px 0 rgba(255, 255, 255, .04);
 }
 
 .gth-logo {
@@ -2019,19 +2030,19 @@
   top: 0;
   left: 0;
   right: 0;
-  z-index: 50;
-  height: 3px;
+  z-index: 9999;
+  height: 4px;
   pointer-events: none;
   transform-origin: left center;
   transform: scaleX(var(--gth-page-scroll));
   background: linear-gradient(90deg, #5ce4d2, #4c82ff, #a685ff);
-  box-shadow: 0 0 24px rgba(80, 139, 255, .65);
+  box-shadow: 0 0 24px rgba(80, 139, 255, .75);
 }
 
 .gth-header {
   position: sticky;
   top: 0;
-  z-index: 40;
+  z-index: 100;
   margin-top: 0;
   border-bottom-color: rgba(210, 225, 255, .12);
   border-radius: 0 0 24px 24px;
@@ -2601,5 +2612,80 @@
 @media (prefers-reduced-motion: reduce) {
   .gth-route-panel {
     animation: none !important;
+  }
+}
+
+/* =========================================================
+   Astro SSG/prerender fix
+   Public pages are intentionally rendered as static HTML without
+   React hydration. Reveal animations must therefore be visible by
+   default; otherwise the first screen can appear empty.
+   ========================================================= */
+.gth-reveal,
+.gth-reveal.is-visible {
+  opacity: 1 !important;
+  translate: 0 0 !important;
+  scale: 1 !important;
+  filter: none !important;
+}
+
+.gth-page {
+  overflow-y: visible;
+}
+
+
+/* =========================================================
+   Astro hydrated public pages: sticky header + smooth anchors
+   ========================================================= */
+#top,
+#gth-pricing,
+#faq {
+  scroll-margin-top: 120px;
+}
+
+.gth-page {
+  height: 100dvh !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  scroll-behavior: smooth;
+}
+
+.gth-header {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 100 !important;
+}
+
+.gth-reveal:not(.is-visible) {
+  opacity: 0 !important;
+  translate: 0 38px !important;
+  scale: .982 !important;
+  filter: blur(10px) !important;
+}
+
+.gth-reveal.is-visible {
+  opacity: 1 !important;
+  translate: 0 0 !important;
+  scale: 1 !important;
+  filter: blur(0) !important;
+}
+
+@media (max-width: 820px) {
+  .gth-header {
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 100 !important;
+    width: calc(100% - 28px) !important;
+    height: auto;
+    padding: 18px 16px;
+    grid-template-columns: 1fr;
+    gap: 18px;
+    border-radius: 0 0 22px 22px;
+  }
+
+  #top,
+  #gth-pricing,
+  #faq {
+    scroll-margin-top: 150px;
   }
 }

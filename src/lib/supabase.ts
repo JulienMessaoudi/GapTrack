@@ -1,10 +1,23 @@
 import { createClient } from "@supabase/supabase-js";
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+const env = import.meta.env as Record<string, string | undefined>;
+
+const supabaseUrl =
+  env.PUBLIC_SUPABASE_URL ||
+  env.VITE_SUPABASE_URL;
+
+const supabaseKey =
+  env.PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+  env.PUBLIC_SUPABASE_ANON_KEY ||
+  env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+  env.VITE_SUPABASE_ANON_KEY;
 
 if (!supabaseUrl || !supabaseKey) {
   throw new Error("Variables Supabase manquantes.");
+}
+
+if (!/^https?:\/\//i.test(supabaseUrl)) {
+  throw new Error("L’URL Supabase doit commencer par http:// ou https://.");
 }
 
 const REMEMBER_ME_KEY = "gaptrack_remember_me";

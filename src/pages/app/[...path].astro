@@ -1,0 +1,12 @@
+---
+import ClientAppLayout from "../../layouts/ClientAppLayout.astro";
+import ClientAppMount from "../../components/ClientAppMount";
+---
+
+<ClientAppLayout
+  title="GapTrack — Espace applicatif privé"
+  description="Espace applicatif privé GapTrack réservé aux utilisateurs connectés."
+  canonicalPath="/app"
+>
+  <ClientAppMount client:load />
+</ClientAppLayout>
