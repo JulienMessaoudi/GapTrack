@@ -760,12 +760,6 @@ function PrivacyPage() {
         </div>
       </div>
 
-      <div className="gth-security-disclaimer gth-reveal">
-        <ShieldCheck aria-hidden="true" />
-        <p>
-          Cette page est une présentation claire de la politique de confidentialité de GapTrack. Elle ne remplace pas un audit juridique ou une validation officielle de conformité RGPD.
-        </p>
-      </div>
     </section>
   );
 }
@@ -857,12 +851,6 @@ function SecurityPage() {
         </div>
       </div>
 
-      <div className="gth-security-disclaimer gth-reveal">
-        <InfoIcon />
-        <p>
-          Cette page présente les principes de sécurité appliqués à GapTrack. Elle n’est pas encore une certification de sécurité ni un audit externe du produit.
-        </p>
-      </div>
     </section>
   );
 }
@@ -875,10 +863,6 @@ function SecurityCard({ icon, title, text }: { icon: React.ReactNode; title: str
       <p>{text}</p>
     </article>
   );
-}
-
-function InfoIcon() {
-  return <ShieldCheck aria-hidden="true" />;
 }
 
 function AboutPage() {
