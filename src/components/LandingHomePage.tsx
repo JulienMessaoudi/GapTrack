@@ -562,8 +562,11 @@ function FaqSection() {
 
 function SecurityPage() {
   return (
-    <section className="gth-security" id="top">
-      <div className="gth-security-hero gth-reveal">
+    <section className="gth-security gth-security-immersive" id="top">
+      <div className="gth-security-orb gth-security-orb-one" aria-hidden="true" />
+      <div className="gth-security-orb gth-security-orb-two" aria-hidden="true" />
+
+      <div className="gth-security-hero gth-security-apple-hero gth-reveal">
         <div className="gth-security-copy">
           <div className="gth-kicker gth-security-kicker">
             <ShieldCheck aria-hidden="true" />
@@ -571,33 +574,137 @@ function SecurityPage() {
           </div>
 
           <h1>
-            Une plateforme pensée <br />
-            pour protéger vos audits, <br />
-            <span>preuves et accès</span>
+            Une expérience fluide <br />
+            pour comprendre comment <br />
+            <span>GapTrack protège vos audits</span>
           </h1>
 
           <p className="gth-lead gth-security-lead">
-            GapTrack manipule des informations sensibles liées à la conformité SSI. La sécurité repose donc sur une authentification fiable, des accès maîtrisés, une traçabilité claire et une gestion prudente des preuves.
+            Une page pensée comme le reste du site : claire, immersive et progressive. Elle présente l’authentification, les rôles, les preuves et la traçabilité sans donner l’impression d’une simple page juridique.
           </p>
+
+          <div className="gth-hero-actions gth-security-actions">
+            <a className="gth-primary" href="#gth-security-story" onClick={(event) => handleSeoLinkClick(event, () => scrollToLandingSection("gth-security-story"))}>
+              Découvrir les protections
+              <ArrowRight aria-hidden="true" />
+            </a>
+            <a className="gth-secondary" href={`mailto:${PREMIUM_CONTACT_EMAIL}?subject=${encodeURIComponent("Question sécurité GapTrack")}`}>
+              Poser une question
+              <Mail aria-hidden="true" />
+            </a>
+          </div>
         </div>
 
-        <div className="gth-security-summary" aria-label="Résumé sécurité GapTrack">
-          <div className="gth-security-score">
-            <ShieldCheck aria-hidden="true" />
-            <strong>Sécurité par conception</strong>
-            <span>Authentification, rôles, preuves, traçabilité et confidentialité structurés dès le produit.</span>
+        <div className="gth-security-device gth-reveal" aria-label="Aperçu sécurité GapTrack">
+          <div className="gth-security-device-top">
+            <span><ShieldCheck aria-hidden="true" /> Mode sécurisé</span>
+            <b>Actif</b>
           </div>
-          <ul>
-            <li><CheckCircle2 aria-hidden="true" /> Accès par compte utilisateur sécurisé</li>
-            <li><CheckCircle2 aria-hidden="true" /> Rôles applicatifs pour limiter les droits</li>
-            <li><CheckCircle2 aria-hidden="true" /> Preuves stockées et consultées de manière contrôlée</li>
-            <li><CheckCircle2 aria-hidden="true" /> Journal d’audit pour suivre les actions sensibles</li>
-          </ul>
+
+          <div className="gth-security-radar" aria-hidden="true">
+            <div className="gth-security-radar-ring gth-security-radar-ring-one" />
+            <div className="gth-security-radar-ring gth-security-radar-ring-two" />
+            <div className="gth-security-radar-core">
+              <ShieldCheck aria-hidden="true" />
+            </div>
+          </div>
+
+          <div className="gth-security-device-list">
+            <div className="is-on"><Lock aria-hidden="true" /><span>Authentification Supabase</span><strong>OK</strong></div>
+            <div className="is-on"><Users aria-hidden="true" /><span>Rôles applicatifs</span><strong>OK</strong></div>
+            <div><FileText aria-hidden="true" /><span>Preuves contrôlées</span><strong>Suivi</strong></div>
+            <div><Eye aria-hidden="true" /><span>Journal d’audit</span><strong>Trace</strong></div>
+          </div>
         </div>
       </div>
 
+      <div className="gth-security-trustbar gth-reveal" aria-label="Résumé des garanties sécurité">
+        <article>
+          <span>01</span>
+          <strong>Accès maîtrisé</strong>
+          <p>Chaque utilisateur dispose d’un compte et d’un rôle adapté à son usage.</p>
+        </article>
+        <article>
+          <span>02</span>
+          <strong>Preuves encadrées</strong>
+          <p>Les fichiers sont associés à des audits et contrôles précis.</p>
+        </article>
+        <article>
+          <span>03</span>
+          <strong>Actions suivies</strong>
+          <p>Les opérations sensibles peuvent être historisées pour garder une trace claire.</p>
+        </article>
+      </div>
+
+      <section className="gth-security-scroll-story gth-scroll-story" id="gth-security-story" aria-label="Parcours sécurité GapTrack">
+        <div className="gth-story-sticky gth-security-story-sticky">
+          <div className="gth-story-copy">
+            <div className="gth-kicker gth-security-kicker">
+              <Shield aria-hidden="true" /> PARCOURS SÉCURITÉ
+            </div>
+            <h2>Trois couches simples pour rassurer l’utilisateur.</h2>
+            <p>
+              L’objectif n’est pas seulement d’ajouter une page “sécurité”, mais de montrer visuellement comment GapTrack protège le parcours complet : connexion, droits, preuves et auditabilité.
+            </p>
+
+            <div className="gth-story-steps">
+              <article className="gth-story-step">
+                <span>01</span>
+                <h3>Authentifier</h3>
+                <p>Connexion sécurisée, mots de passe robustes, réinitialisation contrôlée et compatibilité avec les mécanismes Supabase.</p>
+              </article>
+              <article className="gth-story-step">
+                <span>02</span>
+                <h3>Autoriser</h3>
+                <p>Les rôles admin, auditeur, contributeur et lecteur évitent de donner plus de droits que nécessaire.</p>
+              </article>
+              <article className="gth-story-step">
+                <span>03</span>
+                <h3>Tracer</h3>
+                <p>Les changements sur les audits, preuves, statuts et utilisateurs restent compréhensibles dans le temps.</p>
+              </article>
+            </div>
+          </div>
+
+          <div className="gth-security-story-visual">
+            <div className="gth-security-stack" aria-hidden="true">
+              <div className="gth-security-stack-card gth-security-stack-card-one">
+                <small>Connexion</small>
+                <strong>Utilisateur vérifié</strong>
+                <span><Lock /> Mot de passe renforcé</span>
+              </div>
+              <div className="gth-security-stack-card gth-security-stack-card-two">
+                <small>Permissions</small>
+                <strong>Rôle : Auditeur</strong>
+                <span><Users /> Droits limités</span>
+              </div>
+              <div className="gth-security-stack-card gth-security-stack-card-three">
+                <small>Preuve</small>
+                <strong>Politique SSI.pdf</strong>
+                <span><FileText /> Associée au contrôle A.5</span>
+              </div>
+              <div className="gth-security-stack-card gth-security-stack-card-four">
+                <small>Journal</small>
+                <strong>Action enregistrée</strong>
+                <span><Eye /> Traçabilité activée</span>
+              </div>
+            </div>
+            <div className="gth-story-floating-card gth-security-floating-card">
+              <span>Niveau de clarté</span>
+              <strong>+90%</strong>
+              <small>Parcours plus lisible</small>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <div className="gth-security-section gth-reveal">
-        <h2>Mesures de sécurité principales</h2>
+        <div>
+          <div className="gth-kicker gth-security-kicker">
+            <CheckCircle2 aria-hidden="true" /> MESURES CLÉS
+          </div>
+          <h2>Des garanties compréhensibles en quelques secondes.</h2>
+        </div>
         <div className="gth-security-grid">
           <SecurityCard
             icon={<Lock />}
@@ -632,8 +739,11 @@ function SecurityPage() {
         </div>
       </div>
 
-      <div className="gth-security-section gth-security-commitment gth-reveal">
+      <div className="gth-security-commitment gth-reveal">
         <div>
+          <div className="gth-kicker gth-security-kicker">
+            <ShieldCheck aria-hidden="true" /> CONFIDENTIALITÉ
+          </div>
           <h2>Engagement de confidentialité</h2>
           <p>
             Les données saisies dans GapTrack peuvent contenir des informations sensibles sur l’organisation, les écarts de conformité, les preuves et les plans d’action. L’objectif est de limiter l’accès à ces informations aux seules personnes autorisées et de conserver une traçabilité claire des actions réalisées.
