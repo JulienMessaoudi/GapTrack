@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import "./LandingHomePage.css";
 
-type LandingPageView = "plateforme" | "apropos" | "securite";
+type LandingPageView = "plateforme" | "apropos" | "securite" | "confidentialite";
 type SubscriptionPlan = "free" | "premium";
 
 const PREMIUM_CONTACT_EMAIL = "julien.messaoudi@edu.esiee.fr";
@@ -341,7 +341,7 @@ export function LandingHomePage({
       </header>
 
       <div key={page} className="gth-route-panel">
-        {page === "apropos" ? <AboutPage /> : page === "securite" ? <SecurityPage /> : <HomePage onAccess={onAccess} openPage={openPage} />}
+        {page === "confidentialite" ? <PrivacyPage /> : page === "apropos" ? <AboutPage /> : page === "securite" ? <SecurityPage /> : <HomePage onAccess={onAccess} openPage={openPage} />}
       </div>
 
       <footer className="gth-footer" aria-label="Pied de page GapTrack">
@@ -350,7 +350,7 @@ export function LandingHomePage({
         </p>
 
         <nav className="gth-footer-links" aria-label="Liens légaux et contact">
-          <a href="/confidentialite">Confidentialité</a>
+          <a href="/confidentialite" onClick={(event) => handleSeoLinkClick(event, () => openPage("confidentialite"))}>Confidentialité</a>
           <span aria-hidden="true">—</span>
           <a href="/cgu">CGU</a>
           <span aria-hidden="true">—</span>
@@ -559,6 +559,195 @@ function FaqSection() {
   );
 }
 
+
+
+function PrivacyPage() {
+  const privacySections = [
+    {
+      icon: <Users />,
+      title: "Données de compte",
+      text: "Nom, adresse e-mail, organisation, rôle utilisateur et formule Free ou Premium permettent de créer le compte, gérer les accès et afficher le bon niveau de service.",
+    },
+    {
+      icon: <FileText />,
+      title: "Données d’audit",
+      text: "Référentiel choisi, périmètre, statuts de contrôles, commentaires, preuves et plans d’action servent uniquement à piloter les audits SSI dans l’espace GapTrack.",
+    },
+    {
+      icon: <Eye />,
+      title: "Traçabilité",
+      text: "Certaines actions importantes peuvent être enregistrées afin de comprendre qui a modifié un audit, ajouté une preuve ou fait évoluer un plan d’action.",
+    },
+  ];
+
+  const privacyRights = [
+    "Accéder aux données liées à votre compte",
+    "Demander une correction si une information est inexacte",
+    "Demander la suppression de votre compte ou de certaines données",
+    "Demander des précisions sur l’usage de vos données",
+  ];
+
+  return (
+    <section className="gth-privacy" id="top">
+      <div className="gth-privacy-hero gth-reveal">
+        <div className="gth-privacy-copy">
+          <div className="gth-kicker gth-privacy-kicker">
+            <ShieldCheck aria-hidden="true" />
+            CONFIDENTIALITÉ GAPTRACK
+          </div>
+
+          <h1>
+            Vos données d’audit <br />
+            restent lisibles, maîtrisées <br />
+            <span>et protégées</span>
+          </h1>
+
+          <p className="gth-lead gth-privacy-lead">
+            Cette page explique simplement quelles données peuvent être utilisées par GapTrack, pourquoi elles sont nécessaires, comment elles sont protégées et comment demander leur suppression ou leur modification.
+          </p>
+
+          <div className="gth-privacy-meta" aria-label="Informations principales de confidentialité">
+            <span><CheckCircle2 aria-hidden="true" /> Données utilisées pour faire fonctionner le service</span>
+            <span><CheckCircle2 aria-hidden="true" /> Pas de revente des données personnelles</span>
+            <span><CheckCircle2 aria-hidden="true" /> Contact direct pour toute demande</span>
+          </div>
+        </div>
+
+        <div className="gth-privacy-visual" aria-label="Résumé visuel de la confidentialité GapTrack">
+          <div className="gth-privacy-orbit" aria-hidden="true" />
+          <div className="gth-privacy-core">
+            <ShieldCheck aria-hidden="true" />
+            <strong>Contrôle des données</strong>
+            <span>Compte, audits, preuves, rôles et journaux sont organisés autour de l’utilisateur ou de son organisation.</span>
+          </div>
+          <div className="gth-privacy-node gth-privacy-node-one">Compte</div>
+          <div className="gth-privacy-node gth-privacy-node-two">Audits</div>
+          <div className="gth-privacy-node gth-privacy-node-three">Preuves</div>
+          <div className="gth-privacy-node gth-privacy-node-four">Droits</div>
+        </div>
+      </div>
+
+      <div className="gth-privacy-section gth-reveal">
+        <div>
+          <h2>Ce que GapTrack peut traiter</h2>
+          <p>
+            GapTrack collecte uniquement les informations utiles à la création du compte, au fonctionnement de l’application et au suivi des audits SSI.
+          </p>
+        </div>
+
+        <div className="gth-privacy-grid">
+          {privacySections.map((section) => (
+            <article className="gth-privacy-card gth-reveal" key={section.title}>
+              <div className="gth-privacy-card-icon">{section.icon}</div>
+              <h3>{section.title}</h3>
+              <p>{section.text}</p>
+            </article>
+          ))}
+        </div>
+      </div>
+
+      <div className="gth-privacy-story gth-reveal">
+        <div className="gth-privacy-sticky">
+          <div className="gth-kicker gth-privacy-kicker">
+            <Lock aria-hidden="true" />
+            CYCLE DE VIE DES DONNÉES
+          </div>
+          <h2>Collecter moins, expliquer mieux, supprimer sur demande.</h2>
+          <p>
+            L’objectif est de rester transparent : les données servent à fournir l’espace GapTrack, sécuriser les accès, rattacher les preuves aux bons contrôles et répondre aux demandes de contact ou Premium.
+          </p>
+        </div>
+
+        <div className="gth-privacy-timeline">
+          <article className="gth-privacy-step gth-reveal">
+            <span>01</span>
+            <h3>Création du compte</h3>
+            <p>Les informations de compte permettent d’identifier l’utilisateur, son organisation et son rôle dans l’application.</p>
+          </article>
+          <article className="gth-privacy-step gth-reveal">
+            <span>02</span>
+            <h3>Utilisation de l’audit</h3>
+            <p>Les statuts, commentaires, preuves et plans d’action sont conservés pour permettre le suivi de conformité dans le temps.</p>
+          </article>
+          <article className="gth-privacy-step gth-reveal">
+            <span>03</span>
+            <h3>Sécurité et traçabilité</h3>
+            <p>Des journaux techniques ou applicatifs peuvent être utilisés pour protéger le service et comprendre les actions importantes.</p>
+          </article>
+          <article className="gth-privacy-step gth-reveal">
+            <span>04</span>
+            <h3>Suppression ou correction</h3>
+            <p>L’utilisateur peut demander l’accès, la correction ou la suppression de ses données via l’adresse de contact indiquée.</p>
+          </article>
+        </div>
+      </div>
+
+      <div className="gth-privacy-section gth-privacy-legal gth-reveal">
+        <div>
+          <h2>Politique de confidentialité</h2>
+          <p>Dernière mise à jour : 2026</p>
+        </div>
+
+        <div className="gth-privacy-legal-grid">
+          <article>
+            <h3>Responsable du traitement</h3>
+            <p><strong>Julien Messaoudi</strong><br />Projet GapTrack<br /><a href={`mailto:${PREMIUM_CONTACT_EMAIL}`}>{PREMIUM_CONTACT_EMAIL}</a></p>
+          </article>
+          <article>
+            <h3>Finalités</h3>
+            <p>Les données sont utilisées pour gérer les comptes, permettre la connexion, centraliser les audits, rattacher les preuves aux contrôles, générer les rapports, gérer les rôles et assurer la sécurité du service.</p>
+          </article>
+          <article>
+            <h3>Hébergement et prestataires</h3>
+            <p>GapTrack peut s’appuyer sur des services techniques comme Supabase pour l’authentification, la base de données et le stockage, ainsi que Vercel pour l’hébergement de l’interface web si le site y est déployé.</p>
+          </article>
+          <article>
+            <h3>Durée de conservation</h3>
+            <p>Les données sont conservées pendant la durée nécessaire au fonctionnement du compte, au suivi des audits et au traitement des demandes. Une demande de suppression peut être envoyée à tout moment.</p>
+          </article>
+          <article>
+            <h3>Cookies et stockage local</h3>
+            <p>GapTrack peut utiliser des éléments techniques comme la session, le stockage local ou le stockage de session afin de maintenir la connexion, mémoriser certaines préférences et assurer le fonctionnement de l’application.</p>
+          </article>
+          <article>
+            <h3>Sécurité</h3>
+            <p>Les accès sont structurés par compte et par rôle. Les mots de passe ne doivent pas être stockés en clair par l’application et les preuves doivent être consultées uniquement par les personnes autorisées.</p>
+          </article>
+        </div>
+      </div>
+
+      <div className="gth-privacy-rights gth-reveal">
+        <div>
+          <div className="gth-kicker gth-privacy-kicker">
+            <Mail aria-hidden="true" />
+            VOS DROITS
+          </div>
+          <h2>Une demande ? Écrivez directement au créateur.</h2>
+          <p>
+            Pour exercer vos droits ou poser une question sur la confidentialité, vous pouvez contacter GapTrack par e-mail.
+          </p>
+          <a className="gth-primary" href={`mailto:${PREMIUM_CONTACT_EMAIL}`}>
+            Contacter GapTrack
+            <Mail aria-hidden="true" />
+          </a>
+        </div>
+
+        <div className="gth-privacy-rights-list">
+          {privacyRights.map((right) => (
+            <span key={right}><CheckCircle2 aria-hidden="true" /> {right}</span>
+          ))}
+        </div>
+      </div>
+
+      <div className="gth-security-disclaimer gth-reveal">
+        <ShieldCheck aria-hidden="true" />
+        <p>
+          Cette page est une présentation claire de la politique de confidentialité de GapTrack. Elle ne remplace pas un audit juridique ou une validation officielle de conformité RGPD.
+        </p>
+      </div>
+    </section>
+  );
+}
 
 function SecurityPage() {
   return (
