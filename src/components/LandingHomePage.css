@@ -1495,6 +1495,19 @@
   margin: 0;
 }
 
+.gth-credit-link {
+  color: rgba(226, 236, 255, .86);
+  text-decoration: none;
+  font-weight: 800;
+  transition: color .18s ease, text-shadow .18s ease, transform .18s ease;
+}
+
+.gth-credit-link:hover,
+.gth-credit-link:focus-visible {
+  color: #ffffff;
+  text-shadow: 0 0 20px rgba(70, 135, 255, .42);
+}
+
 .gth-footer-links {
   display: inline-flex;
   align-items: center;

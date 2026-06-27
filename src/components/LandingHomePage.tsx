@@ -26,6 +26,7 @@ type LandingPageView = "plateforme" | "apropos" | "securite" | "confidentialite"
 type SubscriptionPlan = "free" | "premium";
 
 const PREMIUM_CONTACT_EMAIL = "julien.messaoudi@edu.esiee.fr";
+const LINKEDIN_PROFILE_URL = "https://www.linkedin.com/in/julien-messaoudi/";
 
 function buildPremiumRequestMailto(source: string): string {
   const subject = "Demande d’activation Premium GapTrack";
@@ -346,7 +347,16 @@ export function LandingHomePage({
 
       <footer className="gth-footer" aria-label="Pied de page GapTrack">
         <p className="gth-footer-copy">
-          © Copyright GapTrack 2026 | Réalisation Julien Messaoudi
+          © Copyright GapTrack 2026 | Réalisation {" "}
+          <a
+            className="gth-credit-link"
+            href={LINKEDIN_PROFILE_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Ouvrir le profil LinkedIn de Julien Messaoudi"
+          >
+            Julien Messaoudi
+          </a>
         </p>
 
         <nav className="gth-footer-links" aria-label="Liens légaux et contact">
@@ -689,7 +699,20 @@ function PrivacyPage() {
         <div className="gth-privacy-legal-grid">
           <article>
             <h3>Responsable du traitement</h3>
-            <p><strong>Julien Messaoudi</strong><br />Projet GapTrack<br /><a href={`mailto:${PREMIUM_CONTACT_EMAIL}`}>{PREMIUM_CONTACT_EMAIL}</a></p>
+            <p>
+              <strong>
+                <a
+                  className="gth-credit-link"
+                  href={LINKEDIN_PROFILE_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="Ouvrir le profil LinkedIn de Julien Messaoudi"
+                >
+                  Julien Messaoudi
+                </a>
+              </strong>
+              <br />Projet GapTrack<br /><a href={`mailto:${PREMIUM_CONTACT_EMAIL}`}>{PREMIUM_CONTACT_EMAIL}</a>
+            </p>
           </article>
           <article>
             <h3>Finalités</h3>
