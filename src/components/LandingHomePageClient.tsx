@@ -1,6 +1,6 @@
 import { LandingHomePage } from "./LandingHomePage";
 
-type LandingPageView = "plateforme" | "apropos";
+type LandingPageView = "plateforme" | "apropos" | "securite";
 type SubscriptionPlan = "free" | "premium";
 
 export default function LandingHomePageClient({
@@ -21,7 +21,7 @@ export default function LandingHomePageClient({
   };
 
   const handleNavigate = (page: LandingPageView) => {
-    const nextPath = page === "apropos" ? "/a-propos" : "/";
+    const nextPath = page === "apropos" ? "/a-propos" : page === "securite" ? "/securite" : "/";
 
     if (window.location.pathname !== nextPath) {
       window.history.pushState({}, "", nextPath);

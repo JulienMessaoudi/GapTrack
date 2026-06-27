@@ -7,6 +7,7 @@ import {
   Ear,
   Eye,
   FileText,
+  Lock,
   Grid2X2,
   Layers,
   Lightbulb,
@@ -21,7 +22,7 @@ import {
 } from "lucide-react";
 import "./LandingHomePage.css";
 
-type LandingPageView = "plateforme" | "apropos";
+type LandingPageView = "plateforme" | "apropos" | "securite";
 type SubscriptionPlan = "free" | "premium";
 
 const PREMIUM_CONTACT_EMAIL = "julien.messaoudi@edu.esiee.fr";
@@ -340,7 +341,7 @@ export function LandingHomePage({
       </header>
 
       <div key={page} className="gth-route-panel">
-        {page === "apropos" ? <AboutPage /> : <HomePage onAccess={onAccess} openPage={openPage} />}
+        {page === "apropos" ? <AboutPage /> : page === "securite" ? <SecurityPage /> : <HomePage onAccess={onAccess} openPage={openPage} />}
       </div>
 
       <footer className="gth-footer" aria-label="Pied de page GapTrack">
@@ -353,7 +354,7 @@ export function LandingHomePage({
           <span aria-hidden="true">—</span>
           <a href="/cgu">CGU</a>
           <span aria-hidden="true">—</span>
-          <a href="/securite">Sécurité</a>
+          <a href="/securite" onClick={(event) => handleSeoLinkClick(event, () => openPage("securite"))}>Sécurité</a>
           <span aria-hidden="true">—</span>
           <a href={`mailto:${PREMIUM_CONTACT_EMAIL}`}>Contact</a>
         </nav>
@@ -556,6 +557,118 @@ function FaqSection() {
       </div>
     </section>
   );
+}
+
+
+function SecurityPage() {
+  return (
+    <section className="gth-security" id="top">
+      <div className="gth-security-hero gth-reveal">
+        <div className="gth-security-copy">
+          <div className="gth-kicker gth-security-kicker">
+            <ShieldCheck aria-hidden="true" />
+            SÉCURITÉ GAPTRACK
+          </div>
+
+          <h1>
+            Une plateforme pensée <br />
+            pour protéger vos audits, <br />
+            <span>preuves et accès</span>
+          </h1>
+
+          <p className="gth-lead gth-security-lead">
+            GapTrack manipule des informations sensibles liées à la conformité SSI. La sécurité repose donc sur une authentification fiable, des accès maîtrisés, une traçabilité claire et une gestion prudente des preuves.
+          </p>
+        </div>
+
+        <div className="gth-security-summary" aria-label="Résumé sécurité GapTrack">
+          <div className="gth-security-score">
+            <ShieldCheck aria-hidden="true" />
+            <strong>Sécurité par conception</strong>
+            <span>Authentification, rôles, preuves, traçabilité et confidentialité structurés dès le produit.</span>
+          </div>
+          <ul>
+            <li><CheckCircle2 aria-hidden="true" /> Accès par compte utilisateur sécurisé</li>
+            <li><CheckCircle2 aria-hidden="true" /> Rôles applicatifs pour limiter les droits</li>
+            <li><CheckCircle2 aria-hidden="true" /> Preuves stockées et consultées de manière contrôlée</li>
+            <li><CheckCircle2 aria-hidden="true" /> Journal d’audit pour suivre les actions sensibles</li>
+          </ul>
+        </div>
+      </div>
+
+      <div className="gth-security-section gth-reveal">
+        <h2>Mesures de sécurité principales</h2>
+        <div className="gth-security-grid">
+          <SecurityCard
+            icon={<Lock />}
+            title="Authentification sécurisée"
+            text="Les comptes GapTrack utilisent une authentification dédiée. Les mots de passe doivent respecter une longueur minimale et une complexité renforcée."
+          />
+          <SecurityCard
+            icon={<Users />}
+            title="Gestion des rôles"
+            text="Les droits sont séparés selon les profils : administrateur, auditeur, contributeur ou lecteur, afin d’éviter les accès inutiles."
+          />
+          <SecurityCard
+            icon={<FileText />}
+            title="Protection des preuves"
+            text="Les preuves sont rattachées aux audits et contrôles concernés. L’accès aux fichiers peut être limité et généré temporairement lorsque nécessaire."
+          />
+          <SecurityCard
+            icon={<Eye />}
+            title="Traçabilité"
+            text="Les actions importantes liées aux audits, preuves, statuts et utilisateurs peuvent être historisées pour mieux comprendre ce qui a été fait."
+          />
+          <SecurityCard
+            icon={<Shield />}
+            title="Réduction des risques"
+            text="Les fichiers et entrées sensibles doivent être contrôlés afin de limiter les abus, les erreurs de manipulation et les accès non autorisés."
+          />
+          <SecurityCard
+            icon={<Settings />}
+            title="Amélioration continue"
+            text="GapTrack est conçu pour évoluer progressivement : sécurité applicative, confidentialité, permissions et conformité seront renforcées avec le produit."
+          />
+        </div>
+      </div>
+
+      <div className="gth-security-section gth-security-commitment gth-reveal">
+        <div>
+          <h2>Engagement de confidentialité</h2>
+          <p>
+            Les données saisies dans GapTrack peuvent contenir des informations sensibles sur l’organisation, les écarts de conformité, les preuves et les plans d’action. L’objectif est de limiter l’accès à ces informations aux seules personnes autorisées et de conserver une traçabilité claire des actions réalisées.
+          </p>
+        </div>
+        <div className="gth-security-checklist">
+          <span><CheckCircle2 aria-hidden="true" /> Pas de mot de passe stocké en clair</span>
+          <span><CheckCircle2 aria-hidden="true" /> Accès différenciés selon les rôles</span>
+          <span><CheckCircle2 aria-hidden="true" /> Données d’audit structurées par utilisateur ou organisation</span>
+          <span><CheckCircle2 aria-hidden="true" /> Preuves associées à des contrôles précis</span>
+        </div>
+      </div>
+
+      <div className="gth-security-disclaimer gth-reveal">
+        <InfoIcon />
+        <p>
+          Cette page présente les principes de sécurité appliqués à GapTrack. Elle n’est pas encore une certification de sécurité ni un audit externe du produit.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+function SecurityCard({ icon, title, text }: { icon: React.ReactNode; title: string; text: string }) {
+  return (
+    <article className="gth-security-card gth-reveal">
+      <div className="gth-security-card-icon">{icon}</div>
+      <h3>{title}</h3>
+      <p>{text}</p>
+    </article>
+  );
+}
+
+function InfoIcon() {
+  return <ShieldCheck aria-hidden="true" />;
 }
 
 function AboutPage() {
