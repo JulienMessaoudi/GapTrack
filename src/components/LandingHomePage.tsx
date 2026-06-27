@@ -343,8 +343,20 @@ export function LandingHomePage({
         {page === "apropos" ? <AboutPage /> : <HomePage onAccess={onAccess} openPage={openPage} />}
       </div>
 
-      <footer className="gth-signature" aria-label="Crédits">
-        Conçu et développé par Julien Messaoudi
+      <footer className="gth-footer" aria-label="Pied de page GapTrack">
+        <p className="gth-footer-copy">
+          © Copyright GapTrack 2026 | Réalisation Julien Messaoudi
+        </p>
+
+        <nav className="gth-footer-links" aria-label="Liens légaux et contact">
+          <a href="/confidentialite">Confidentialité</a>
+          <span aria-hidden="true">—</span>
+          <a href="/cgu">CGU</a>
+          <span aria-hidden="true">—</span>
+          <a href="/securite">Sécurité</a>
+          <span aria-hidden="true">—</span>
+          <a href={`mailto:${PREMIUM_CONTACT_EMAIL}`}>Contact</a>
+        </nav>
       </footer>
     </main>
   );
