@@ -2689,3 +2689,54 @@
     scroll-margin-top: 150px;
   }
 }
+
+
+/* =========================================================
+   Sticky header: frosted but readable
+   Le bandeau reste flouté, mais suffisamment opaque pour que
+   le contenu qui passe derrière ne soit plus lisible.
+   ========================================================= */
+.gth-header {
+  z-index: 1000 !important;
+  border: 1px solid rgba(154, 184, 235, .18) !important;
+  border-top: 0 !important;
+  background:
+    linear-gradient(180deg, rgba(7, 17, 38, .98), rgba(7, 17, 38, .94)),
+    radial-gradient(circle at 82% 0%, rgba(46, 111, 255, .20), transparent 38%),
+    rgba(7, 17, 38, .96) !important;
+  backdrop-filter: blur(30px) saturate(160%) !important;
+  -webkit-backdrop-filter: blur(30px) saturate(160%) !important;
+  box-shadow:
+    0 18px 60px rgba(0, 0, 0, .42),
+    0 1px 0 rgba(255, 255, 255, .06) inset,
+    0 -1px 0 rgba(255, 255, 255, .03) inset !important;
+  isolation: isolate;
+}
+
+.gth-header::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: rgba(4, 10, 24, .72);
+  pointer-events: none;
+}
+
+.gth-scroll-progress {
+  z-index: 10000 !important;
+}
+
+@media (max-width: 820px) {
+  .gth-header {
+    background:
+      linear-gradient(180deg, rgba(7, 17, 38, .99), rgba(7, 17, 38, .96)),
+      radial-gradient(circle at 82% 0%, rgba(46, 111, 255, .18), transparent 42%),
+      rgba(7, 17, 38, .97) !important;
+    backdrop-filter: blur(32px) saturate(165%) !important;
+    -webkit-backdrop-filter: blur(32px) saturate(165%) !important;
+    box-shadow:
+      0 18px 52px rgba(0, 0, 0, .48),
+      0 1px 0 rgba(255, 255, 255, .06) inset !important;
+  }
+}
