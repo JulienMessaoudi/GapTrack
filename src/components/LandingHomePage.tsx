@@ -352,8 +352,6 @@ export function LandingHomePage({
         <nav className="gth-footer-links" aria-label="Liens légaux et contact">
           <a href="/confidentialite" onClick={(event) => handleSeoLinkClick(event, () => openPage("confidentialite"))}>Confidentialité</a>
           <span aria-hidden="true">—</span>
-          <a href="/cgu">CGU</a>
-          <span aria-hidden="true">—</span>
           <a href="/securite" onClick={(event) => handleSeoLinkClick(event, () => openPage("securite"))}>Sécurité</a>
           <span aria-hidden="true">—</span>
           <a href={`mailto:${PREMIUM_CONTACT_EMAIL}`}>Contact</a>

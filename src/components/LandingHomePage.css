@@ -3519,6 +3519,8 @@
 }
 
 .gth-security-card {
+  position: relative;
+  overflow: hidden;
   min-height: 220px;
   padding: 24px;
   border: 1px solid rgba(145, 169, 207, .18);
@@ -3527,7 +3529,53 @@
     radial-gradient(circle at 80% 0%, rgba(61, 126, 255, .12), transparent 38%),
     linear-gradient(180deg, rgba(24, 45, 84, .72), rgba(11, 26, 55, .62));
   box-shadow: inset 0 1px 0 rgba(255,255,255,.045), 0 18px 38px rgba(0,0,0,.12);
+  transition:
+    transform .32s cubic-bezier(.22, 1, .36, 1),
+    border-color .32s ease,
+    box-shadow .32s ease,
+    background .32s ease;
 }
+
+.gth-security-card::after,
+.gth-security-commitment::after,
+.gth-security-disclaimer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(120deg, transparent, rgba(255,255,255,.075), transparent);
+  translate: -125% 0;
+  transition: translate .75s cubic-bezier(.22, 1, .36, 1);
+  pointer-events: none;
+}
+
+.gth-security-card:hover,
+.gth-security-card:focus-within {
+  transform: translateY(-7px);
+  border-color: rgba(91, 167, 255, .46);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.07),
+    0 24px 54px rgba(0,0,0,.24),
+    0 0 46px rgba(70, 135, 255, .16);
+  background:
+    radial-gradient(circle at 84% 0%, rgba(85, 170, 255, .22), transparent 40%),
+    linear-gradient(180deg, rgba(28, 55, 101, .82), rgba(12, 30, 63, .70));
+}
+
+.gth-security-card:hover::after,
+.gth-security-card:focus-within::after,
+.gth-security-commitment:hover::after,
+.gth-security-disclaimer:hover::after {
+  translate: 125% 0;
+}
+
+.gth-security-card:hover .gth-security-card-icon,
+.gth-security-card:focus-within .gth-security-card-icon {
+  transform: scale(1.06) rotate(-2deg);
+  color: #61dff0;
+  border-color: rgba(88, 223, 240, .38);
+  box-shadow: 0 0 34px rgba(88, 223, 240, .18);
+}
+
 
 .gth-security-card-icon {
   width: 58px;
@@ -3540,6 +3588,11 @@
   background: radial-gradient(circle at 50% 25%, rgba(70, 135, 255, .30), rgba(20, 48, 105, .30));
   border: 1px solid rgba(70, 135, 255, .34);
   box-shadow: 0 0 28px rgba(70, 135, 255, .16);
+  transition:
+    transform .32s cubic-bezier(.22, 1, .36, 1),
+    color .32s ease,
+    border-color .32s ease,
+    box-shadow .32s ease;
 }
 
 .gth-security-card-icon svg {
@@ -3563,12 +3616,26 @@
 }
 
 .gth-security-commitment {
+  position: relative;
+  overflow: hidden;
   grid-template-columns: minmax(260px, 420px) 1fr;
   padding: 28px;
   border: 1px solid rgba(145, 169, 207, .18);
   border-radius: 16px;
   background: linear-gradient(180deg, rgba(20, 37, 72, .72), rgba(9, 23, 51, .65));
   box-shadow: inset 0 1px 0 rgba(255,255,255,.045), 0 18px 42px rgba(0,0,0,.14);
+  transition: transform .32s cubic-bezier(.22, 1, .36, 1), border-color .32s ease, box-shadow .32s ease;
+}
+
+
+.gth-security-commitment:hover,
+.gth-security-disclaimer:hover {
+  transform: translateY(-5px);
+  border-color: rgba(91, 167, 255, .40);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.065),
+    0 22px 50px rgba(0,0,0,.22),
+    0 0 40px rgba(70, 135, 255, .14);
 }
 
 .gth-security-commitment h2 {
@@ -3580,6 +3647,8 @@
 }
 
 .gth-security-disclaimer {
+  position: relative;
+  overflow: hidden;
   margin-top: 24px;
   padding: 18px 22px;
   display: flex;
@@ -3589,6 +3658,7 @@
   border-radius: 12px;
   background: rgba(12, 32, 70, .42);
   color: #c8d2e4;
+  transition: transform .32s cubic-bezier(.22, 1, .36, 1), border-color .32s ease, box-shadow .32s ease;
 }
 
 .gth-security-disclaimer svg {
@@ -3649,5 +3719,28 @@
 
   .gth-security-commitment {
     padding: 22px;
+  }
+}
+
+
+@media (prefers-reduced-motion: reduce) {
+
+  .gth-security-card,
+  .gth-security-card-icon,
+  .gth-security-commitment,
+  .gth-security-disclaimer,
+  .gth-security-card::after,
+  .gth-security-commitment::after,
+  .gth-security-disclaimer::after {
+    transition: none;
+  }
+
+  .gth-security-card:hover,
+  .gth-security-card:focus-within,
+  .gth-security-commitment:hover,
+  .gth-security-disclaimer:hover,
+  .gth-security-card:hover .gth-security-card-icon,
+  .gth-security-card:focus-within .gth-security-card-icon {
+    transform: none;
   }
 }
