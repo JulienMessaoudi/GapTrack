@@ -46,8 +46,8 @@
   background:
     linear-gradient(180deg, rgba(7, 17, 38, .96), rgba(7, 17, 38, .86)),
     rgba(7, 17, 38, .88);
-  backdrop-filter: blur(22px);
-  -webkit-backdrop-filter: blur(22px);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   box-shadow:
     0 18px 50px rgba(0, 0, 0, .22),
     inset 0 1px 0 rgba(255, 255, 255, .04);
@@ -2047,8 +2047,8 @@
   border-bottom-color: rgba(210, 225, 255, .12);
   border-radius: 0 0 24px 24px;
   background: linear-gradient(180deg, rgba(3, 8, 18, .78), rgba(3, 8, 18, .52));
-  backdrop-filter: blur(26px) saturate(150%);
-  -webkit-backdrop-filter: blur(26px) saturate(150%);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
   box-shadow: 0 18px 52px rgba(0,0,0,.18);
 }
 
@@ -2707,9 +2707,9 @@
 
   /* Important : le backdrop-filter doit être directement sur le header.
      C'est lui qui floute le texte / les cartes qui passent derrière. */
-  background: rgba(5, 12, 28, .46) !important;
-  -webkit-backdrop-filter: blur(42px) saturate(180%) brightness(.74) contrast(112%) !important;
-  backdrop-filter: blur(42px) saturate(180%) brightness(.74) contrast(112%) !important;
+  background: rgba(5, 12, 28, .58) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(145%) brightness(.82) contrast(108%) !important;
+  backdrop-filter: blur(18px) saturate(145%) brightness(.82) contrast(108%) !important;
 
   box-shadow:
     0 18px 58px rgba(0, 0, 0, .34),
@@ -2770,9 +2770,9 @@
   .gth-header {
     width: calc(100% - 28px) !important;
     border-radius: 0 0 22px 22px !important;
-    background: rgba(5, 12, 28, .56) !important;
-    -webkit-backdrop-filter: blur(46px) saturate(185%) brightness(.70) contrast(116%) !important;
-    backdrop-filter: blur(46px) saturate(185%) brightness(.70) contrast(116%) !important;
+    background: rgba(5, 12, 28, .62) !important;
+    -webkit-backdrop-filter: blur(18px) saturate(145%) brightness(.82) contrast(108%) !important;
+    backdrop-filter: blur(18px) saturate(145%) brightness(.82) contrast(108%) !important;
   }
 
   .gth-header::before {
