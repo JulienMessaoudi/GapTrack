@@ -808,7 +808,7 @@ function LegalNoticePage() {
       text: (
         <>
           Le site GapTrack, accessible à l’adresse <a href={SITE_URL}>{SITE_URL}</a>, est édité par{" "}
-          <strong>Julien Messaoudi</strong>, dans le cadre du projet logiciel GapTrack.
+          <a href={LINKEDIN_PROFILE_URL} target="_blank" rel="noopener noreferrer"><strong>Julien Messaoudi</strong></a>, dans le cadre du projet logiciel GapTrack.
           <br />
           Contact : <a href={`mailto:${PREMIUM_CONTACT_EMAIL}`}>{PREMIUM_CONTACT_EMAIL}</a>
         </>
@@ -818,7 +818,7 @@ function LegalNoticePage() {
       title: "Directeur de la publication",
       text: (
         <>
-          Le directeur de la publication est <strong>Julien Messaoudi</strong>.
+          Le directeur de la publication est <a href={LINKEDIN_PROFILE_URL} target="_blank" rel="noopener noreferrer"><strong>Julien Messaoudi</strong></a>.
         </>
       ),
     },
@@ -892,13 +892,13 @@ function LegalNoticePage() {
 
           <h1>
             Informations légales <br />
-            relatives au site <br />
-            <span>GapTrack</span>
+            de la plateforme <br />
+            <span>d’audit SSI</span>
           </h1>
 
           <p className="gth-lead gth-privacy-lead">
-            Cette page présente l’éditeur du site, l’hébergeur, les informations de contact,
-            les règles de propriété intellectuelle et les principales informations juridiques liées à l’utilisation de GapTrack.
+            Retrouvez ici les informations permettant d’identifier l’éditeur du site, son hébergeur,
+            les moyens de contact, ainsi que les règles de propriété intellectuelle et de responsabilité applicables.
           </p>
 
           <div className="gth-privacy-meta" aria-label="Résumé des mentions légales GapTrack">
