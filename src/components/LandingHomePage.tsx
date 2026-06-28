@@ -27,6 +27,7 @@ type SubscriptionPlan = "free" | "premium";
 
 const PREMIUM_CONTACT_EMAIL = "julien.messaoudi@edu.esiee.fr";
 const SITE_URL = "https://gaptrack-ssi.vercel.app";
+const JULIEN_LINKEDIN_URL = "https://www.linkedin.com/in/julien-messaoudi/";
 
 function buildPremiumRequestMailto(source: string): string {
   const subject = "Demande d’activation Premium GapTrack";
@@ -380,8 +381,15 @@ export function LandingHomePage({
 
       <footer className="gth-footer" aria-label="Pied de page GapTrack">
         <p className="gth-footer-copy">
-          © Copyright GapTrack 2026 | Réalisation {" "}
-          <span>Julien Messaoudi</span>
+          © Copyright GapTrack 2026 | Réalisation{" "}
+          <a
+            className="gth-credit-link"
+            href={JULIEN_LINKEDIN_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Julien Messaoudi
+          </a>
         </p>
 
         <nav className="gth-footer-links" aria-label="Liens légaux et contact">
@@ -727,7 +735,13 @@ function PrivacyPage() {
           <article>
             <h3>Responsable du traitement</h3>
             <p>
-              <strong>Julien Messaoudi</strong>
+              <a
+                href={JULIEN_LINKEDIN_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <strong>Julien Messaoudi</strong>
+              </a>
               <br />Projet GapTrack<br /><a href={`mailto:${PREMIUM_CONTACT_EMAIL}`}>{PREMIUM_CONTACT_EMAIL}</a>
             </p>
           </article>
