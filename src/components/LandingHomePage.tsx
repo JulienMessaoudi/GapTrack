@@ -611,7 +611,7 @@ function PrivacyPage() {
           </h1>
 
           <p className="gth-lead gth-privacy-lead">
-            Cette page explique simplement quelles données peuvent être utilisées par GapTrack, pourquoi elles sont nécessaires, comment elles sont protégées et comment demander leur suppression ou leur modification.
+            GapTrack utilise les données nécessaires au fonctionnement du service : gérer votre compte, structurer vos audits, protéger vos preuves et répondre aux demandes de modification ou de suppression.
           </p>
 
           <div className="gth-privacy-meta" aria-label="Informations principales de confidentialité">
