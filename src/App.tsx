@@ -424,6 +424,10 @@ interface EvidenceItem {
   mimeType?: string;
   storageKind?: EvidenceStorageKind;
   storageKey?: string;
+  /** Legacy/user-owned storage paths keep the uploader user id as first folder.
+   *  Group-shared storage paths use the shared group id instead. */
+  ownerUserId?: string;
+  groupId?: string;
   sha256?: string;
   contentAvailable?: boolean;
   reviewedBy?: string;
@@ -754,6 +758,8 @@ function evidenceItemFromBackendRow(row: any): { controlId: string; item: Eviden
       addedBy: "Supabase",
       storageKind: "backend",
       storageKey: String(row.storage_path),
+      ownerUserId: typeof row.owner_user_id === "string" && row.owner_user_id.trim() ? row.owner_user_id.trim() : undefined,
+      groupId: typeof row.group_id === "string" && row.group_id.trim() ? row.group_id.trim() : undefined,
       contentAvailable: true,
     },
   };
@@ -763,20 +769,30 @@ async function fetchBackendEvidenceMapForSession(auditSessionId: string): Promis
   if (!auditSessionId) return {};
 
   try {
-    const { data: authData, error: authError } = await supabase.auth.getUser();
-    if (authError || !authData.user?.id) throw authError || new Error("Utilisateur non connecté.");
+    const context = await getSupabaseUserContext();
+    const baseColumns = "id, owner_user_id, group_id, control_id, filename, mime_type, size_bytes, storage_path, created_at";
 
-    const { data, error } = await supabase
+    let result = await supabase
       .from("gaptrack_evidence_files")
-      .select("id, owner_user_id, control_id, filename, mime_type, size_bytes, storage_path, created_at")
+      .select(baseColumns)
       .eq("audit_session_id", auditSessionId)
-      .eq("owner_user_id", authData.user.id)
+      .eq("group_id", context.groupId)
       .order("created_at", { ascending: false });
 
-    if (error) throw error;
+    // Compatibility with databases where the group_id migration has not been applied yet.
+    if (result.error && String(result.error.message || "").toLowerCase().includes("group_id")) {
+      result = await supabase
+        .from("gaptrack_evidence_files")
+        .select("id, owner_user_id, control_id, filename, mime_type, size_bytes, storage_path, created_at")
+        .eq("audit_session_id", auditSessionId)
+        .eq("owner_user_id", context.userId)
+        .order("created_at", { ascending: false });
+    }
+
+    if (result.error) throw result.error;
 
     const map: Record<string, EvidenceItem[]> = {};
-    for (const row of data || []) {
+    for (const row of result.data || []) {
       const parsed = evidenceItemFromBackendRow(row);
       if (!parsed) continue;
       map[parsed.controlId] = [...(map[parsed.controlId] || []), parsed.item];
@@ -835,24 +851,20 @@ async function uploadEvidenceFileToBackend(params: {
   addedBy: string;
   sha256?: string;
 }): Promise<EvidenceItem> {
-  const { data: authData, error: authError } = await supabase.auth.getUser();
-
-  if (authError || !authData.user) {
-    throw authError || new Error("Utilisateur non connecté.");
-  }
-
-  const userId = authData.user.id;
+  const context = await getSupabaseUserContext();
+  const userId = context.userId;
+  const groupId = context.groupId;
   const validationError = validateEvidenceFile(params.file);
   if (validationError) throw new Error(validationError);
 
-  if (![params.auditSessionId, params.controlId, params.evidenceId].every(isSafePathSegment)) {
+  if (![groupId, params.auditSessionId, params.controlId, params.evidenceId].every(isSafePathSegment)) {
     throw new Error("Identifiant de preuve invalide.");
   }
 
   const safeFilename = safeStorageFilename(params.file.name);
   const mimeType = resolveSafeMimeType(params.file);
   const storagePath = [
-    userId,
+    groupId,
     params.auditSessionId,
     params.controlId,
     `${params.evidenceId}-${safeFilename}`,
@@ -868,27 +880,40 @@ async function uploadEvidenceFileToBackend(params: {
 
   if (uploadError) throw uploadError;
 
-  const { data, error: insertError } = await supabase
+  const insertPayload: Record<string, unknown> = {
+    id: params.evidenceId,
+    owner_user_id: userId,
+    group_id: groupId,
+    audit_session_id: params.auditSessionId,
+    control_id: params.controlId,
+    filename: safeFilename,
+    mime_type: mimeType,
+    size_bytes: params.file.size,
+    storage_bucket: EVIDENCE_STORAGE_BUCKET,
+    storage_path: storagePath,
+  };
+
+  let result = await supabase
     .from("gaptrack_evidence_files")
-    .insert({
-      id: params.evidenceId,
-      owner_user_id: userId,
-      audit_session_id: params.auditSessionId,
-      control_id: params.controlId,
-      filename: safeFilename,
-      mime_type: mimeType,
-      size_bytes: params.file.size,
-      storage_bucket: EVIDENCE_STORAGE_BUCKET,
-      storage_path: storagePath,
-    })
-    .select("id, filename, mime_type, size_bytes, storage_path, created_at")
+    .insert(insertPayload)
+    .select("id, owner_user_id, group_id, filename, mime_type, size_bytes, storage_path, created_at")
     .single();
 
-  if (insertError) {
-    await supabase.storage.from(EVIDENCE_STORAGE_BUCKET).remove([storagePath]).catch(() => undefined);
-    throw insertError;
+  if (result.error && String(result.error.message || "").toLowerCase().includes("group_id")) {
+    const { group_id: _groupId, ...legacyPayload } = insertPayload;
+    result = await supabase
+      .from("gaptrack_evidence_files")
+      .insert(legacyPayload)
+      .select("id, owner_user_id, filename, mime_type, size_bytes, storage_path, created_at")
+      .single();
   }
 
+  if (result.error) {
+    await supabase.storage.from(EVIDENCE_STORAGE_BUCKET).remove([storagePath]).catch(() => undefined);
+    throw result.error;
+  }
+
+  const data = result.data as any;
   return {
     id: String(data?.id || params.evidenceId),
     filename: String(data?.filename || safeFilename),
@@ -898,6 +923,8 @@ async function uploadEvidenceFileToBackend(params: {
     addedBy: params.addedBy,
     storageKind: "backend",
     storageKey: String(data?.storage_path || storagePath),
+    ownerUserId: typeof data?.owner_user_id === "string" ? data.owner_user_id : userId,
+    groupId: typeof data?.group_id === "string" ? data.group_id : groupId,
     sha256: params.sha256,
     contentAvailable: true,
   };
@@ -905,8 +932,8 @@ async function uploadEvidenceFileToBackend(params: {
 
 async function openBackendEvidenceItem(item: EvidenceItem): Promise<void> {
   if (!item.storageKey) throw new Error("Missing Supabase Storage path.");
-  const userId = await getSupabaseUserId();
-  if (!storagePathBelongsToUser(item.storageKey, userId)) throw new Error("Chemin de preuve non autorisé.");
+  const context = await getSupabaseUserContext();
+  if (!storagePathBelongsToEvidenceItem(item.storageKey, context, item)) throw new Error("Chemin de preuve non autorisé.");
 
   const { data, error } = await supabase.storage
     .from(EVIDENCE_STORAGE_BUCKET)
@@ -920,8 +947,8 @@ async function openBackendEvidenceItem(item: EvidenceItem): Promise<void> {
 
 async function deleteBackendEvidenceItem(item: EvidenceItem): Promise<void> {
   if (!item.storageKey) throw new Error("Missing Supabase Storage path.");
-  const userId = await getSupabaseUserId();
-  if (!storagePathBelongsToUser(item.storageKey, userId)) throw new Error("Chemin de preuve non autorisé.");
+  const context = await getSupabaseUserContext();
+  if (!storagePathBelongsToEvidenceItem(item.storageKey, context, item)) throw new Error("Chemin de preuve non autorisé.");
 
   const { error: fileError } = await supabase.storage
     .from(EVIDENCE_STORAGE_BUCKET)
@@ -929,13 +956,21 @@ async function deleteBackendEvidenceItem(item: EvidenceItem): Promise<void> {
 
   if (fileError) throw fileError;
 
-  const { error: dbError } = await supabase
+  let result = await supabase
     .from("gaptrack_evidence_files")
     .delete()
     .eq("id", item.id)
-    .eq("owner_user_id", userId);
+    .eq("group_id", context.groupId);
 
-  if (dbError) throw dbError;
+  if (result.error && String(result.error.message || "").toLowerCase().includes("group_id")) {
+    result = await supabase
+      .from("gaptrack_evidence_files")
+      .delete()
+      .eq("id", item.id)
+      .eq("owner_user_id", context.userId);
+  }
+
+  if (result.error) throw result.error;
 }
 
 async function sha256File(file: File): Promise<string | undefined> {
@@ -2090,6 +2125,26 @@ function storagePathBelongsToUser(storageKey: string | undefined, userId: string
   return parts.length >= 4 && parts[0] === userId && parts.every((part) => isSafePathSegment(part));
 }
 
+function storagePathBelongsToEvidenceItem(
+  storageKey: string | undefined,
+  context: SupabaseUserContext,
+  item?: Pick<EvidenceItem, "ownerUserId" | "groupId">
+): boolean {
+  if (!storageKey || !context?.userId || !context?.groupId) return false;
+  const parts = String(storageKey).split("/");
+  if (parts.length < 4 || !parts.every((part) => isSafePathSegment(part))) return false;
+
+  // New shared storage path: <group_id>/<audit_id>/<control_id>/<file>
+  if (parts[0] === context.groupId) return true;
+
+  // Backward compatibility for files uploaded before group sharing.
+  if (parts[0] === context.userId) return true;
+  if (item?.ownerUserId && parts[0] === item.ownerUserId) return true;
+  if (item?.groupId && parts[0] === item.groupId && item.groupId === context.groupId) return true;
+
+  return false;
+}
+
 function userRoleLabel(role: UserRole | undefined, lang: LangKey): string {
   const r = normalizeUserRole(role);
   if (lang === "fr") {
@@ -2296,30 +2351,39 @@ function userRecordFromProfileRow(row: any): AppUser | null {
 }
 
 function mergeUsersByEmail(localUsers: AppUser[], incomingUsers: AppUser[]): AppUser[] {
-  const byEmail = new Map<string, AppUser>();
+  // Supabase is the source of truth for the user list.
+  // We only preserve a few harmless local fields for users that still exist on the server.
+  // This prevents deleted/soft-deleted users from reappearing from localStorage.
+  const localByEmail = new Map<string, AppUser>();
 
   for (const user of localUsers) {
-    byEmail.set(normalizeEmail(user.email), user);
+    const key = normalizeEmail(user.email);
+    if (!key) continue;
+    localByEmail.set(key, user);
   }
+
+  const nextByEmail = new Map<string, AppUser>();
 
   for (const incoming of incomingUsers) {
     const key = normalizeEmail(incoming.email);
     if (!key) continue;
-    const existing = byEmail.get(key);
-    byEmail.set(key, sanitizeUserForClientStorage({
-      ...(existing || {}),
+
+    const existing = localByEmail.get(key);
+
+    nextByEmail.set(key, sanitizeUserForClientStorage({
+      ...existing,
       ...incoming,
-      id: existing?.id || incoming.id || uuid(),
-      createdAt: existing?.createdAt || incoming.createdAt || new Date().toISOString(),
+      id: incoming.id || existing?.id || uuid(),
+      createdAt: incoming.createdAt || existing?.createdAt || new Date().toISOString(),
       lastLoginAt: existing?.lastLoginAt || incoming.lastLoginAt,
-      createdByUserId: incoming.createdByUserId || existing?.createdByUserId,
-      createdByEmail: incoming.createdByEmail || existing?.createdByEmail,
-      groupId: incoming.groupId || existing?.groupId,
-      groupName: incoming.groupName || existing?.groupName,
+      createdByUserId: incoming.createdByUserId,
+      createdByEmail: incoming.createdByEmail,
+      groupId: incoming.groupId,
+      groupName: incoming.groupName,
     }));
   }
 
-  return Array.from(byEmail.values()).sort((a, b) => {
+  return Array.from(nextByEmail.values()).sort((a, b) => {
     const ga = String(a.groupName || "");
     const gb = String(b.groupName || "");
     if (ga !== gb) return ga.localeCompare(gb);
@@ -2726,49 +2790,137 @@ async function getSupabaseUserId(): Promise<string> {
   return data.user.id;
 }
 
-async function loadSessionsFromBackend(): Promise<Session[]> {
+type SupabaseUserContext = {
+  userId: string;
+  groupId: string;
+  groupName?: string;
+};
+
+function fallbackGroupIdForUserId(userId: string): string {
+  return `group-${String(userId || uuid()).toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "")}`;
+}
+
+function safeSharedGroupId(value: string | undefined, userId: string): string {
+  const fallback = fallbackGroupIdForUserId(userId);
+  const candidate = String(value || fallback).trim();
+  return isSafePathSegment(candidate) ? candidate : fallback;
+}
+
+async function getSupabaseUserContext(): Promise<SupabaseUserContext> {
   const userId = await getSupabaseUserId();
-  const { data, error } = await supabase
+  let groupId: string | undefined;
+  let groupName: string | undefined;
+
+  try {
+    const { data, error } = await supabase
+      .from("gaptrack_profiles")
+      .select("group_id, group_name")
+      .eq("id", userId)
+      .maybeSingle();
+
+    if (!error && data) {
+      groupId = typeof data.group_id === "string" && data.group_id.trim() ? data.group_id.trim() : undefined;
+      groupName = typeof data.group_name === "string" && data.group_name.trim() ? data.group_name.trim() : undefined;
+    }
+  } catch (error) {
+    console.warn("Unable to read GapTrack group context; using a personal fallback group.", error);
+  }
+
+  const safeGroupId = safeSharedGroupId(groupId, userId);
+
+  // If an old profile has no group yet, initialize a stable personal group.
+  // When an admin creates users, the same group_id is then reused by all members.
+  if (!groupId || groupId !== safeGroupId) {
+    try {
+      await supabase
+        .from("gaptrack_profiles")
+        .update({
+          group_id: safeGroupId,
+          group_name: groupName || "Groupe 1",
+        })
+        .eq("id", userId);
+    } catch (error) {
+      console.warn("Unable to persist GapTrack fallback group on profile.", error);
+    }
+  }
+
+  return {
+    userId,
+    groupId: safeGroupId,
+    groupName,
+  };
+}
+
+async function loadSessionsFromBackend(): Promise<Session[]> {
+  const context = await getSupabaseUserContext();
+
+  let result = await supabase
     .from(AUDIT_SESSIONS_TABLE)
-    .select("session")
-    .eq("owner_user_id", userId)
+    .select("session, group_id, updated_at")
+    .eq("group_id", context.groupId)
     .order("updated_at", { ascending: false });
 
-  if (error) throw error;
+  // Compatibility with databases where the group_id migration has not been applied yet.
+  if (result.error && String(result.error.message || "").toLowerCase().includes("group_id")) {
+    result = await supabase
+      .from(AUDIT_SESSIONS_TABLE)
+      .select("session, updated_at")
+      .eq("owner_user_id", context.userId)
+      .order("updated_at", { ascending: false });
+  }
 
-  return (data || [])
+  if (result.error) throw result.error;
+
+  return (result.data || [])
     .map((row: any) => normalizeBackendSession(row.session))
     .filter(Boolean) as Session[];
 }
 
 async function saveSessionsToBackend(sessions: Session[]): Promise<void> {
   if (!sessions.length) return;
-  const userId = await getSupabaseUserId();
+  const context = await getSupabaseUserContext();
   const now = new Date().toISOString();
   const payload = sessions.map((session) => ({
     id: session.id,
-    owner_user_id: userId,
+    owner_user_id: context.userId,
+    group_id: context.groupId,
     session,
     updated_at: now,
   }));
 
-  const { error } = await supabase
+  let result = await supabase
     .from(AUDIT_SESSIONS_TABLE)
     .upsert(payload, { onConflict: "id" });
 
-  if (error) throw error;
+  if (result.error && String(result.error.message || "").toLowerCase().includes("group_id")) {
+    const legacyPayload = payload.map(({ group_id: _groupId, ...row }) => row);
+    result = await supabase
+      .from(AUDIT_SESSIONS_TABLE)
+      .upsert(legacyPayload, { onConflict: "id" });
+  }
+
+  if (result.error) throw result.error;
 }
 
 async function deleteAuditSessionFromBackend(sessionId: string | null | undefined): Promise<void> {
   if (!sessionId) return;
   try {
-    const userId = await getSupabaseUserId();
-    const { error } = await supabase
+    const context = await getSupabaseUserContext();
+    let result = await supabase
       .from(AUDIT_SESSIONS_TABLE)
       .delete()
       .eq("id", sessionId)
-      .eq("owner_user_id", userId);
-    if (error) throw error;
+      .eq("group_id", context.groupId);
+
+    if (result.error && String(result.error.message || "").toLowerCase().includes("group_id")) {
+      result = await supabase
+        .from(AUDIT_SESSIONS_TABLE)
+        .delete()
+        .eq("id", sessionId)
+        .eq("owner_user_id", context.userId);
+    }
+
+    if (result.error) throw result.error;
   } catch (error) {
     console.error("Unable to delete audit session from Supabase.", error);
   }
@@ -2779,31 +2931,77 @@ function isBackendSyncEnabled(): boolean {
 }
 
 async function apiGetSnapshot(auditId: string): Promise<SnapshotPayload | null> {
-  const userId = await getSupabaseUserId();
-  const { data, error } = await supabase
+  const context = await getSupabaseUserContext();
+  let result = await supabase
     .from(AUDIT_SESSIONS_TABLE)
     .select("state")
     .eq("id", auditId)
-    .eq("owner_user_id", userId)
+    .eq("group_id", context.groupId)
     .maybeSingle();
 
-  if (error) throw error;
-  return (data?.state ?? null) as SnapshotPayload | null;
+  if (result.error && String(result.error.message || "").toLowerCase().includes("group_id")) {
+    result = await supabase
+      .from(AUDIT_SESSIONS_TABLE)
+      .select("state")
+      .eq("id", auditId)
+      .eq("owner_user_id", context.userId)
+      .maybeSingle();
+  }
+
+  if (result.error) throw result.error;
+  return (result.data?.state ?? null) as SnapshotPayload | null;
 }
 
 async function apiPutSnapshot(auditId: string, payload: SnapshotPayload): Promise<void> {
-  const userId = await getSupabaseUserId();
-  const { error } = await supabase
+  const context = await getSupabaseUserContext();
+  const updatePatch = {
+    state: payload,
+    updated_at: new Date().toISOString(),
+  };
+
+  let updateResult = await supabase
     .from(AUDIT_SESSIONS_TABLE)
-    .upsert({
+    .update(updatePatch)
+    .eq("id", auditId)
+    .eq("group_id", context.groupId)
+    .select("id");
+
+  if (updateResult.error && String(updateResult.error.message || "").toLowerCase().includes("group_id")) {
+    updateResult = await supabase
+      .from(AUDIT_SESSIONS_TABLE)
+      .update(updatePatch)
+      .eq("id", auditId)
+      .eq("owner_user_id", context.userId)
+      .select("id");
+  }
+
+  if (updateResult.error) throw updateResult.error;
+  if (Array.isArray(updateResult.data) && updateResult.data.length > 0) return;
+
+  let insertResult = await supabase
+    .from(AUDIT_SESSIONS_TABLE)
+    .insert({
       id: auditId,
-      owner_user_id: userId,
+      owner_user_id: context.userId,
+      group_id: context.groupId,
       state: payload,
       updated_at: new Date().toISOString(),
-    }, { onConflict: "id" });
+    });
 
-  if (error) throw error;
+  if (insertResult.error && String(insertResult.error.message || "").toLowerCase().includes("group_id")) {
+    insertResult = await supabase
+      .from(AUDIT_SESSIONS_TABLE)
+      .insert({
+        id: auditId,
+        owner_user_id: context.userId,
+        state: payload,
+        updated_at: new Date().toISOString(),
+      });
+  }
+
+  if (insertResult.error) throw insertResult.error;
 }
+
 
 function loadRowsForSession(_sessionId: string): ControlItem[] | null {
   return null;
