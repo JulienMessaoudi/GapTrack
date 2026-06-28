@@ -11117,11 +11117,12 @@ function PrintExecutive({
   );
 }
 
-type AppRoute = "home" | "about" | "security" | "login" | "app" | "reset-password";
+type AppRoute = "home" | "about" | "security" | "privacy" | "login" | "app" | "reset-password";
 
 function pathForRoute(route: AppRoute): string {
   if (route === "about") return "/a-propos";
   if (route === "security") return "/securite";
+  if (route === "privacy") return "/confidentialite";
   if (route === "login") return "/login";
   if (route === "app") return "/app";
   if (route === "reset-password") return "/reset-password";
@@ -11136,6 +11137,7 @@ function getCurrentAppRoute(): AppRoute {
   if (path.startsWith("/reset-password")) return "reset-password";
   if (path.startsWith("/a-propos")) return "about";
   if (path.startsWith("/securite")) return "security";
+  if (path.startsWith("/confidentialite")) return "privacy";
   if (path.startsWith("/login")) return "login";
   if (path.startsWith("/app")) return "app";
 
@@ -11167,6 +11169,12 @@ const SEO_ROUTE_CONFIG: Record<AppRoute, SeoRouteConfig> = {
     title: "Sécurité GapTrack — Protection des audits, preuves et accès",
     description: "Découvrez les principes de sécurité de GapTrack : authentification, rôles, protection des preuves, traçabilité et confidentialité des données d’audit SSI.",
     path: "/securite",
+    robots: "index, follow",
+  },
+  privacy: {
+    title: "Confidentialité GapTrack — Données, preuves et audits SSI",
+    description: "Consultez la politique de confidentialité de GapTrack : données de compte, audits SSI, preuves, rôles, traçabilité, conservation et demandes de suppression.",
+    path: "/confidentialite",
     robots: "index, follow",
   },
   login: {
@@ -13116,12 +13124,12 @@ function GapTrackApp({
     return (
       <MotionConfig transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }} reducedMotion="user">
         <LandingHomePage
-          initialPage={route === "about" ? "apropos" : route === "security" ? "securite" : "plateforme"}
+          initialPage={route === "about" ? "apropos" : route === "security" ? "securite" : route === "privacy" ? "confidentialite" : "plateforme"}
           onAccess={(plan) => {
             if (plan) saveSelectedSubscriptionPlan(normalizeSubscriptionPlan(plan));
             navigate("login");
           }}
-          onNavigate={(page) => navigate(page === "apropos" ? "about" : page === "securite" ? "security" : "home")}
+          onNavigate={(page) => navigate(page === "apropos" ? "about" : page === "securite" ? "security" : page === "confidentialite" ? "privacy" : "home")}
         />
       </MotionConfig>
     );

@@ -1,12 +1,17 @@
 {
-  "name": "GapTrack",
+  "id": "/",
+  "name": "GapTrack — Audit SSI",
   "short_name": "GapTrack",
-  "description": "Plateforme d’audit SSI pour centraliser les preuves, écarts et plans d’action.",
+  "description": "Plateforme d’audit SSI pour centraliser les audits, preuves, écarts et plans d’action de conformité cyber.",
+  "lang": "fr-FR",
+  "dir": "ltr",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
+  "orientation": "portrait-primary",
   "background_color": "#071126",
   "theme_color": "#071126",
+  "categories": ["business", "productivity", "security"],
   "icons": [
     {
       "src": "/icon-192.png",
