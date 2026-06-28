@@ -113,6 +113,22 @@ function useMediaQuery(query: string): boolean {
   return matches;
 }
 
+function landingPageFromPathname(pathname: string): LandingPageView | null {
+  const path = String(pathname || "/").replace(/\/+$/, "") || "/";
+
+  if (path === "/") return "plateforme";
+  if (path === "/a-propos") return "apropos";
+  if (path === "/securite") return "securite";
+  if (path === "/confidentialite") return "confidentialite";
+
+  return null;
+}
+
+function landingPageFromCurrentLocation(fallback: LandingPageView): LandingPageView {
+  if (typeof window === "undefined") return fallback;
+  return landingPageFromPathname(window.location.pathname) || fallback;
+}
+
 const GAPTRACK_FAQS = [
   {
     question: "À quoi sert GapTrack ?",
@@ -275,10 +291,26 @@ export function LandingHomePage({
   initialPage?: LandingPageView;
   onNavigate?: (page: LandingPageView) => void;
 }) {
-  const [page, setPage] = useState<LandingPageView>(initialPage);
+  const [page, setPage] = useState<LandingPageView>(() => landingPageFromCurrentLocation(initialPage));
 
   useEffect(() => {
-    setPage(initialPage);
+    setPage(landingPageFromCurrentLocation(initialPage));
+  }, [initialPage]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const syncFromPath = () => {
+      setPage(landingPageFromCurrentLocation(initialPage));
+    };
+
+    window.addEventListener("popstate", syncFromPath);
+    window.addEventListener("pageshow", syncFromPath);
+
+    return () => {
+      window.removeEventListener("popstate", syncFromPath);
+      window.removeEventListener("pageshow", syncFromPath);
+    };
   }, [initialPage]);
 
   useAppleLikeLandingEffects(page);
