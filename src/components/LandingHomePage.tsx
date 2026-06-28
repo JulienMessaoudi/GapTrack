@@ -1120,7 +1120,7 @@ function TermsPage() {
           </h1>
 
           <p className="gth-lead gth-privacy-lead">
-            Cette page précise les règles d’accès et d’utilisation de GapTrack : création de compte, rôles, preuves, limites du service, responsabilités et contact.
+            Retrouvez ici les règles d’accès et d’utilisation de GapTrack : création de compte, rôles, preuves, limites du service, responsabilités et contact.
           </p>
 
           <div className="gth-privacy-meta" aria-label="Résumé des CGU GapTrack">
