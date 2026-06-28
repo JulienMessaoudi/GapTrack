@@ -26,7 +26,6 @@ type LandingPageView = "plateforme" | "apropos" | "securite" | "confidentialite"
 type SubscriptionPlan = "free" | "premium";
 
 const PREMIUM_CONTACT_EMAIL = "julien.messaoudi@edu.esiee.fr";
-const LINKEDIN_PROFILE_URL = "https://www.linkedin.com/in/julien-messaoudi/";
 const SITE_URL = "https://gaptrack-ssi.vercel.app";
 
 function buildPremiumRequestMailto(source: string): string {
@@ -382,15 +381,7 @@ export function LandingHomePage({
       <footer className="gth-footer" aria-label="Pied de page GapTrack">
         <p className="gth-footer-copy">
           © Copyright GapTrack 2026 | Réalisation {" "}
-          <a
-            className="gth-credit-link"
-            href={LINKEDIN_PROFILE_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label="Ouvrir le profil LinkedIn de Julien Messaoudi"
-          >
-            Julien Messaoudi
-          </a>
+          <span>Julien Messaoudi</span>
         </p>
 
         <nav className="gth-footer-links" aria-label="Liens légaux et contact">
@@ -736,17 +727,7 @@ function PrivacyPage() {
           <article>
             <h3>Responsable du traitement</h3>
             <p>
-              <strong>
-                <a
-                  className="gth-credit-link"
-                  href={LINKEDIN_PROFILE_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label="Ouvrir le profil LinkedIn de Julien Messaoudi"
-                >
-                  Julien Messaoudi
-                </a>
-              </strong>
+              <strong>Julien Messaoudi</strong>
               <br />Projet GapTrack<br /><a href={`mailto:${PREMIUM_CONTACT_EMAIL}`}>{PREMIUM_CONTACT_EMAIL}</a>
             </p>
           </article>
@@ -808,7 +789,7 @@ function LegalNoticePage() {
       text: (
         <>
           Le site GapTrack, accessible à l’adresse <a href={SITE_URL}>{SITE_URL}</a>, est édité par{" "}
-          <a href={LINKEDIN_PROFILE_URL} target="_blank" rel="noopener noreferrer"><strong>Julien Messaoudi</strong></a>, dans le cadre du projet logiciel GapTrack.
+          <strong>Julien Messaoudi</strong>, dans le cadre du projet logiciel GapTrack.
           <br />
           Contact : <a href={`mailto:${PREMIUM_CONTACT_EMAIL}`}>{PREMIUM_CONTACT_EMAIL}</a>
         </>
@@ -818,7 +799,7 @@ function LegalNoticePage() {
       title: "Directeur de la publication",
       text: (
         <>
-          Le directeur de la publication est <a href={LINKEDIN_PROFILE_URL} target="_blank" rel="noopener noreferrer"><strong>Julien Messaoudi</strong></a>.
+          Le directeur de la publication est <strong>Julien Messaoudi</strong>.
         </>
       ),
     },
@@ -892,13 +873,12 @@ function LegalNoticePage() {
 
           <h1>
             Informations légales <br />
-            de la plateforme <br />
-            <span>d’audit SSI</span>
+            relatives au site <br />
+            <span>GapTrack</span>
           </h1>
 
           <p className="gth-lead gth-privacy-lead">
-            Retrouvez ici les informations permettant d’identifier l’éditeur du site, son hébergeur,
-            les moyens de contact, ainsi que les règles de propriété intellectuelle et de responsabilité applicables.
+            Retrouvez ici les informations permettant d’identifier l’éditeur de GapTrack, son hébergeur et ses moyens de contact, ainsi que les règles applicables en matière de propriété intellectuelle et de responsabilité.
           </p>
 
           <div className="gth-privacy-meta" aria-label="Résumé des mentions légales GapTrack">
