@@ -25,6 +25,12 @@
     <priority>0.6</priority>
   </url>
   <url>
+    <loc>https://gaptrack-ssi.vercel.app/cgu</loc>
+    <lastmod>2026-06-28</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
     <loc>https://gaptrack-ssi.vercel.app/mentions-legales</loc>
     <lastmod>2026-06-28</lastmod>
     <changefreq>yearly</changefreq>

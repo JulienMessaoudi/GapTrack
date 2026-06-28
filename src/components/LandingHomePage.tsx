@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import "./LandingHomePage.css";
 
-type LandingPageView = "plateforme" | "apropos" | "securite" | "confidentialite" | "mentions-legales";
+type LandingPageView = "plateforme" | "apropos" | "securite" | "confidentialite" | "mentions-legales" | "cgu";
 type SubscriptionPlan = "free" | "premium";
 
 const PREMIUM_CONTACT_EMAIL = "julien.messaoudi@edu.esiee.fr";
@@ -122,6 +122,7 @@ function landingPageFromPathname(pathname: string): LandingPageView | null {
   if (path === "/securite") return "securite";
   if (path === "/confidentialite") return "confidentialite";
   if (path === "/mentions-legales") return "mentions-legales";
+  if (path === "/cgu") return "cgu";
 
   return null;
 }
@@ -376,7 +377,7 @@ export function LandingHomePage({
       </header>
 
       <div key={page} className="gth-route-panel">
-        {page === "confidentialite" ? <PrivacyPage /> : page === "mentions-legales" ? <LegalNoticePage /> : page === "apropos" ? <AboutPage /> : page === "securite" ? <SecurityPage /> : <HomePage onAccess={onAccess} openPage={openPage} />}
+        {page === "confidentialite" ? <PrivacyPage /> : page === "mentions-legales" ? <LegalNoticePage /> : page === "cgu" ? <TermsPage /> : page === "apropos" ? <AboutPage /> : page === "securite" ? <SecurityPage /> : <HomePage onAccess={onAccess} openPage={openPage} />}
       </div>
 
       <footer className="gth-footer" aria-label="Pied de page GapTrack">
@@ -394,6 +395,8 @@ export function LandingHomePage({
 
         <nav className="gth-footer-links" aria-label="Liens légaux et contact">
           <a href="/mentions-legales" onClick={(event) => handleSeoLinkClick(event, () => openPage("mentions-legales"))}>Mentions légales</a>
+          <span aria-hidden="true">—</span>
+          <a href="/cgu" onClick={(event) => handleSeoLinkClick(event, () => openPage("cgu"))}>CGU</a>
           <span aria-hidden="true">—</span>
           <a href="/confidentialite" onClick={(event) => handleSeoLinkClick(event, () => openPage("confidentialite"))}>Confidentialité</a>
           <span aria-hidden="true">—</span>
@@ -952,6 +955,231 @@ function LegalNoticePage() {
           <span><ShieldCheck aria-hidden="true" /> Page accessible depuis le footer</span>
           <span><Lock aria-hidden="true" /> Informations juridiques centralisées</span>
           <span><CheckCircle2 aria-hidden="true" /> Lien vers la confidentialité</span>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+
+function TermsPage() {
+  const termsBlocks = [
+    {
+      title: "Objet des CGU",
+      text: (
+        <>
+          Les présentes conditions générales d’utilisation encadrent l’accès et l’utilisation de GapTrack, une plateforme
+          destinée à structurer des audits SSI, des contrôles, des preuves, des écarts, des plans d’action et des indicateurs
+          de suivi de conformité.
+        </>
+      ),
+    },
+    {
+      title: "Acceptation des conditions",
+      text: (
+        <>
+          En créant un compte ou en utilisant GapTrack, l’utilisateur reconnaît avoir pris connaissance des présentes CGU
+          et s’engage à les respecter. Si l’utilisateur agit pour une organisation, il déclare disposer de l’autorisation
+          nécessaire pour utiliser le service au nom de cette organisation.
+        </>
+      ),
+    },
+    {
+      title: "Accès au service",
+      text: (
+        <>
+          L’accès à certaines fonctionnalités nécessite un compte utilisateur. GapTrack peut proposer une offre Free et une
+          offre Premium, dont les limites fonctionnelles peuvent évoluer : nombre d’audits, exports, stockage cloud des preuves,
+          gestion des utilisateurs, rôles, validations ou modèles personnalisés.
+        </>
+      ),
+    },
+    {
+      title: "Compte utilisateur",
+      text: (
+        <>
+          L’utilisateur s’engage à fournir des informations exactes, à protéger ses identifiants et à ne pas partager son accès
+          avec une personne non autorisée. Toute activité réalisée depuis un compte peut être rattachée à ce compte pour des
+          raisons de sécurité, de traçabilité et de fonctionnement du service.
+        </>
+      ),
+    },
+    {
+      title: "Utilisation autorisée",
+      text: (
+        <>
+          GapTrack doit être utilisé uniquement pour des finalités licites liées à l’audit, la conformité, la cybersécurité ou
+          l’organisation interne. Il est interdit d’utiliser le service pour contourner des mesures de sécurité, accéder à des
+          données sans autorisation, déposer des contenus illicites ou perturber le fonctionnement de la plateforme.
+        </>
+      ),
+    },
+    {
+      title: "Données, audits et preuves",
+      text: (
+        <>
+          L’utilisateur reste responsable des informations, commentaires, fichiers, preuves et documents qu’il ajoute dans
+          GapTrack. Il lui appartient de vérifier qu’il dispose des droits nécessaires pour importer, consulter ou partager ces
+          éléments au sein de son organisation.
+        </>
+      ),
+    },
+    {
+      title: "Rôles et autorisations",
+      text: (
+        <>
+          Lorsque plusieurs utilisateurs sont rattachés à un même espace, les droits peuvent dépendre du rôle attribué
+          : administrateur, auditeur, contributeur ou lecteur. L’administrateur de l’espace reste responsable de l’attribution
+          et du retrait des accès accordés aux membres de son organisation.
+        </>
+      ),
+    },
+    {
+      title: "Limites du service",
+      text: (
+        <>
+          GapTrack est un outil d’aide au suivi et à la structuration d’audits SSI. Son utilisation ne garantit pas à elle seule
+          la conformité à un référentiel, l’obtention d’une certification, l’absence de vulnérabilités ou la validation officielle
+          d’un audit. Les décisions de conformité restent sous la responsabilité de l’utilisateur ou de son organisation.
+        </>
+      ),
+    },
+    {
+      title: "Disponibilité et évolution",
+      text: (
+        <>
+          GapTrack peut évoluer, être corrigé, amélioré ou temporairement indisponible pour maintenance, sécurité ou raisons
+          techniques. L’éditeur s’efforce de maintenir un service fiable, sans garantir une disponibilité permanente ou sans
+          interruption.
+        </>
+      ),
+    },
+    {
+      title: "Propriété intellectuelle",
+      text: (
+        <>
+          Les interfaces, textes, éléments graphiques, composants logiciels, logos et contenus propres à GapTrack restent protégés
+          par le droit de la propriété intellectuelle. L’utilisateur conserve ses droits sur les contenus qu’il importe, sous réserve
+          des droits accordés pour permettre le fonctionnement du service.
+        </>
+      ),
+    },
+    {
+      title: "Suspension ou suppression",
+      text: (
+        <>
+          Un compte ou un accès peut être suspendu ou supprimé en cas d’usage abusif, frauduleux, illicite, dangereux pour la sécurité
+          du service ou contraire aux présentes CGU. L’utilisateur peut également demander la suppression de son compte selon les
+          modalités indiquées dans la politique de confidentialité.
+        </>
+      ),
+    },
+    {
+      title: "Données personnelles",
+      text: (
+        <>
+          Les traitements de données personnelles liés à GapTrack sont décrits dans la{" "}
+          <a href="/confidentialite">politique de confidentialité</a>. Cette page précise notamment les catégories de données,
+          les finalités, les droits des utilisateurs, les durées de conservation et les moyens de contact.
+        </>
+      ),
+    },
+    {
+      title: "Cookies et stockage local",
+      text: (
+        <>
+          GapTrack peut utiliser des cookies ou mécanismes de stockage strictement nécessaires au fonctionnement du service,
+          notamment pour la session, l’authentification, la sécurité, certaines préférences ou la continuité d’utilisation.
+        </>
+      ),
+    },
+    {
+      title: "Droit applicable",
+      text: (
+        <>
+          Les présentes CGU sont soumises au droit français. En cas de difficulté, l’utilisateur est invité à contacter GapTrack
+          afin de rechercher une solution amiable avant toute autre démarche.
+        </>
+      ),
+    },
+  ];
+
+  return (
+    <section className="gth-privacy" id="top">
+      <div className="gth-privacy-hero gth-reveal">
+        <div className="gth-privacy-copy">
+          <div className="gth-kicker gth-privacy-kicker">
+            <ClipboardCheck aria-hidden="true" />
+            CONDITIONS D’UTILISATION
+          </div>
+
+          <h1>
+            Conditions générales <br />
+            d’utilisation de <br />
+            <span>GapTrack</span>
+          </h1>
+
+          <p className="gth-lead gth-privacy-lead">
+            Cette page précise les règles d’accès et d’utilisation de GapTrack : création de compte, rôles, preuves, limites du service, responsabilités et contact.
+          </p>
+
+          <div className="gth-privacy-meta" aria-label="Résumé des CGU GapTrack">
+            <span><CheckCircle2 aria-hidden="true" /> Règles d’utilisation</span>
+            <span><CheckCircle2 aria-hidden="true" /> Responsabilités précisées</span>
+            <span><CheckCircle2 aria-hidden="true" /> Données et preuves encadrées</span>
+          </div>
+        </div>
+
+        <div className="gth-privacy-visual" aria-label="Résumé visuel des conditions d’utilisation">
+          <div className="gth-privacy-orbit" aria-hidden="true" />
+          <div className="gth-privacy-core">
+            <ClipboardCheck aria-hidden="true" />
+            <strong>Cadre d’usage</strong>
+            <span>Compte, rôles, audits, preuves, limites du service et responsabilités sont clarifiés pour utiliser GapTrack correctement.</span>
+          </div>
+          <div className="gth-privacy-node gth-privacy-node-one">Compte</div>
+          <div className="gth-privacy-node gth-privacy-node-two">Rôles</div>
+          <div className="gth-privacy-node gth-privacy-node-three">Preuves</div>
+          <div className="gth-privacy-node gth-privacy-node-four">Usage</div>
+        </div>
+      </div>
+
+      <div className="gth-privacy-section gth-privacy-legal gth-reveal">
+        <div>
+          <h2>Conditions générales d’utilisation</h2>
+          <p>Dernière mise à jour : 28 juin 2026</p>
+        </div>
+
+        <div className="gth-privacy-legal-grid">
+          {termsBlocks.map((block) => (
+            <article key={block.title}>
+              <h3>{block.title}</h3>
+              <p>{block.text}</p>
+            </article>
+          ))}
+        </div>
+      </div>
+
+      <div className="gth-privacy-rights gth-reveal">
+        <div>
+          <div className="gth-kicker gth-privacy-kicker">
+            <Mail aria-hidden="true" />
+            CONTACT
+          </div>
+          <h2>Une question sur les conditions d’utilisation ?</h2>
+          <p>
+            Vous pouvez contacter GapTrack pour toute question concernant l’accès au service, les comptes, les preuves ou les présentes CGU.
+          </p>
+          <a className="gth-primary" href={`mailto:${PREMIUM_CONTACT_EMAIL}`}>
+            Contacter GapTrack
+            <Mail aria-hidden="true" />
+          </a>
+        </div>
+
+        <div className="gth-privacy-rights-list">
+          <span><ShieldCheck aria-hidden="true" /> Service d’aide au pilotage SSI</span>
+          <span><Lock aria-hidden="true" /> Accès par compte et par rôle</span>
+          <span><FileText aria-hidden="true" /> Lien avec confidentialité et mentions légales</span>
         </div>
       </div>
     </section>

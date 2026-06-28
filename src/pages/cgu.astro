@@ -1,0 +1,12 @@
+---
+import PublicLayout from "../layouts/PublicLayout.astro";
+import LandingHomePageClient from "../components/LandingHomePageClient";
+---
+
+<PublicLayout
+  title="CGU GapTrack — Conditions générales d’utilisation"
+  description="Consultez les conditions générales d’utilisation de GapTrack : accès au service, comptes, rôles, preuves, responsabilités, limites du service et contact."
+  canonicalPath="/cgu"
+>
+  <LandingHomePageClient client:load initialPage="cgu" />
+</PublicLayout>
