@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import "./LandingHomePage.css";
 
-type LandingPageView = "plateforme" | "apropos" | "securite" | "confidentialite";
+type LandingPageView = "plateforme" | "apropos" | "securite" | "confidentialite" | "mentions-legales";
 type SubscriptionPlan = "free" | "premium";
 
 const PREMIUM_CONTACT_EMAIL = "julien.messaoudi@edu.esiee.fr";
@@ -121,6 +121,7 @@ function landingPageFromPathname(pathname: string): LandingPageView | null {
   if (path === "/a-propos") return "apropos";
   if (path === "/securite") return "securite";
   if (path === "/confidentialite") return "confidentialite";
+  if (path === "/mentions-legales") return "mentions-legales";
 
   return null;
 }
@@ -375,7 +376,7 @@ export function LandingHomePage({
       </header>
 
       <div key={page} className="gth-route-panel">
-        {page === "confidentialite" ? <PrivacyPage /> : page === "apropos" ? <AboutPage /> : page === "securite" ? <SecurityPage /> : <HomePage onAccess={onAccess} openPage={openPage} />}
+        {page === "confidentialite" ? <PrivacyPage /> : page === "mentions-legales" ? <LegalNoticePage /> : page === "apropos" ? <AboutPage /> : page === "securite" ? <SecurityPage /> : <HomePage onAccess={onAccess} openPage={openPage} />}
       </div>
 
       <footer className="gth-footer" aria-label="Pied de page GapTrack">
@@ -393,6 +394,8 @@ export function LandingHomePage({
         </p>
 
         <nav className="gth-footer-links" aria-label="Liens légaux et contact">
+          <a href="/mentions-legales" onClick={(event) => handleSeoLinkClick(event, () => openPage("mentions-legales"))}>Mentions légales</a>
+          <span aria-hidden="true">—</span>
           <a href="/confidentialite" onClick={(event) => handleSeoLinkClick(event, () => openPage("confidentialite"))}>Confidentialité</a>
           <span aria-hidden="true">—</span>
           <a href="/securite" onClick={(event) => handleSeoLinkClick(event, () => openPage("securite"))}>Sécurité</a>
@@ -793,6 +796,170 @@ function PrivacyPage() {
         </div>
       </div>
 
+    </section>
+  );
+}
+
+
+function LegalNoticePage() {
+  const legalBlocks = [
+    {
+      title: "Éditeur du site",
+      text: (
+        <>
+          Le site GapTrack, accessible à l’adresse <a href={SITE_URL}>{SITE_URL}</a>, est édité par{" "}
+          <strong>Julien Messaoudi</strong>, dans le cadre du projet logiciel GapTrack.
+          <br />
+          Contact : <a href={`mailto:${PREMIUM_CONTACT_EMAIL}`}>{PREMIUM_CONTACT_EMAIL}</a>
+        </>
+      ),
+    },
+    {
+      title: "Directeur de la publication",
+      text: (
+        <>
+          Le directeur de la publication est <strong>Julien Messaoudi</strong>.
+        </>
+      ),
+    },
+    {
+      title: "Hébergement",
+      text: (
+        <>
+          Le site est hébergé par <strong>Vercel Inc.</strong>, 440 N Barranca Ave #4133,
+          Covina, CA 91723, United States.
+          <br />
+          Site web : <a href="https://vercel.com" target="_blank" rel="noopener noreferrer">https://vercel.com</a>
+        </>
+      ),
+    },
+    {
+      title: "Propriété intellectuelle",
+      text: (
+        <>
+          Les textes, interfaces, éléments graphiques, logos, composants logiciels et contenus présents sur GapTrack
+          sont protégés par le droit de la propriété intellectuelle. Toute reproduction ou réutilisation non autorisée
+          est interdite.
+        </>
+      ),
+    },
+    {
+      title: "Données personnelles",
+      text: (
+        <>
+          GapTrack peut traiter les données nécessaires au fonctionnement du service : compte utilisateur, rôles,
+          audits SSI, preuves, écarts, plans d’action et journaux d’activité. Les détails sont précisés dans la{" "}
+          <a href="/confidentialite">politique de confidentialité</a>.
+        </>
+      ),
+    },
+    {
+      title: "Cookies et stockage local",
+      text: (
+        <>
+          Le site peut utiliser des éléments techniques nécessaires au fonctionnement du service, notamment pour
+          l’authentification, la sécurité, la session utilisateur et certaines préférences locales.
+        </>
+      ),
+    },
+    {
+      title: "Responsabilité",
+      text: (
+        <>
+          L’éditeur s’efforce de fournir des informations fiables et à jour. L’utilisation de GapTrack ne dispense pas
+          l’utilisateur de réaliser ses propres vérifications dans le cadre de ses démarches d’audit, de conformité ou de cybersécurité.
+        </>
+      ),
+    },
+    {
+      title: "Droit applicable",
+      text: (
+        <>
+          Les présentes mentions légales sont soumises au droit français.
+        </>
+      ),
+    },
+  ];
+
+  return (
+    <section className="gth-privacy" id="top">
+      <div className="gth-privacy-hero gth-reveal">
+        <div className="gth-privacy-copy">
+          <div className="gth-kicker gth-privacy-kicker">
+            <FileText aria-hidden="true" />
+            MENTIONS LÉGALES
+          </div>
+
+          <h1>
+            Informations légales <br />
+            relatives au site <br />
+            <span>GapTrack</span>
+          </h1>
+
+          <p className="gth-lead gth-privacy-lead">
+            Cette page présente l’éditeur du site, l’hébergeur, les informations de contact,
+            les règles de propriété intellectuelle et les principales informations juridiques liées à l’utilisation de GapTrack.
+          </p>
+
+          <div className="gth-privacy-meta" aria-label="Résumé des mentions légales GapTrack">
+            <span><CheckCircle2 aria-hidden="true" /> Éditeur identifié</span>
+            <span><CheckCircle2 aria-hidden="true" /> Hébergeur indiqué</span>
+            <span><CheckCircle2 aria-hidden="true" /> Contact accessible</span>
+          </div>
+        </div>
+
+        <div className="gth-privacy-visual" aria-label="Résumé visuel des mentions légales">
+          <div className="gth-privacy-orbit" aria-hidden="true" />
+          <div className="gth-privacy-core">
+            <FileText aria-hidden="true" />
+            <strong>Cadre légal</strong>
+            <span>Éditeur, hébergeur, contact, données personnelles et responsabilité sont centralisés sur cette page.</span>
+          </div>
+          <div className="gth-privacy-node gth-privacy-node-one">Éditeur</div>
+          <div className="gth-privacy-node gth-privacy-node-two">Hébergeur</div>
+          <div className="gth-privacy-node gth-privacy-node-three">Contact</div>
+          <div className="gth-privacy-node gth-privacy-node-four">Données</div>
+        </div>
+      </div>
+
+      <div className="gth-privacy-section gth-privacy-legal gth-reveal">
+        <div>
+          <h2>Mentions légales</h2>
+          <p>Dernière mise à jour : 2026</p>
+        </div>
+
+        <div className="gth-privacy-legal-grid">
+          {legalBlocks.map((block) => (
+            <article key={block.title}>
+              <h3>{block.title}</h3>
+              <p>{block.text}</p>
+            </article>
+          ))}
+        </div>
+      </div>
+
+      <div className="gth-privacy-rights gth-reveal">
+        <div>
+          <div className="gth-kicker gth-privacy-kicker">
+            <Mail aria-hidden="true" />
+            CONTACT
+          </div>
+          <h2>Une question sur le site ou les mentions légales ?</h2>
+          <p>
+            Vous pouvez contacter l’éditeur du site à l’adresse indiquée ci-dessous.
+          </p>
+          <a className="gth-primary" href={`mailto:${PREMIUM_CONTACT_EMAIL}`}>
+            Contacter GapTrack
+            <Mail aria-hidden="true" />
+          </a>
+        </div>
+
+        <div className="gth-privacy-rights-list">
+          <span><ShieldCheck aria-hidden="true" /> Page accessible depuis le footer</span>
+          <span><Lock aria-hidden="true" /> Informations juridiques centralisées</span>
+          <span><CheckCircle2 aria-hidden="true" /> Lien vers la confidentialité</span>
+        </div>
+      </div>
     </section>
   );
 }

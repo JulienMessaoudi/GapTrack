@@ -1,0 +1,12 @@
+---
+import PublicLayout from "../layouts/PublicLayout.astro";
+import LandingHomePageClient from "../components/LandingHomePageClient";
+---
+
+<PublicLayout
+  title="Mentions légales GapTrack — Éditeur, hébergeur et contact"
+  description="Consultez les mentions légales de GapTrack : éditeur du site, directeur de publication, hébergement, propriété intellectuelle, données personnelles, cookies et contact."
+  canonicalPath="/mentions-legales"
+>
+  <LandingHomePageClient client:load initialPage="mentions-legales" />
+</PublicLayout>

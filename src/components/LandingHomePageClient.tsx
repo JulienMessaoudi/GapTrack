@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { LandingHomePage } from "./LandingHomePage";
 
-type LandingPageView = "plateforme" | "apropos" | "securite" | "confidentialite";
+type LandingPageView = "plateforme" | "apropos" | "securite" | "confidentialite" | "mentions-legales";
 type SubscriptionPlan = "free" | "premium";
 
 function pageFromPathname(pathname: string): LandingPageView {
@@ -10,6 +10,7 @@ function pageFromPathname(pathname: string): LandingPageView {
   if (path === "/a-propos") return "apropos";
   if (path === "/securite") return "securite";
   if (path === "/confidentialite") return "confidentialite";
+  if (path === "/mentions-legales") return "mentions-legales";
 
   return "plateforme";
 }
@@ -18,6 +19,7 @@ function pathForPage(page: LandingPageView): string {
   if (page === "apropos") return "/a-propos";
   if (page === "securite") return "/securite";
   if (page === "confidentialite") return "/confidentialite";
+  if (page === "mentions-legales") return "/mentions-legales";
   return "/";
 }
 
