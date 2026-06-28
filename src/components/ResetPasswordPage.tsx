@@ -55,7 +55,7 @@ export function ResetPasswordPage() {
       }
 
       toast.success("Mot de passe mis à jour.");
-      window.location.href = "/";
+      window.location.href = "/login";
     } finally {
       setBusy(false);
     }

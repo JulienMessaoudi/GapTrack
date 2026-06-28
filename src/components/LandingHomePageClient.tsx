@@ -35,8 +35,11 @@ export default function LandingHomePageClient({
   useEffect(() => {
     if (initialPage) {
       setCurrentPage(initialPage);
-      return;
     }
+  }, [initialPage]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
 
     const syncFromUrl = () => {
       setCurrentPage(pageFromPathname(window.location.pathname));
@@ -44,8 +47,13 @@ export default function LandingHomePageClient({
 
     syncFromUrl();
     window.addEventListener("popstate", syncFromUrl);
-    return () => window.removeEventListener("popstate", syncFromUrl);
-  }, [initialPage]);
+    window.addEventListener("pageshow", syncFromUrl);
+
+    return () => {
+      window.removeEventListener("popstate", syncFromUrl);
+      window.removeEventListener("pageshow", syncFromUrl);
+    };
+  }, []);
 
   const handleAccess = (plan?: SubscriptionPlan) => {
     try {

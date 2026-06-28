@@ -1,0 +1,12 @@
+---
+import PublicLayout from "../layouts/PublicLayout.astro";
+import LandingHomePageClient from "../components/LandingHomePageClient";
+---
+
+<PublicLayout
+  title="Sécurité GapTrack — Protection des audits, preuves et accès"
+  description="Découvrez les principes de sécurité de GapTrack : authentification, rôles, protection des preuves, traçabilité et confidentialité des données d’audit SSI."
+  canonicalPath="/securite"
+>
+  <LandingHomePageClient client:load initialPage="securite" />
+</PublicLayout>

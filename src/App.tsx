@@ -510,14 +510,17 @@ function frameworkLabel(id: FrameworkId, lang: LangKey): string {
 function normalizeLoadedFrameworkId(v: any): FrameworkId | null {
   const s = String(v ?? "").trim();
   if (!s) return null;
-  if (s === "ISO27001") return "ISO27001";
-  if (s === "GDPR") return "RGPD";
-  if (s === "PGSSI_S") return "PGSSI-S";
-  if (s === "PGSSI-S") return "PGSSI-S";
-  if (s === "ISO27001") return "ISO27001";
-  if (s === "NIS2") return "NIS2";
-  if (s === "DORA") return "DORA";
-  if (s === "RGPD") return "RGPD";
+
+  const normalized = s
+    .toUpperCase()
+    .replace(/[\s_]+/g, "-")
+    .replace(/^GDPR$/, "RGPD");
+
+  if (normalized === "ISO27001" || normalized === "ISO-27001") return "ISO27001";
+  if (normalized === "PGSSI-S") return "PGSSI-S";
+  if (normalized === "NIS2") return "NIS2";
+  if (normalized === "DORA") return "DORA";
+  if (normalized === "RGPD") return "RGPD";
   return null;
 }
 
@@ -11149,13 +11152,13 @@ type SeoRouteConfig = {
   title: string;
   description: string;
   path: string;
-  robots: "index, follow" | "noindex, follow";
+  robots: "index, follow" | "noindex, nofollow";
 };
 
 const SEO_ROUTE_CONFIG: Record<AppRoute, SeoRouteConfig> = {
   home: {
     title: "GapTrack — Plateforme d’audit SSI et gestion des preuves",
-    description: "Centralisez vos audits SSI, preuves, écarts et plans d’action dans une plateforme sécurisée pensée pour ISO 27001, NIS2, DORA et RGPD.",
+    description: "Centralisez vos audits SSI, preuves, écarts et plans d’action dans une plateforme sécurisée pensée pour ISO 27001, NIS2, DORA, RGPD et PGSSI-S.",
     path: "/",
     robots: "index, follow",
   },
@@ -11181,19 +11184,19 @@ const SEO_ROUTE_CONFIG: Record<AppRoute, SeoRouteConfig> = {
     title: "Connexion GapTrack",
     description: "Accédez à votre espace GapTrack pour gérer vos audits SSI, preuves, écarts et plans d’action.",
     path: "/login",
-    robots: "noindex, follow",
+    robots: "noindex, nofollow",
   },
   app: {
     title: I18N.fr.appTitle,
     description: "Espace applicatif privé GapTrack réservé aux utilisateurs connectés.",
     path: "/app",
-    robots: "noindex, follow",
+    robots: "noindex, nofollow",
   },
   "reset-password": {
     title: "Réinitialisation du mot de passe GapTrack",
     description: "Page sécurisée de réinitialisation du mot de passe GapTrack.",
     path: "/reset-password",
-    robots: "noindex, follow",
+    robots: "noindex, nofollow",
   },
 };
 

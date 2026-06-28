@@ -27,6 +27,7 @@ type SubscriptionPlan = "free" | "premium";
 
 const PREMIUM_CONTACT_EMAIL = "julien.messaoudi@edu.esiee.fr";
 const LINKEDIN_PROFILE_URL = "https://www.linkedin.com/in/julien-messaoudi/";
+const SITE_URL = "https://gaptrack-ssi.vercel.app";
 
 function buildPremiumRequestMailto(source: string): string {
   const subject = "Demande d’activation Premium GapTrack";
@@ -236,7 +237,7 @@ function JsonLd() {
     name: "GapTrack",
     applicationCategory: "BusinessApplication",
     operatingSystem: "Web",
-    url: "https://gaptrack-ssi.vercel.app/",
+    url: `${SITE_URL}/`,
     description:
       "GapTrack est un logiciel d’audit SSI pour centraliser les audits, les preuves, les écarts et les plans d’action de conformité.",
     offers: {
@@ -247,7 +248,7 @@ function JsonLd() {
     publisher: {
       "@type": "Organization",
       name: "GapTrack",
-      url: "https://gaptrack-ssi.vercel.app/",
+      url: `${SITE_URL}/`,
     },
   };
 
