@@ -6,8 +6,6 @@ import { Input } from "./components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "./components/ui/select";
 import { Badge } from "./components/ui/badge";
 import { toast } from "sonner";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
 import {Filter, Redo2, Search, Undo2, ArrowUp, Paperclip, Download, Plus, Copy, X, Trash2, AlertTriangle, Shield, ShieldCheck, Lightbulb, Info, Loader2, CheckCircle2, AlertCircle, Pencil, BarChart3, ListChecks, ListTodo, Users, LogOut, UserPlus, History, FileCheck2, Clock3, Mail, Settings} from "lucide-react";
 import { ResponsiveContainer, Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Tooltip } from "recharts";
 import { LoginAccessPage } from "./components/LoginAccessPage";
@@ -1990,7 +1988,89 @@ function pdfDateStamp(lang: LangKey): string {
   return lang === "fr" ? new Date().toLocaleString("fr-FR") : new Date().toLocaleString("en-GB");
 }
 
-function addPdfPageNumbers(doc: jsPDF, footerLeft: string) {
+declare global {
+  interface Window {
+    jspdf?: { jsPDF?: any; autoTable?: any };
+    autoTable?: any;
+    jspdfAutoTable?: any;
+  }
+}
+
+let searchablePdfLibrariesPromise: Promise<{ jsPDF: any; autoTable: (doc: any, options: any) => void }> | null = null;
+
+function loadExternalScriptOnce(id: string, src: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (typeof document === "undefined") {
+      reject(new Error("Export PDF indisponible hors navigateur."));
+      return;
+    }
+
+    const existing = document.getElementById(id) as HTMLScriptElement | null;
+    if (existing) {
+      if (existing.dataset.loaded === "true") {
+        resolve();
+        return;
+      }
+
+      existing.addEventListener("load", () => resolve(), { once: true });
+      existing.addEventListener("error", () => reject(new Error(`Impossible de charger ${src}`)), { once: true });
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.id = id;
+    script.src = src;
+    script.async = true;
+    script.crossOrigin = "anonymous";
+    script.onload = () => {
+      script.dataset.loaded = "true";
+      resolve();
+    };
+    script.onerror = () => reject(new Error(`Impossible de charger ${src}`));
+    document.head.appendChild(script);
+  });
+}
+
+async function loadSearchablePdfLibraries(): Promise<{ jsPDF: any; autoTable: (doc: any, options: any) => void }> {
+  if (!searchablePdfLibrariesPromise) {
+    searchablePdfLibrariesPromise = (async () => {
+      await loadExternalScriptOnce(
+        "gaptrack-jspdf",
+        "https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"
+      );
+      await loadExternalScriptOnce(
+        "gaptrack-jspdf-autotable",
+        "https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.4/dist/jspdf.plugin.autotable.min.js"
+      );
+
+      const jsPDF = window.jspdf?.jsPDF;
+      if (!jsPDF) {
+        throw new Error("La bibliothèque jsPDF n’a pas pu être initialisée.");
+      }
+
+      const autoTable = (doc: any, options: any) => {
+        if (typeof doc?.autoTable === "function") {
+          doc.autoTable(options);
+          return;
+        }
+
+        const globalAutoTable = window.jspdf?.autoTable || window.jspdfAutoTable || window.autoTable;
+        if (typeof globalAutoTable === "function") {
+          globalAutoTable(doc, options);
+          return;
+        }
+
+        throw new Error("La bibliothèque jspdf-autotable n’a pas pu être initialisée.");
+      };
+
+      return { jsPDF, autoTable };
+    })();
+  }
+
+  return searchablePdfLibrariesPromise;
+}
+
+function addPdfPageNumbers(doc: any, footerLeft: string) {
   const pageCount = doc.getNumberOfPages();
   for (let page = 1; page <= pageCount; page += 1) {
     doc.setPage(page);
@@ -2003,13 +2083,13 @@ function addPdfPageNumbers(doc: jsPDF, footerLeft: string) {
   doc.setTextColor(15, 23, 42);
 }
 
-function addPdfWrappedText(doc: jsPDF, text: string, x: number, y: number, width: number, lineHeight = 5): number {
+function addPdfWrappedText(doc: any, text: string, x: number, y: number, width: number, lineHeight = 5): number {
   const lines = doc.splitTextToSize(text, width);
   doc.text(lines, x, y);
   return y + lines.length * lineHeight;
 }
 
-function saveSearchablePlanPDF({
+async function saveSearchablePlanPDF({
   rows,
   plans,
   lang,
@@ -2022,6 +2102,7 @@ function saveSearchablePlanPDF({
   proofStatusFor: (controlId: string) => EvidenceStatus;
   filename?: string;
 }) {
+  const { jsPDF, autoTable } = await loadSearchablePdfLibraries();
   const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
   const title = lang === "fr" ? "Plan d’action" : "Action plan";
 
@@ -2117,7 +2198,7 @@ function saveSearchablePlanPDF({
   doc.save(filename || (lang === "fr" ? "plan_action.pdf" : "action_plan.pdf"));
 }
 
-function saveSearchableAuditReportPDF({
+async function saveSearchableAuditReportPDF({
   rows,
   lang,
   session,
@@ -2266,6 +2347,7 @@ function saveSearchableAuditReportPDF({
   }
 
   const title = lang === "fr" ? "Rapport d’audit sécurité" : "Security audit report";
+  const { jsPDF, autoTable } = await loadSearchablePdfLibraries();
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   doc.setProperties({
     title,
@@ -9051,14 +9133,14 @@ function PlanView({
     }
   };
 
-  const exportPlanPDF = () => {
+  const exportPlanPDF = async () => {
     if (!canExport) {
       onPremiumRequired?.(lang === "fr" ? "L’export PDF du plan d’action" : "Action plan PDF export");
       return;
     }
 
     try {
-      saveSearchablePlanPDF({
+      await saveSearchablePlanPDF({
         rows: filtered,
         plans,
         lang,
@@ -13625,14 +13707,14 @@ function GapTrackApp({
     return loadRowsForSession(prev.id);
   }, [sessions, activeSessionId]);
 
-  const handleExport = React.useCallback(() => {
+  const handleExport = React.useCallback(async () => {
     if (!requirePremiumFeature(lang === "fr" ? "L’export PDF du rapport" : "PDF report export")) return;
 
     try {
       const current = sessions.find((s) => s.id === activeSessionId) || currentSession;
       const baseTitle = current?.name || current?.organization || (lang === "fr" ? "rapport-audit" : "audit-report");
 
-      saveSearchableAuditReportPDF({
+      await saveSearchableAuditReportPDF({
         rows,
         lang,
         session: current,
