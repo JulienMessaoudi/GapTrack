@@ -6,6 +6,8 @@ import { Input } from "./components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "./components/ui/select";
 import { Badge } from "./components/ui/badge";
 import { toast } from "sonner";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 import {Filter, Redo2, Search, Undo2, ArrowUp, Paperclip, Download, Plus, Copy, X, Trash2, AlertTriangle, Shield, ShieldCheck, Lightbulb, Info, Loader2, CheckCircle2, AlertCircle, Pencil, BarChart3, ListChecks, ListTodo, Users, LogOut, UserPlus, History, FileCheck2, Clock3, Mail, Settings} from "lucide-react";
 import { ResponsiveContainer, Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Tooltip } from "recharts";
 import { LoginAccessPage } from "./components/LoginAccessPage";
@@ -1974,6 +1976,474 @@ function safeExportFilename(value: string, lang: LangKey): string {
     .replace(/^-+|-+$/g, "")
     .slice(0, 80) || (lang === "fr" ? "rapport-audit" : "audit-report");
   return `${base}-${new Date().toISOString().slice(0, 10)}`;
+}
+
+// ==================
+// Searchable PDF export helpers
+// ==================
+function pdfText(value: unknown, fallback = "—"): string {
+  const text = String(value ?? "").replace(/\s+$/g, "").trim();
+  return text || fallback;
+}
+
+function pdfDateStamp(lang: LangKey): string {
+  return lang === "fr" ? new Date().toLocaleString("fr-FR") : new Date().toLocaleString("en-GB");
+}
+
+function addPdfPageNumbers(doc: jsPDF, footerLeft: string) {
+  const pageCount = doc.getNumberOfPages();
+  for (let page = 1; page <= pageCount; page += 1) {
+    doc.setPage(page);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139);
+    doc.text(footerLeft, 14, 287);
+    doc.text(`${page}/${pageCount}`, 196, 287, { align: "right" });
+  }
+  doc.setTextColor(15, 23, 42);
+}
+
+function addPdfWrappedText(doc: jsPDF, text: string, x: number, y: number, width: number, lineHeight = 5): number {
+  const lines = doc.splitTextToSize(text, width);
+  doc.text(lines, x, y);
+  return y + lines.length * lineHeight;
+}
+
+function saveSearchablePlanPDF({
+  rows,
+  plans,
+  lang,
+  proofStatusFor,
+  filename,
+}: {
+  rows: ControlItem[];
+  plans?: Record<string, PlanAction>;
+  lang: LangKey;
+  proofStatusFor: (controlId: string) => EvidenceStatus;
+  filename?: string;
+}) {
+  const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+  const title = lang === "fr" ? "Plan d’action" : "Action plan";
+
+  doc.setProperties({
+    title,
+    subject: lang === "fr" ? "Plan d’action GapTrack" : "GapTrack action plan",
+    author: "GapTrack",
+    creator: "GapTrack",
+  });
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(18);
+  doc.setTextColor(15, 23, 42);
+  doc.text(title, 14, 16);
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
+  doc.setTextColor(71, 85, 105);
+  doc.text(`${lang === "fr" ? "Généré le" : "Generated on"} ${pdfDateStamp(lang)} · ${rows.length} ${lang === "fr" ? "écart(s)" : "gap(s)"}`, 14, 23);
+
+  const prioLabel = (p?: PlanAction["priority"]) => {
+    if (p === "high") return "P1";
+    if (p === "medium") return "P2";
+    if (p === "low") return "P3";
+    return "";
+  };
+
+  autoTable(doc, {
+    startY: 30,
+    head: [[
+      lang === "fr" ? "Réf." : "Ref",
+      lang === "fr" ? "Domaine" : "Domain",
+      "Impact",
+      lang === "fr" ? "Point de contrôle" : "Control point",
+      lang === "fr" ? "Priorité" : "Priority",
+      lang === "fr" ? "Échéance" : "Due",
+      lang === "fr" ? "Resp." : "Owner",
+      lang === "fr" ? "Preuve" : "Evidence",
+      "Action",
+    ]],
+    body: rows.map((r) => {
+      const p = plans?.[r.id];
+      return [
+        pdfText(r.ref, ""),
+        pdfText(r.domain, ""),
+        String(r.impact),
+        pdfText(r.description, ""),
+        prioLabel(p?.priority),
+        pdfText(p?.due, ""),
+        pdfText(p?.owner, ""),
+        evidenceStatusLabel(proofStatusFor(r.id), lang),
+        pdfText(p?.comment, ""),
+      ];
+    }),
+    styles: {
+      font: "helvetica",
+      fontSize: 7.6,
+      cellPadding: 1.8,
+      textColor: [15, 23, 42],
+      lineColor: [226, 232, 240],
+      lineWidth: 0.15,
+      overflow: "linebreak",
+      valign: "top",
+    },
+    headStyles: {
+      fillColor: [241, 245, 249],
+      textColor: [15, 23, 42],
+      fontStyle: "bold",
+    },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+    columnStyles: {
+      0: { cellWidth: 13 },
+      1: { cellWidth: 35 },
+      2: { cellWidth: 13, halign: "center" },
+      3: { cellWidth: 66 },
+      4: { cellWidth: 15, halign: "center" },
+      5: { cellWidth: 20 },
+      6: { cellWidth: 23 },
+      7: { cellWidth: 26 },
+      8: { cellWidth: 73 },
+    },
+    didDrawPage: () => {
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(100, 116, 139);
+      doc.text("GapTrack", 14, 202);
+      doc.text(String(doc.getCurrentPageInfo().pageNumber), 283, 202, { align: "right" });
+      doc.setTextColor(15, 23, 42);
+    },
+    margin: { top: 12, right: 10, bottom: 14, left: 10 },
+  });
+
+  doc.save(filename || (lang === "fr" ? "plan_action.pdf" : "action_plan.pdf"));
+}
+
+function saveSearchableAuditReportPDF({
+  rows,
+  lang,
+  session,
+  sessionName,
+  baseline,
+  plans,
+  evidenceMap,
+  proofStatusMap,
+  filename,
+}: {
+  rows: ControlItem[];
+  lang: LangKey;
+  session?: Session | null;
+  sessionName: string;
+  baseline?: ControlItem[] | null;
+  plans?: Record<string, PlanAction>;
+  evidenceMap?: Record<string, EvidenceItem[]>;
+  proofStatusMap?: EvidenceStatusMap;
+  filename?: string;
+}) {
+  const cmpRef = (a: string, b: string) =>
+    a.localeCompare(b, lang === "fr" ? "fr" : "en", { numeric: true, sensitivity: "base" });
+
+  const proofStatusFor = (controlId: string) =>
+    effectiveEvidenceStatus(controlId, evidenceMap || {}, proofStatusMap || {});
+
+  const hasPlan = (id: string) => hasAnyPlanFields(plans?.[id]);
+
+  const maturityFor = (items: ControlItem[]) => {
+    const applicable = items.filter((r) => isApplicableForMaturity(r.realized));
+    const global = applicable.reduce((total, r) => total + r.impact * controlStatusScore(r.realized), 0);
+    const globalMax = applicable.reduce((total, r) => total + r.impact, 0);
+    return globalMax ? Number(((global / globalMax) * 100).toFixed(2)) : 0;
+  };
+
+  const byDomain: Record<string, {
+    points: number;
+    max: number;
+    count: number;
+    gaps: number;
+    criticalGaps: number;
+    missingProof: number;
+  }> = {};
+
+  for (const r of rows) {
+    const x = byDomain[r.domain] || (byDomain[r.domain] = {
+      points: 0,
+      max: 0,
+      count: 0,
+      gaps: 0,
+      criticalGaps: 0,
+      missingProof: 0,
+    });
+
+    x.count += 1;
+    if (isGapStatus(r.realized)) x.gaps += 1;
+    if (r.impact === 3 && isGapStatus(r.realized)) x.criticalGaps += 1;
+    if (isImplementedStatus(r.realized) && proofStatusFor(r.id) !== "validated") x.missingProof += 1;
+
+    if (!isApplicableForMaturity(r.realized)) continue;
+    x.max += r.impact;
+    x.points += r.impact * controlStatusScore(r.realized);
+  }
+
+  const domains = Object.entries(byDomain).map(([domain, v]) => ({
+    domain,
+    ...v,
+    percent: v.max ? Number(((v.points / v.max) * 100).toFixed(2)) : 0,
+  }));
+
+  const global = domains.reduce((total, d) => total + d.points, 0);
+  const globalMax = domains.reduce((total, d) => total + d.max, 0);
+  const globalPercent = globalMax ? Number(((global / globalMax) * 100).toFixed(2)) : 0;
+  const level = maturityLabel(globalPercent, lang);
+  const baselinePercent = baseline?.length ? maturityFor(baseline) : null;
+  const delta = baselinePercent === null ? null : Number((globalPercent - baselinePercent).toFixed(2));
+
+  const gaps = rows
+    .filter((r) => isGapStatus(r.realized))
+    .slice()
+    .sort((a, b) => (b.impact - a.impact) || cmpRef(a.ref, b.ref));
+  const criticalGaps = gaps.filter((r) => r.impact === 3);
+  const gapsWithoutPlan = gaps.filter((r) => !hasPlan(r.id));
+  const missingProofs = rows
+    .filter((r) => isImplementedStatus(r.realized) && proofStatusFor(r.id) !== "validated")
+    .slice()
+    .sort((a, b) => (b.impact - a.impact) || cmpRef(a.ref, b.ref));
+
+  const plannedActions = gaps
+    .map((row) => ({ row, plan: plans?.[row.id] }))
+    .filter(({ plan }) => hasAnyPlanFields(plan))
+    .sort((a, b) =>
+      priorityWeight(a.plan?.priority) - priorityWeight(b.plan?.priority) ||
+      ((daysUntilISO(a.plan?.due) ?? 9999) - (daysUntilISO(b.plan?.due) ?? 9999)) ||
+      (b.row.impact - a.row.impact) ||
+      cmpRef(a.row.ref, b.row.ref)
+    );
+
+  const allEvidenceCount = rows.reduce((total, r) => total + (evidenceMap?.[r.id]?.length || 0), 0);
+  const evidenceValidatedControls = rows.filter((r) => proofStatusFor(r.id) === "validated").length;
+  const evidenceAddedControls = rows.filter((r) => proofStatusFor(r.id) !== "absent").length;
+  const applicableControls = rows.filter((r) => isApplicableForMaturity(r.realized)).length;
+  const conformControls = rows.filter((r) => r.realized === 1).length;
+  const partialControls = rows.filter((r) => r.realized === 0.5).length;
+  const nonConformControls = rows.filter((r) => r.realized === 0).length;
+  const notEvaluatedControls = rows.filter((r) => r.realized === -2).length;
+  const notApplicableControls = rows.filter((r) => r.realized === -1).length;
+  const topDomains = domains
+    .slice()
+    .sort((a, b) =>
+      (b.criticalGaps - a.criticalGaps) ||
+      (b.gaps - a.gaps) ||
+      (a.percent - b.percent) ||
+      a.domain.localeCompare(b.domain, lang === "fr" ? "fr" : "en")
+    )
+    .slice(0, 6);
+
+  const reportConclusion = (() => {
+    if (lang === "fr") {
+      if (globalPercent <= 20) return "Le dispositif de sécurité est à un niveau critique. La priorité est de structurer les fondamentaux, de traiter les écarts d’impact 3 et de produire des preuves vérifiables.";
+      if (globalPercent <= 40) return "Le dispositif est en phase initiale. Des mesures existent probablement, mais elles doivent être formalisées, pilotées et rattachées à des preuves.";
+      if (globalPercent <= 60) return "Le dispositif progresse mais reste hétérogène. Les actions doivent se concentrer sur les domaines faibles, les preuves et la réduction des écarts majeurs.";
+      if (globalPercent <= 80) return "Le dispositif est globalement maîtrisé. L’enjeu principal est la consolidation, le suivi périodique et la démonstration par les preuves.";
+      return "Le dispositif est mature. Le rapport doit surtout alimenter l’amélioration continue et la conservation des preuves.";
+    }
+    if (globalPercent <= 20) return "The security program is at a critical level. Priority should be given to core controls, impact-3 gaps and verifiable evidence.";
+    if (globalPercent <= 40) return "The program is at an initial stage. Measures may exist, but need to be formalized, governed and backed by evidence.";
+    if (globalPercent <= 60) return "The program is progressing but remains uneven. Actions should focus on weak domains, evidence and major gaps.";
+    if (globalPercent <= 80) return "The program is broadly managed. The main challenge is consolidation, periodic monitoring and evidence.";
+    return "The program is mature. The report mainly supports continuous improvement and evidence retention.";
+  })();
+
+  const recommendations: string[] = [];
+  if (lang === "fr") {
+    if (criticalGaps.length) recommendations.push(`Traiter en priorité les ${criticalGaps.length} écart(s) d’impact 3, avec responsable, échéance et preuve attendue.`);
+    if (gapsWithoutPlan.length) recommendations.push(`Compléter le plan d’action pour ${gapsWithoutPlan.length} écart(s), en commençant par les plus critiques.`);
+    if (missingProofs.length) recommendations.push(`Valider les preuves des ${missingProofs.length} contrôle(s) conformes ou partiels non encore justifiés.`);
+    if (notEvaluatedControls) recommendations.push(`Finaliser l’évaluation des ${notEvaluatedControls} contrôle(s) encore non évalués.`);
+    if (!recommendations.length) recommendations.push("Maintenir une revue périodique, conserver les preuves et suivre les actions jusqu’à clôture.");
+  } else {
+    if (criticalGaps.length) recommendations.push(`Prioritize the ${criticalGaps.length} impact-3 gap(s), with owner, due date and expected evidence.`);
+    if (gapsWithoutPlan.length) recommendations.push(`Complete the action plan for ${gapsWithoutPlan.length} gap(s), starting with the most critical.`);
+    if (missingProofs.length) recommendations.push(`Validate evidence for ${missingProofs.length} compliant or partial control(s) not yet justified.`);
+    if (notEvaluatedControls) recommendations.push(`Finalize the assessment of the ${notEvaluatedControls} control(s) still not evaluated.`);
+    if (!recommendations.length) recommendations.push("Maintain periodic review, evidence retention and action follow-up until closure.");
+  }
+
+  const title = lang === "fr" ? "Rapport d’audit sécurité" : "Security audit report";
+  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+  doc.setProperties({
+    title,
+    subject: lang === "fr" ? "Rapport d’audit GapTrack" : "GapTrack audit report",
+    author: "GapTrack",
+    creator: "GapTrack",
+  });
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9);
+  doc.setTextColor(71, 85, 105);
+  doc.text("GAPTRACK · AUDIT SSI", 14, 15);
+
+  doc.setFontSize(22);
+  doc.setTextColor(15, 23, 42);
+  doc.text(title, 14, 27);
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+  doc.setTextColor(71, 85, 105);
+  doc.text(`${pdfText(sessionName)} · ${sessionFrameworkLabel(session, lang)} · ${formatAuditDate(session?.auditDate, lang)}`, 14, 35);
+  doc.text(`${lang === "fr" ? "Généré le" : "Generated on"} ${pdfDateStamp(lang)}`, 196, 15, { align: "right" });
+  doc.setDrawColor(15, 23, 42);
+  doc.setLineWidth(0.7);
+  doc.line(14, 42, 196, 42);
+
+  autoTable(doc, {
+    startY: 48,
+    body: [
+      [lang === "fr" ? "Organisation" : "Organization", pdfText(session?.organization, "—"), lang === "fr" ? "Auditeur" : "Auditor", pdfText(session?.auditor, "—")],
+      [lang === "fr" ? "Commanditaire" : "Sponsor", pdfText(session?.sponsor, "—"), lang === "fr" ? "Périmètre" : "Scope", pdfText(session?.scope, "—")],
+      [lang === "fr" ? "Type" : "Type", auditTypeLabel(session?.auditType, lang), lang === "fr" ? "Criticité" : "Criticality", criticalityLabel(session?.criticality, lang)],
+    ],
+    theme: "grid",
+    styles: { font: "helvetica", fontSize: 9, cellPadding: 2.5, lineColor: [226, 232, 240], lineWidth: 0.15 },
+    columnStyles: { 0: { fontStyle: "bold", fillColor: [248, 250, 252] }, 2: { fontStyle: "bold", fillColor: [248, 250, 252] } },
+    margin: { left: 14, right: 14 },
+  });
+
+  autoTable(doc, {
+    startY: ((doc as any).lastAutoTable?.finalY || 72) + 8,
+    head: [[lang === "fr" ? "Maturité globale" : "Global maturity", lang === "fr" ? "Contrôles évalués" : "Assessed controls", lang === "fr" ? "Écarts critiques" : "Critical gaps", lang === "fr" ? "Preuves validées" : "Validated evidence"]],
+    body: [[`${globalPercent}%\n${level}\n${global} / ${globalMax} pts`, `${rows.filter((r) => isEvaluatedStatus(r.realized)).length} / ${rows.length}\n${applicableControls} applicable(s)`, `${criticalGaps.length}\nImpact 3`, `${evidenceValidatedControls}\n${allEvidenceCount} preuve(s)`]],
+    styles: { font: "helvetica", fontSize: 9, cellPadding: 3, lineColor: [226, 232, 240], lineWidth: 0.15, valign: "top" },
+    headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255] },
+    margin: { left: 14, right: 14 },
+  });
+
+  let y = ((doc as any).lastAutoTable?.finalY || 108) + 8;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(12);
+  doc.setTextColor(15, 23, 42);
+  doc.text(lang === "fr" ? "Synthèse exécutive" : "Executive summary", 14, y);
+  y += 6;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+  y = addPdfWrappedText(doc, reportConclusion, 14, y, 182, 5) + 2;
+  for (const rec of recommendations.slice(0, 5)) {
+    y = addPdfWrappedText(doc, `• ${rec}`, 18, y, 176, 5);
+  }
+
+  doc.addPage();
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(14);
+  doc.setTextColor(15, 23, 42);
+  doc.text(lang === "fr" ? "Lecture des résultats" : "Reading the results", 14, 18);
+
+  autoTable(doc, {
+    startY: 25,
+    head: [[lang === "fr" ? "Indicateur" : "Metric", lang === "fr" ? "Valeur" : "Value"]],
+    body: [
+      [lang === "fr" ? "Conforme" : "Compliant", conformControls],
+      [lang === "fr" ? "Partiellement conforme" : "Partially compliant", partialControls],
+      [lang === "fr" ? "Non conforme" : "Non-compliant", nonConformControls],
+      [lang === "fr" ? "Non évalué" : "Not evaluated", notEvaluatedControls],
+      [lang === "fr" ? "Non applicable" : "Not applicable", notApplicableControls],
+      [lang === "fr" ? "Contrôles avec preuve" : "Controls with evidence", evidenceAddedControls],
+      [lang === "fr" ? "Preuves manquantes ou non validées" : "Missing or unvalidated evidence", missingProofs.length],
+      [lang === "fr" ? "Évolution vs audit précédent" : "Change vs previous audit", delta === null ? "—" : `${delta >= 0 ? "+" : ""}${delta} pts (${baselinePercent}% → ${globalPercent}%)`],
+    ],
+    styles: { font: "helvetica", fontSize: 9, cellPadding: 2.3, lineColor: [226, 232, 240], lineWidth: 0.15 },
+    headStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42] },
+    margin: { left: 14, right: 14 },
+  });
+
+  autoTable(doc, {
+    startY: ((doc as any).lastAutoTable?.finalY || 80) + 8,
+    head: [[lang === "fr" ? "Domaine" : "Domain", lang === "fr" ? "Maturité" : "Maturity", "Score", lang === "fr" ? "Écarts" : "Gaps", "Impact 3", lang === "fr" ? "Preuves à revoir" : "Evidence to review"]],
+    body: domains
+      .slice()
+      .sort((a, b) => a.domain.localeCompare(b.domain, lang === "fr" ? "fr" : "en"))
+      .map((d) => [d.domain, `${d.percent}%\n${maturityLabel(d.percent, lang)}`, `${d.points} / ${d.max}`, d.gaps, d.criticalGaps, d.missingProof]),
+    styles: { font: "helvetica", fontSize: 8, cellPadding: 2, lineColor: [226, 232, 240], lineWidth: 0.15, overflow: "linebreak", valign: "top" },
+    headStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42] },
+    columnStyles: { 0: { cellWidth: 60 }, 1: { cellWidth: 28 }, 2: { cellWidth: 24 }, 3: { cellWidth: 20 }, 4: { cellWidth: 22 }, 5: { cellWidth: 32 } },
+    margin: { left: 14, right: 14 },
+  });
+
+  doc.addPage();
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(14);
+  doc.text(lang === "fr" ? "Priorités" : "Priorities", 14, 18);
+
+  autoTable(doc, {
+    startY: 25,
+    head: [[lang === "fr" ? "Domaine prioritaire" : "Priority domain", "%", lang === "fr" ? "Écarts" : "Gaps", "P3"]],
+    body: topDomains.map((d) => [d.domain, `${d.percent}%`, d.gaps, d.criticalGaps]),
+    styles: { font: "helvetica", fontSize: 8.5, cellPadding: 2, lineColor: [226, 232, 240], lineWidth: 0.15 },
+    headStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42] },
+    margin: { left: 14, right: 14 },
+  });
+
+  autoTable(doc, {
+    startY: ((doc as any).lastAutoTable?.finalY || 60) + 8,
+    head: [[lang === "fr" ? "Réf." : "Ref", lang === "fr" ? "Domaine" : "Domain", "Impact", lang === "fr" ? "Priorité" : "Priority", lang === "fr" ? "Échéance" : "Due", lang === "fr" ? "Responsable" : "Owner", lang === "fr" ? "Action / preuve attendue" : "Action / expected evidence"]],
+    body: (plannedActions.length ? plannedActions.slice(0, 25) : gaps.slice(0, 25).map((row) => ({ row, plan: undefined }))).map(({ row, plan }) => [
+      row.ref,
+      row.domain,
+      row.impact,
+      reportPriorityLabel(plan?.priority, lang),
+      plan?.due ? formatDueHuman(plan.due, lang) : "—",
+      pdfText(plan?.owner),
+      reportShortText(plan?.comment, lang === "fr" ? "Créer une action avec responsable, échéance, preuve attendue et critère de clôture." : "Create an action with owner, due date, expected evidence and closure criterion.", 900),
+    ]),
+    styles: { font: "helvetica", fontSize: 7.5, cellPadding: 1.8, lineColor: [226, 232, 240], lineWidth: 0.15, overflow: "linebreak", valign: "top" },
+    headStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42] },
+    columnStyles: { 0: { cellWidth: 14 }, 1: { cellWidth: 35 }, 2: { cellWidth: 15, halign: "center" }, 3: { cellWidth: 23 }, 4: { cellWidth: 23 }, 5: { cellWidth: 25 }, 6: { cellWidth: 66 } },
+    margin: { left: 14, right: 14 },
+  });
+
+  doc.addPage();
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(14);
+  doc.text(lang === "fr" ? "Liste détaillée des écarts" : "Detailed list of gaps", 14, 18);
+
+  autoTable(doc, {
+    startY: 25,
+    head: [[lang === "fr" ? "Réf." : "Ref", lang === "fr" ? "Domaine" : "Domain", "Impact", lang === "fr" ? "Statut" : "Status", lang === "fr" ? "Point de contrôle" : "Control point", lang === "fr" ? "Preuve" : "Evidence", lang === "fr" ? "Plan d’action" : "Action plan"]],
+    body: (gaps.length ? gaps : rows).map((g) => [
+      g.ref,
+      g.domain,
+      g.impact,
+      controlStatusLabel(g.realized, lang, true),
+      g.description,
+      `${evidenceStatusLabel(proofStatusFor(g.id), lang)}\n${evidenceMap?.[g.id]?.length || 0} ${lang === "fr" ? "preuve(s)" : "item(s)"}`,
+      reportPlanSummary(plans?.[g.id], lang),
+    ]),
+    styles: { font: "helvetica", fontSize: 7.2, cellPadding: 1.7, lineColor: [226, 232, 240], lineWidth: 0.15, overflow: "linebreak", valign: "top" },
+    headStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42] },
+    columnStyles: { 0: { cellWidth: 14 }, 1: { cellWidth: 34 }, 2: { cellWidth: 14, halign: "center" }, 3: { cellWidth: 23 }, 4: { cellWidth: 50 }, 5: { cellWidth: 25 }, 6: { cellWidth: 42 } },
+    margin: { left: 4, right: 4 },
+  });
+
+  doc.addPage();
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(14);
+  doc.text(lang === "fr" ? "Annexes" : "Appendices", 14, 18);
+
+  autoTable(doc, {
+    startY: 25,
+    head: [[lang === "fr" ? "Preuves non validées - Réf." : "Unvalidated evidence - Ref", lang === "fr" ? "Domaine" : "Domain", lang === "fr" ? "Statut" : "Status"]],
+    body: missingProofs.map((r) => [r.ref, r.domain, evidenceStatusLabel(proofStatusFor(r.id), lang)]),
+    styles: { font: "helvetica", fontSize: 8, cellPadding: 2, lineColor: [226, 232, 240], lineWidth: 0.15, overflow: "linebreak" },
+    headStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42] },
+    margin: { left: 14, right: 14 },
+  });
+
+  autoTable(doc, {
+    startY: ((doc as any).lastAutoTable?.finalY || 70) + 8,
+    head: [[lang === "fr" ? "Écarts sans plan - Réf." : "Gaps without plan - Ref", lang === "fr" ? "Domaine" : "Domain", "Impact"]],
+    body: gapsWithoutPlan.map((r) => [r.ref, r.domain, r.impact]),
+    styles: { font: "helvetica", fontSize: 8, cellPadding: 2, lineColor: [226, 232, 240], lineWidth: 0.15, overflow: "linebreak" },
+    headStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42] },
+    margin: { left: 14, right: 14 },
+  });
+
+  addPdfPageNumbers(doc, `GapTrack · ${pdfText(sessionName)} · ${pdfDateStamp(lang)}`);
+  doc.save(filename || `${safeExportFilename(sessionName || title, lang)}.pdf`);
 }
 
 
@@ -8586,138 +9056,16 @@ function PlanView({
       onPremiumRequired?.(lang === "fr" ? "L’export PDF du plan d’action" : "Action plan PDF export");
       return;
     }
+
     try {
-      const escHtml = (v: any) =>
-        String(v ?? "")
-          .replaceAll("&", "&amp;")
-          .replaceAll("<", "&lt;")
-          .replaceAll(">", "&gt;")
-          .replaceAll('"', "&quot;")
-          .replaceAll("'", "&#39;");
-
-      const prioLabel = (p?: PlanAction["priority"]) => {
-        if (p === "high") return "P1";
-        if (p === "medium") return "P2";
-        if (p === "low") return "P3";
-        return "";
-      };
-
-      const nowStr =
-        lang === "fr" ? new Date().toLocaleString("fr-FR") : new Date().toLocaleString("en-GB");
-
-      const rowsHtml = filtered
-        .map((r) => {
-          const p = plans?.[r.id];
-          const action = escHtml(p?.comment ?? "").replace(/\r?\n/g, "<br/>");
-          return `
-            <tr>
-              <td class="nowrap">${escHtml(r.ref)}</td>
-              <td>${escHtml(r.domain)}</td>
-              <td class="center nowrap">${escHtml(r.impact)}</td>
-              <td>${escHtml(r.description)}</td>
-              <td class="center nowrap">${escHtml(prioLabel(p?.priority))}</td>
-              <td class="nowrap">${escHtml(p?.due ?? "")}</td>
-              <td class="nowrap">${escHtml(p?.owner ?? "")}</td>
-              <td class="nowrap">${escHtml(evidenceStatusLabel(proofStatusFor(r.id), lang))}</td>
-              <td class="action-col">${action}</td>
-            </tr>
-          `;
-        })
-        .join("");
-
-      const title = lang === "fr" ? "Plan d’action" : "Action plan";
-
-      // ✅ CSS “pro” pour éviter le tableau illisible
-      const extraCss = `
-        @page { size: A4 landscape; margin: 12mm; }
-        h1{margin-bottom:6px}
-        .meta{margin-bottom:12px;font-size:12px;color:#444}
-
-        table.plan-table{width:100%;border-collapse:collapse;table-layout:fixed}
-        table.plan-table th, table.plan-table td{border:1px solid #ddd;padding:6px;vertical-align:top}
-        table.plan-table thead th{background:#f3f3f3;font-weight:700;font-size:11px;white-space:normal}
-        table.plan-table tbody td{font-size:10.5px;line-height:1.25;overflow-wrap:break-word;word-break:normal}
-
-        /* Largeurs colonnes (total ~100%) */
-        table.plan-table th:nth-child(1), table.plan-table td:nth-child(1){width:6%}
-        table.plan-table th:nth-child(2), table.plan-table td:nth-child(2){width:13%}
-        table.plan-table th:nth-child(3), table.plan-table td:nth-child(3){width:5%}
-        table.plan-table th:nth-child(4), table.plan-table td:nth-child(4){width:25%}
-        table.plan-table th:nth-child(5), table.plan-table td:nth-child(5){width:6%}
-        table.plan-table th:nth-child(6), table.plan-table td:nth-child(6){width:8%}
-        table.plan-table th:nth-child(7), table.plan-table td:nth-child(7){width:9%}
-        table.plan-table th:nth-child(8), table.plan-table td:nth-child(8){width:10%}
-        table.plan-table th:nth-child(9), table.plan-table td:nth-child(9){width:18%}
-
-        /* ✅ Colonne Action plus visible */
-        table.plan-table th.action-col, table.plan-table td.action-col{
-          border-left: 2px solid #cbd5e1;
-          background: #f8fafc;
-        }
-      `;
-
-      const html = `
-        <div class="page">
-          <h1>${title}</h1>
-          <div class="meta">${lang === "fr" ? "Généré le" : "Generated on"} ${escHtml(nowStr)} • ${
-        filtered.length
-      } ${lang === "fr" ? "écarts" : "gaps"}</div>
-
-          <table class="gaps-table plan-table">
-            <thead>
-              <tr>
-                <th>${lang === "fr" ? "Réf." : "Ref"}</th>
-                <th>${lang === "fr" ? "Domaine" : "Domain"}</th>
-                <th>${lang === "fr" ? "Impact" : "Impact"}</th>
-                <th>${lang === "fr" ? "Point de contrôle" : "Control point"}</th>
-                <th>${lang === "fr" ? "Priorité" : "Priority"}</th>
-                <th>${lang === "fr" ? "Échéance" : "Due"}</th>
-                <th>${lang === "fr" ? "Resp." : "Owner"}</th>
-                <th>${lang === "fr" ? "Preuve" : "Evidence"}</th>
-                <th class="action-col">${lang === "fr" ? "Action" : "Action"}</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${rowsHtml || `<tr><td colspan="9">${lang === "fr" ? "Aucun écart." : "No gaps."}</td></tr>`}
-            </tbody>
-          </table>
-        </div>
-      `;
-
-      const iframe = document.createElement("iframe");
-      iframe.style.position = "fixed";
-      iframe.style.right = "0";
-      iframe.style.bottom = "0";
-      iframe.style.width = "0";
-      iframe.style.height = "0";
-      iframe.style.border = "0";
-      document.body.appendChild(iframe);
-
-      const doc = (iframe.contentDocument ||
-        (iframe.contentWindow && iframe.contentWindow.document)) as Document | null;
-
-      if (!doc) {
-        document.body.removeChild(iframe);
-        toast.error(lang === "fr" ? "Export indisponible" : "Export unavailable");
-        return;
-      }
-
-      doc.open();
-      doc.write(`<!doctype html><html><head><meta charset="utf-8"/>
-        <title>${title}</title>
-        <style>${PRINT_BASE_CSS}${extraCss}</style>
-        </head><body>${html}</body></html>`);
-      doc.close();
-
-      setTimeout(() => {
-        try {
-          (iframe.contentWindow as any).focus();
-          (iframe.contentWindow as any).print();
-        } catch (_) {}
-        setTimeout(() => {
-          if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
-        }, 1000);
-      }, 80);
+      saveSearchablePlanPDF({
+        rows: filtered,
+        plans,
+        lang,
+        proofStatusFor,
+        filename: lang === "fr" ? "plan_action.pdf" : "action_plan.pdf",
+      });
+      toast.success(lang === "fr" ? "PDF généré avec texte recherchable." : "Searchable PDF generated.");
     } catch (e) {
       console.error(e);
       toast.error(lang === "fr" ? "Erreur export PDF" : "PDF export error");
@@ -13279,33 +13627,41 @@ function GapTrackApp({
 
   const handleExport = React.useCallback(() => {
     if (!requirePremiumFeature(lang === "fr" ? "L’export PDF du rapport" : "PDF report export")) return;
+
     try {
-      const src = document.querySelector('.print-only') as HTMLElement | null;
-      if (!src) { toast.error(lang==='fr'?'Aucun contenu a imprimer':'Nothing to print'); return; }
-      const iframe = document.createElement('iframe');
-      iframe.style.position = 'fixed';
-      iframe.style.right = '0';
-      iframe.style.bottom = '0';
-      iframe.style.width = '0';
-      iframe.style.height = '0';
-      iframe.style.border = '0';
-      document.body.appendChild(iframe);
-      const doc = (iframe.contentDocument || (iframe.contentWindow && iframe.contentWindow.document)) as Document | null;
-      if (!doc) { document.body.removeChild(iframe); toast.error(lang==='fr'?'Export indisponible':'Export unavailable'); return; }
-      const current = sessions.find(s=>s.id===activeSessionId);
-      const title = safeExportFilename(current?.name || current?.organization || 'Audit', lang);
-      doc.open();
-      doc.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtmlForExport(title)}</title><style>${PRINT_BASE_CSS}</style></head><body>${src.innerHTML}</body></html>`);
-      doc.close();
-      setTimeout(() => {
-        try { (iframe.contentWindow as any).focus(); (iframe.contentWindow as any).print(); } catch(_) {}
-        setTimeout(() => { if (iframe.parentNode) iframe.parentNode.removeChild(iframe); }, 1000);
-      }, 80);
+      const current = sessions.find((s) => s.id === activeSessionId) || currentSession;
+      const baseTitle = current?.name || current?.organization || (lang === "fr" ? "rapport-audit" : "audit-report");
+
+      saveSearchableAuditReportPDF({
+        rows,
+        lang,
+        session: current,
+        sessionName: baseTitle,
+        baseline: compareRows || null,
+        plans,
+        evidenceMap,
+        proofStatusMap,
+        filename: `${safeExportFilename(baseTitle, lang)}.pdf`,
+      });
+
+      toast.success(lang === "fr" ? "PDF généré avec texte recherchable." : "Searchable PDF generated.");
     } catch (e) {
       console.error(e);
-      toast.error('Export error');
+      toast.error(lang === "fr" ? "Erreur export PDF" : "PDF export error");
     }
-  }, [activeSessionId, lang, requirePremiumFeature, sessions]);
+  }, [
+    activeSessionId,
+    compareRows,
+    currentSession,
+    evidenceMap,
+    lang,
+    plans,
+    proofStatusMap,
+    requirePremiumFeature,
+    rows,
+    sessions,
+  ]);
+
 
   const t = I18N[lang];
   const delDesc = sessions.length <= 1
