@@ -9147,7 +9147,7 @@ function PlanView({
         proofStatusFor,
         filename: lang === "fr" ? "plan_action.pdf" : "action_plan.pdf",
       });
-      toast.success(lang === "fr" ? "PDF généré avec texte recherchable." : "Searchable PDF generated.");
+      toast.success(lang === "fr" ? "PDF généré." : "PDF generated.");
     } catch (e) {
       console.error(e);
       toast.error(lang === "fr" ? "Erreur export PDF" : "PDF export error");
@@ -13726,7 +13726,7 @@ function GapTrackApp({
         filename: `${safeExportFilename(baseTitle, lang)}.pdf`,
       });
 
-      toast.success(lang === "fr" ? "PDF généré avec texte recherchable." : "Searchable PDF generated.");
+      toast.success(lang === "fr" ? "PDF généré." : "PDF generated.");
     } catch (e) {
       console.error(e);
       toast.error(lang === "fr" ? "Erreur export PDF" : "PDF export error");
