@@ -3694,8 +3694,25 @@ function UserManagementDialog({
   const admins = users.filter((u) => u.active !== false && u.role === "admin" && !isServiceOwnerEmail(u.email));
   const canManage = userCanManageUsers(activeUser);
   const canCreate = canCreateUsers;
-  // Le compte propriétaire ne doit pas apparaître dans la gestion des comptes clients.
-  const visibleUsers = users.filter((u) => userCanViewUserRecord(activeUser, u) && !isServiceOwnerEmail(u.email));
+  const activeUserId = String(activeUser?.id || "").trim();
+  const activeUserEmail = normalizeEmail(activeUser?.email || "");
+
+  // Dans la section "Comptes créés", le compte connecté reste affiché uniquement
+  // dans le panneau de gauche. La liste ne montre que les autres comptes créés
+  // par ce compte connecté.
+  const visibleUsers = users.filter((u) => {
+    if (!userCanViewUserRecord(activeUser, u) || isServiceOwnerEmail(u.email)) return false;
+
+    const isCurrentUser =
+      (activeUserId && String(u.id || "").trim() === activeUserId) ||
+      (activeUserEmail && normalizeEmail(u.email) === activeUserEmail);
+
+    if (isCurrentUser) return false;
+
+    if (canManageSubscriptions) return true;
+
+    return userWasCreatedBy(u, activeUser);
+  });
   const countedVisibleUsers = visibleUsers;
 
   async function addUser() {
