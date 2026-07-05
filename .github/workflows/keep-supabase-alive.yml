@@ -1,0 +1,17 @@
+name: Keep Supabase GapTrack alive
+
+on:
+  schedule:
+    - cron: "0 9 * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Ping Supabase healthcheck table
+        run: |
+          curl -sS -f "https://uezjmzkjrrqzxbkcjzwu.supabase.co/rest/v1/healthcheck?select=id&limit=1" \
+            -H "apikey: ${{ secrets.SUPABASE_PUBLIC_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_PUBLIC_KEY }}"
