@@ -2,7 +2,8 @@ name: Keep Supabase GapTrack alive
 
 on:
   schedule:
-    - cron: "30 13 * * *"
+    - cron: "37 15 * * *"
+      timezone: "Europe/Paris"
   workflow_dispatch:
 
 jobs:
