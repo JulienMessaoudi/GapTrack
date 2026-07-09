@@ -1,39 +1,33 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://gaptrack-ssi.vercel.app/</loc>
-    <lastmod>2026-06-28</lastmod>
-    <changefreq>weekly</changefreq>
+    <loc>https://gaptrack.fr/</loc>
+    <lastmod>2026-07-09</lastmod>
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://gaptrack-ssi.vercel.app/a-propos</loc>
-    <lastmod>2026-06-28</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://gaptrack-ssi.vercel.app/securite</loc>
-    <lastmod>2026-06-28</lastmod>
-    <changefreq>monthly</changefreq>
+    <loc>https://gaptrack.fr/a-propos</loc>
+    <lastmod>2026-07-09</lastmod>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://gaptrack-ssi.vercel.app/confidentialite</loc>
-    <lastmod>2026-06-28</lastmod>
-    <changefreq>monthly</changefreq>
+    <loc>https://gaptrack.fr/securite</loc>
+    <lastmod>2026-07-09</lastmod>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://gaptrack-ssi.vercel.app/cgu</loc>
-    <lastmod>2026-06-28</lastmod>
-    <changefreq>yearly</changefreq>
+    <loc>https://gaptrack.fr/cgu</loc>
+    <lastmod>2026-07-09</lastmod>
     <priority>0.5</priority>
   </url>
   <url>
-    <loc>https://gaptrack-ssi.vercel.app/mentions-legales</loc>
-    <lastmod>2026-06-28</lastmod>
-    <changefreq>yearly</changefreq>
-    <priority>0.4</priority>
+    <loc>https://gaptrack.fr/confidentialite</loc>
+    <lastmod>2026-07-09</lastmod>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://gaptrack.fr/mentions-legales</loc>
+    <lastmod>2026-07-09</lastmod>
+    <priority>0.5</priority>
   </url>
 </urlset>

@@ -26,7 +26,7 @@ type LandingPageView = "plateforme" | "apropos" | "securite" | "confidentialite"
 type SubscriptionPlan = "free" | "premium";
 
 const PREMIUM_CONTACT_EMAIL = "julien.messaoudi@edu.esiee.fr";
-const SITE_URL = "https://gaptrack-ssi.vercel.app";
+const SITE_URL = "https://gaptrack.fr";
 const JULIEN_LINKEDIN_URL = "https://www.linkedin.com/in/julien-messaoudi/";
 
 function buildPremiumRequestMailto(source: string): string {

@@ -1,4 +1,28 @@
 {
+  "redirects": [
+    {
+      "source": "/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "gaptrack-ssi.vercel.app"
+        }
+      ],
+      "destination": "https://gaptrack.fr/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "www.gaptrack.fr"
+        }
+      ],
+      "destination": "https://gaptrack.fr/:path*",
+      "permanent": true
+    }
+  ],
   "headers": [
     {
       "source": "/login",

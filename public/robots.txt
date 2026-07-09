@@ -1,8 +1,4 @@
 User-agent: *
 Allow: /
 
-# Pages publiques à indexer : /, /a-propos, /securite, /confidentialite, /cgu, /mentions-legales
-# Pages privées/non pertinentes (/login, /reset-password, /app) : noindex via X-Robots-Tag dans vercel.json et meta côté application.
-# Ne pas les bloquer ici : les moteurs doivent pouvoir lire le noindex.
-
-Sitemap: https://gaptrack-ssi.vercel.app/sitemap.xml
+Sitemap: https://gaptrack.fr/sitemap.xml
