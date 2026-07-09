@@ -4,7 +4,7 @@
 
 Ce projet a été conçu dans une logique de **GRC cybersécurité** afin de simuler une mission d’audit SSI : évaluation de contrôles, scoring de maturité, identification des écarts, priorisation des remédiations et restitution exploitable.
 
-🔗 **Démo en ligne** : https://gaptrack-ssi.vercel.app/  
+🔗 **Démo en ligne** : https://gaptrack.fr/  
 🔗 **Code source** : https://github.com/JulienMessaoudi/GapTrack
 
 ---
