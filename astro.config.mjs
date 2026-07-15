@@ -8,19 +8,28 @@ export default defineConfig({
   output: "static",
   integrations: [react()],
 
-  // Astro calcule automatiquement les empreintes SHA-256 des scripts
-  // et feuilles de style intégrés à chaque page.
   security: {
     csp: {
       algorithm: "SHA-256",
+
+      // Astro gère séparément script-src et ajoute automatiquement
+      // les empreintes SHA-256 des scripts générés pendant le build.
+      scriptDirective: {
+        resources: ["'self'"],
+      },
+
+      // Astro gère également les styles intégrés et leurs empreintes.
+      styleDirective: {
+        resources: ["'self'"],
+      },
+
+      // Toutes les autres directives CSP peuvent rester ici.
       directives: [
         "default-src 'self'",
         "base-uri 'self'",
         "object-src 'none'",
         "form-action 'self'",
         "frame-src 'none'",
-        "script-src-attr 'none'",
-        "style-src-attr 'unsafe-inline'",
         "img-src 'self' data: blob:",
         "font-src 'self' data:",
         "connect-src 'self' https://uezjmzkjrrqzxbkcjzwu.supabase.co wss://uezjmzkjrrqzxbkcjzwu.supabase.co",
