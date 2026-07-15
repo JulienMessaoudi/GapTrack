@@ -395,6 +395,8 @@ interface Session {
   id: string;
   name: string;
   createdAt: string; // ISO
+  /** Explicit marker for the temporary first audit created during bootstrap. */
+  bootstrap?: boolean;
   frameworkId?: string;
   scope?: string;
   criticality?: AuditCriticality;
@@ -586,21 +588,7 @@ function auditProfileCompletion(session: Session | null | undefined): { done: nu
 
 
 function isBootstrapAuditSession(session: Session | null | undefined): boolean {
-  if (!session) return false;
-  return Boolean(
-    /^Audit\s*1$/i.test(String(session.name || "").trim()) &&
-    !session.organization?.trim() &&
-    !normalizeSessionFrameworkId(session.frameworkId) &&
-    !session.scope?.trim() &&
-    !session.objectives?.trim() &&
-    !session.context?.trim() &&
-    !session.templateId
-  );
-}
-
-function removeLocalAuditData(sessionId: string | null | undefined) {
-  if (!sessionId) return;
-  void deleteAuditSessionFromBackend(sessionId);
+  return session?.bootstrap === true;
 }
 
 
@@ -772,27 +760,32 @@ async function fetchBackendEvidenceMapForSession(auditSessionId: string): Promis
     const context = await getSupabaseUserContext();
     const baseColumns = "id, owner_user_id, group_id, control_id, filename, mime_type, size_bytes, storage_path, created_at";
 
-    let result = await supabase
+    const primaryResult = await supabase
       .from("gaptrack_evidence_files")
       .select(baseColumns)
       .eq("audit_session_id", auditSessionId)
       .eq("group_id", context.groupId)
       .order("created_at", { ascending: false });
 
+    let rows: unknown[] = primaryResult.data || [];
+    let queryError = primaryResult.error;
+
     // Compatibility with databases where the group_id migration has not been applied yet.
-    if (result.error && String(result.error.message || "").toLowerCase().includes("group_id")) {
-      result = await supabase
+    if (queryError && String(queryError.message || "").toLowerCase().includes("group_id")) {
+      const legacyResult = await supabase
         .from("gaptrack_evidence_files")
         .select("id, owner_user_id, control_id, filename, mime_type, size_bytes, storage_path, created_at")
         .eq("audit_session_id", auditSessionId)
         .eq("owner_user_id", context.userId)
         .order("created_at", { ascending: false });
+      rows = legacyResult.data || [];
+      queryError = legacyResult.error;
     }
 
-    if (result.error) throw result.error;
+    if (queryError) throw queryError;
 
     const map: Record<string, EvidenceItem[]> = {};
-    for (const row of result.data || []) {
+    for (const row of rows) {
       const parsed = evidenceItemFromBackendRow(row);
       if (!parsed) continue;
       map[parsed.controlId] = [...(map[parsed.controlId] || []), parsed.item];
@@ -973,6 +966,170 @@ async function deleteBackendEvidenceItem(item: EvidenceItem): Promise<void> {
   if (result.error) throw result.error;
 }
 
+async function copyBackendEvidenceItemToAudit(
+  item: EvidenceItem,
+  targetAuditSessionId: string,
+  controlId: string
+): Promise<EvidenceItem> {
+  if (!item.storageKey) throw new Error("Missing Supabase Storage path.");
+
+  const context = await getSupabaseUserContext();
+  if (!storagePathBelongsToEvidenceItem(item.storageKey, context, item)) {
+    throw new Error("Chemin de preuve non autorisé.");
+  }
+
+  const newId = createEvidenceUuid();
+  if (![context.groupId, targetAuditSessionId, controlId, newId].every(isSafePathSegment)) {
+    throw new Error("Identifiant de preuve invalide.");
+  }
+
+  const { data: sourceBlob, error: downloadError } = await supabase.storage
+    .from(EVIDENCE_STORAGE_BUCKET)
+    .download(item.storageKey);
+  if (downloadError || !sourceBlob) throw downloadError || new Error("Unable to copy evidence file.");
+
+  const filename = safeStorageFilename(item.filename || "evidence");
+  const mimeType = item.mimeType || sourceBlob.type || "application/octet-stream";
+  const storagePath = [
+    context.groupId,
+    targetAuditSessionId,
+    controlId,
+    `${newId}-${filename}`,
+  ].join("/");
+
+  const { error: uploadError } = await supabase.storage
+    .from(EVIDENCE_STORAGE_BUCKET)
+    .upload(storagePath, sourceBlob, {
+      cacheControl: "0",
+      contentType: mimeType,
+      upsert: false,
+    });
+  if (uploadError) throw uploadError;
+
+  const insertPayload: Record<string, unknown> = {
+    id: newId,
+    owner_user_id: context.userId,
+    group_id: context.groupId,
+    audit_session_id: targetAuditSessionId,
+    control_id: controlId,
+    filename,
+    mime_type: mimeType,
+    size_bytes: item.size || sourceBlob.size,
+    storage_bucket: EVIDENCE_STORAGE_BUCKET,
+    storage_path: storagePath,
+  };
+
+  let result = await supabase
+    .from("gaptrack_evidence_files")
+    .insert(insertPayload)
+    .select("id, owner_user_id, group_id, filename, mime_type, size_bytes, storage_path, created_at")
+    .single();
+
+  if (result.error && String(result.error.message || "").toLowerCase().includes("group_id")) {
+    const { group_id: _groupId, ...legacyPayload } = insertPayload;
+    result = await supabase
+      .from("gaptrack_evidence_files")
+      .insert(legacyPayload)
+      .select("id, owner_user_id, filename, mime_type, size_bytes, storage_path, created_at")
+      .single();
+  }
+
+  if (result.error) {
+    await supabase.storage.from(EVIDENCE_STORAGE_BUCKET).remove([storagePath]).catch(() => undefined);
+    throw result.error;
+  }
+
+  const data = result.data as any;
+  return {
+    ...item,
+    id: String(data?.id || newId),
+    filename: String(data?.filename || filename),
+    size: Number(data?.size_bytes ?? item.size ?? sourceBlob.size),
+    mimeType: typeof data?.mime_type === "string" ? data.mime_type : mimeType,
+    addedAt: typeof data?.created_at === "string" ? data.created_at : new Date().toISOString(),
+    storageKind: "backend",
+    storageKey: String(data?.storage_path || storagePath),
+    ownerUserId: typeof data?.owner_user_id === "string" ? data.owner_user_id : context.userId,
+    groupId: typeof data?.group_id === "string" ? data.group_id : context.groupId,
+    contentAvailable: true,
+  };
+}
+
+async function cleanupDuplicatedEvidenceItems(evidenceMap: Record<string, EvidenceItem[]>): Promise<void> {
+  for (const item of Object.values(evidenceMap).flat()) {
+    try {
+      if (item.storageKind === "backend" && item.storageKey) {
+        await deleteBackendEvidenceItem(item);
+      } else if (item.storageKind === "indexeddb" && item.storageKey) {
+        await deleteEvidenceFile(item.storageKey);
+      }
+    } catch (error) {
+      console.warn("Unable to clean up a duplicated evidence item.", error);
+    }
+  }
+}
+
+async function duplicateEvidenceMapForAudit(
+  sourceMap: Record<string, EvidenceItem[]>,
+  targetAuditSessionId: string
+): Promise<Record<string, EvidenceItem[]>> {
+  const duplicated: Record<string, EvidenceItem[]> = {};
+
+  try {
+    for (const [controlId, items] of Object.entries(sourceMap || {})) {
+      const copies: EvidenceItem[] = [];
+      duplicated[controlId] = copies;
+
+      for (const item of items || []) {
+        if (item.storageKind === "backend" && item.storageKey && item.contentAvailable !== false) {
+          copies.push(await copyBackendEvidenceItemToAudit(item, targetAuditSessionId, controlId));
+          continue;
+        }
+
+        if (item.storageKind === "indexeddb" && item.storageKey && item.contentAvailable !== false) {
+          const sourceFile = await getEvidenceFile(item.storageKey);
+          if (!sourceFile) throw new Error(`Local evidence file not found: ${item.filename}`);
+          const newId = createEvidenceUuid();
+          await saveEvidenceFile({ ...sourceFile, id: newId, addedAt: new Date().toISOString() });
+          copies.push({
+            ...item,
+            id: newId,
+            storageKey: newId,
+            addedAt: new Date().toISOString(),
+            contentAvailable: true,
+          });
+          continue;
+        }
+
+        if (item.storageKind === "note" || item.note) {
+          copies.push({ ...item, id: createEvidenceUuid(), addedAt: new Date().toISOString() });
+          continue;
+        }
+
+        // A reference without accessible content is still duplicated, but never
+        // points to the source audit's physical file.
+        copies.push({
+          ...item,
+          id: createEvidenceUuid(),
+          storageKind: "metadata_only",
+          storageKey: undefined,
+          ownerUserId: undefined,
+          groupId: undefined,
+          contentAvailable: false,
+          addedAt: new Date().toISOString(),
+        });
+      }
+
+      if (!copies.length) delete duplicated[controlId];
+    }
+
+    return duplicated;
+  } catch (error) {
+    await cleanupDuplicatedEvidenceItems(duplicated);
+    throw error;
+  }
+}
+
 async function sha256File(file: File): Promise<string | undefined> {
   try {
     if (typeof window === "undefined" || !window.crypto?.subtle) return undefined;
@@ -1097,14 +1254,6 @@ function auditLogActionClass(action: AuditLogAction): string {
   return "border-muted-foreground/30 text-muted-foreground bg-muted/20";
 }
 
-function loadAuditLogForSession(_sessionId: string): AuditLogEntry[] {
-  return [];
-}
-
-function saveAuditLogForSession(_sessionId: string, _entries: AuditLogEntry[]) {
-  // Le journal est inclus dans le snapshot Supabase par l’autosave React.
-}
-
 function exportAuditLogCSV(entries: AuditLogEntry[], lang: LangKey) {
   const delimiter = ";";
   const header = lang === "fr"
@@ -1128,15 +1277,6 @@ function exportAuditLogCSV(entries: AuditLogEntry[], lang: LangKey) {
     ].map(esc).join(delimiter)),
   ];
   downloadBlob(new Blob(["\uFEFF" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" }), `gaptrack-journal-${new Date().toISOString().slice(0, 10)}.csv`);
-}
-
-function loadPlansForSession(_sessionId: string): Record<string, PlanAction> {
-  return {};
-}
-
-
-function savePlansForSession(_sessionId: string, _plans: Record<string, PlanAction>) {
-  // Les plans sont enregistrés dans public.gaptrack_audit_sessions.state via l’autosave Supabase.
 }
 
 function normalizeEvidenceStatus(value: any): EvidenceStatus | null {
@@ -1957,15 +2097,6 @@ function reportPlanSummary(plan: PlanAction | undefined, lang: LangKey): string 
   return lines.join("\n");
 }
 
-function escapeHtmlForExport(value: string): string {
-  return String(value || "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-}
-
 function safeExportFilename(value: string, lang: LangKey): string {
   const base = String(value || (lang === "fr" ? "rapport-audit" : "audit-report"))
     .normalize("NFD")
@@ -2538,21 +2669,6 @@ function loadLegacyRows(): ControlItem[] | null {
 function loadSettings() { try { const raw = localStorage.getItem(STORAGE_SETTINGS); return raw ? JSON.parse(raw) : {}; } catch { return {}; } }
 function saveSettings(s: any) { localStorage.setItem(STORAGE_SETTINGS, JSON.stringify(s)); }
 
-function loadSessions(): Session[] {
-  return [];
-}
-
-
-
-
-function saveSessions(arr: Session[]){
-  void saveSessionsToBackend(arr);
-}
-function loadActiveSessionId(): string | null { return null; }
-function saveActiveSessionId(_id: string){
-  // L’audit actif n’est plus persisté localement : au rechargement, le plus récent est ouvert.
-}
-
 function normalizeEmail(value: string): string {
   return String(value || "").trim().toLowerCase();
 }
@@ -2669,12 +2785,6 @@ function sanitizeUserForClientStorage(user: AppUser): AppUser {
     subscriptionPlan: normalizeSubscriptionPlan(safeUser.subscriptionPlan),
     active: safeUser.active !== false,
   };
-}
-
-function storagePathBelongsToUser(storageKey: string | undefined, userId: string): boolean {
-  if (!storageKey || !userId) return false;
-  const parts = String(storageKey).split("/");
-  return parts.length >= 4 && parts[0] === userId && parts.every((part) => isSafePathSegment(part));
 }
 
 function storagePathBelongsToEvidenceItem(
@@ -3315,6 +3425,17 @@ type SnapshotPayload = {
   auditLog?: AuditLogEntry[];
 };
 
+function normalizeSnapshotPayload(value: unknown): SnapshotPayload {
+  const data = value && typeof value === "object" ? value as Partial<SnapshotPayload> : {};
+  return {
+    rows: Array.isArray(data.rows) ? data.rows : [],
+    evidenceMap: data.evidenceMap && typeof data.evidenceMap === "object" ? data.evidenceMap : {},
+    plans: data.plans && typeof data.plans === "object" ? data.plans : {},
+    proofStatusMap: data.proofStatusMap && typeof data.proofStatusMap === "object" ? data.proofStatusMap : {},
+    auditLog: Array.isArray(data.auditLog) ? data.auditLog : [],
+  };
+}
+
 function normalizeBackendSession(value: any): Session | null {
   if (!value || typeof value !== "object") return null;
   if (typeof value.id !== "string" || typeof value.name !== "string" || typeof value.createdAt !== "string") return null;
@@ -3322,6 +3443,7 @@ function normalizeBackendSession(value: any): Session | null {
     id: value.id,
     name: value.name,
     createdAt: value.createdAt,
+    bootstrap: value.bootstrap === true,
     frameworkId: typeof value.frameworkId === "string" ? value.frameworkId : undefined,
     scope: typeof value.scope === "string" ? value.scope : undefined,
     criticality: value.criticality === "low" || value.criticality === "medium" || value.criticality === "high" ? value.criticality : undefined,
@@ -3334,6 +3456,12 @@ function normalizeBackendSession(value: any): Session | null {
     objectives: typeof value.objectives === "string" ? value.objectives : undefined,
     context: typeof value.context === "string" ? value.context : undefined,
   };
+}
+
+function withoutGroupId<T extends Record<string, unknown>>(row: T): Omit<T, "group_id"> {
+  const legacyRow = { ...row };
+  delete legacyRow.group_id;
+  return legacyRow;
 }
 
 async function getSupabaseUserId(): Promise<string> {
@@ -3406,80 +3534,177 @@ async function getSupabaseUserContext(): Promise<SupabaseUserContext> {
 async function loadSessionsFromBackend(): Promise<Session[]> {
   const context = await getSupabaseUserContext();
 
-  let result = await supabase
+  const primaryResult = await supabase
     .from(AUDIT_SESSIONS_TABLE)
     .select("session, group_id, updated_at")
     .eq("group_id", context.groupId)
     .order("updated_at", { ascending: false });
 
+  let rows: unknown[] = primaryResult.data || [];
+  let queryError = primaryResult.error;
+
   // Compatibility with databases where the group_id migration has not been applied yet.
-  if (result.error && String(result.error.message || "").toLowerCase().includes("group_id")) {
-    result = await supabase
+  if (queryError && String(queryError.message || "").toLowerCase().includes("group_id")) {
+    const legacyResult = await supabase
       .from(AUDIT_SESSIONS_TABLE)
       .select("session, updated_at")
       .eq("owner_user_id", context.userId)
       .order("updated_at", { ascending: false });
+    rows = legacyResult.data || [];
+    queryError = legacyResult.error;
   }
 
-  if (result.error) throw result.error;
+  if (queryError) throw queryError;
 
-  return (result.data || [])
+  return rows
     .map((row: any) => normalizeBackendSession(row.session))
     .filter(Boolean) as Session[];
 }
 
-async function saveSessionsToBackend(sessions: Session[]): Promise<void> {
-  if (!sessions.length) return;
+async function updateAuditSessionMetadataOnBackend(session: Session): Promise<void> {
   const context = await getSupabaseUserContext();
-  const now = new Date().toISOString();
-  const payload = sessions.map((session) => ({
+  const patch = {
+    session,
+    updated_at: new Date().toISOString(),
+  };
+
+  let result = await supabase
+    .from(AUDIT_SESSIONS_TABLE)
+    .update(patch)
+    .eq("id", session.id)
+    .eq("group_id", context.groupId)
+    .select("id");
+
+  if (result.error && String(result.error.message || "").toLowerCase().includes("group_id")) {
+    result = await supabase
+      .from(AUDIT_SESSIONS_TABLE)
+      .update(patch)
+      .eq("id", session.id)
+      .eq("owner_user_id", context.userId)
+      .select("id");
+  }
+
+  if (result.error) throw result.error;
+  if (!Array.isArray(result.data) || result.data.length === 0) {
+    throw new Error("Audit introuvable : ses métadonnées n’ont pas été enregistrées.");
+  }
+}
+
+async function createAuditSessionOnBackend(session: Session, snapshot: SnapshotPayload): Promise<void> {
+  const context = await getSupabaseUserContext();
+  const payload = {
     id: session.id,
     owner_user_id: context.userId,
     group_id: context.groupId,
     session,
-    updated_at: now,
-  }));
+    state: normalizeSnapshotPayload(snapshot),
+    updated_at: new Date().toISOString(),
+  };
 
-  let result = await supabase
-    .from(AUDIT_SESSIONS_TABLE)
-    .upsert(payload, { onConflict: "id" });
-
+  let result = await supabase.from(AUDIT_SESSIONS_TABLE).insert(payload);
   if (result.error && String(result.error.message || "").toLowerCase().includes("group_id")) {
-    const legacyPayload = payload.map(({ group_id: _groupId, ...row }) => row);
-    result = await supabase
+    result = await supabase.from(AUDIT_SESSIONS_TABLE).insert(withoutGroupId(payload));
+  }
+  if (result.error) throw result.error;
+}
+
+async function evidenceStoragePathsReferencedByOtherAudits(
+  deletedAuditId: string,
+  context: SupabaseUserContext
+): Promise<Set<string>> {
+  const primaryResult = await supabase
+    .from(AUDIT_SESSIONS_TABLE)
+    .select("id, state")
+    .eq("group_id", context.groupId)
+    .neq("id", deletedAuditId);
+
+  let rows: any[] = primaryResult.data || [];
+  let queryError = primaryResult.error;
+  if (queryError && String(queryError.message || "").toLowerCase().includes("group_id")) {
+    const legacyResult = await supabase
       .from(AUDIT_SESSIONS_TABLE)
-      .upsert(legacyPayload, { onConflict: "id" });
+      .select("id, state")
+      .eq("owner_user_id", context.userId)
+      .neq("id", deletedAuditId);
+    rows = legacyResult.data || [];
+    queryError = legacyResult.error;
+  }
+  if (queryError) throw queryError;
+
+  const referenced = new Set<string>();
+  for (const row of rows) {
+    const snapshot = normalizeSnapshotPayload(row?.state);
+    for (const item of Object.values(snapshot.evidenceMap).flat()) {
+      if (item?.storageKind === "backend" && item.storageKey) referenced.add(item.storageKey);
+    }
   }
 
-  if (result.error) throw result.error;
+  const primaryEvidenceResult = await supabase
+    .from("gaptrack_evidence_files")
+    .select("storage_path")
+    .eq("group_id", context.groupId)
+    .neq("audit_session_id", deletedAuditId);
+  let evidenceRows: any[] = primaryEvidenceResult.data || [];
+  let evidenceError = primaryEvidenceResult.error;
+  if (evidenceError && String(evidenceError.message || "").toLowerCase().includes("group_id")) {
+    const legacyEvidenceResult = await supabase
+      .from("gaptrack_evidence_files")
+      .select("storage_path")
+      .eq("owner_user_id", context.userId)
+      .neq("audit_session_id", deletedAuditId);
+    evidenceRows = legacyEvidenceResult.data || [];
+    evidenceError = legacyEvidenceResult.error;
+  }
+  if (evidenceError) throw evidenceError;
+  for (const row of evidenceRows) {
+    if (typeof row?.storage_path === "string" && row.storage_path) referenced.add(row.storage_path);
+  }
+  return referenced;
 }
 
 async function deleteAuditSessionFromBackend(sessionId: string | null | undefined): Promise<void> {
   if (!sessionId) return;
-  try {
-    const context = await getSupabaseUserContext();
-    let result = await supabase
+  const context = await getSupabaseUserContext();
+  const snapshot = await apiGetSnapshot(sessionId).catch(() => null);
+  const backendEvidenceMap = await fetchBackendEvidenceMapForSession(sessionId).catch(() => ({}));
+  const evidenceMap = mergeEvidenceMaps(snapshot?.evidenceMap || {}, backendEvidenceMap);
+  const referencedElsewhere = await evidenceStoragePathsReferencedByOtherAudits(sessionId, context).catch((error) => {
+    console.warn("Unable to verify shared evidence references; physical file cleanup is skipped.", error);
+    return null;
+  });
+
+  let result = await supabase
+    .from(AUDIT_SESSIONS_TABLE)
+    .delete()
+    .eq("id", sessionId)
+    .eq("group_id", context.groupId)
+    .select("id");
+
+  if (result.error && String(result.error.message || "").toLowerCase().includes("group_id")) {
+    result = await supabase
       .from(AUDIT_SESSIONS_TABLE)
       .delete()
       .eq("id", sessionId)
-      .eq("group_id", context.groupId);
-
-    if (result.error && String(result.error.message || "").toLowerCase().includes("group_id")) {
-      result = await supabase
-        .from(AUDIT_SESSIONS_TABLE)
-        .delete()
-        .eq("id", sessionId)
-        .eq("owner_user_id", context.userId);
-    }
-
-    if (result.error) throw result.error;
-  } catch (error) {
-    console.error("Unable to delete audit session from Supabase.", error);
+      .eq("owner_user_id", context.userId)
+      .select("id");
   }
-}
 
-function isBackendSyncEnabled(): boolean {
-  return true;
+  if (result.error) throw result.error;
+  if (!Array.isArray(result.data) || result.data.length === 0) {
+    throw new Error("Audit introuvable : la suppression n’a pas été confirmée par le serveur.");
+  }
+
+  for (const item of Object.values(evidenceMap).flat()) {
+    try {
+      if (item.storageKind === "backend" && item.storageKey && referencedElsewhere && !referencedElsewhere.has(item.storageKey)) {
+        await deleteBackendEvidenceItem(item);
+      } else if (item.storageKind === "indexeddb" && item.storageKey) {
+        await deleteEvidenceFile(item.storageKey);
+      }
+    } catch (error) {
+      console.warn("Audit deleted, but one evidence file could not be cleaned up.", error);
+    }
+  }
 }
 
 async function apiGetSnapshot(auditId: string): Promise<SnapshotPayload | null> {
@@ -3501,7 +3726,7 @@ async function apiGetSnapshot(auditId: string): Promise<SnapshotPayload | null> 
   }
 
   if (result.error) throw result.error;
-  return (result.data?.state ?? null) as SnapshotPayload | null;
+  return result.data?.state == null ? null : normalizeSnapshotPayload(result.data.state);
 }
 
 async function apiPutSnapshot(auditId: string, payload: SnapshotPayload): Promise<void> {
@@ -3528,65 +3753,33 @@ async function apiPutSnapshot(auditId: string, payload: SnapshotPayload): Promis
   }
 
   if (updateResult.error) throw updateResult.error;
-  if (Array.isArray(updateResult.data) && updateResult.data.length > 0) return;
-
-  let insertResult = await supabase
-    .from(AUDIT_SESSIONS_TABLE)
-    .insert({
-      id: auditId,
-      owner_user_id: context.userId,
-      group_id: context.groupId,
-      state: payload,
-      updated_at: new Date().toISOString(),
-    });
-
-  if (insertResult.error && String(insertResult.error.message || "").toLowerCase().includes("group_id")) {
-    insertResult = await supabase
-      .from(AUDIT_SESSIONS_TABLE)
-      .insert({
-        id: auditId,
-        owner_user_id: context.userId,
-        state: payload,
-        updated_at: new Date().toISOString(),
-      });
+  if (!Array.isArray(updateResult.data) || updateResult.data.length === 0) {
+    throw new Error("Audit introuvable : la sauvegarde a été refusée pour éviter de recréer un audit supprimé.");
   }
-
-  if (insertResult.error) throw insertResult.error;
 }
 
-
-function loadRowsForSession(_sessionId: string): ControlItem[] | null {
-  return null;
-}
-
-
-
-
-
-
-
-function saveRowsForSession(_sessionId: string, _rows: ControlItem[]){
-  // Les lignes d’audit sont enregistrées dans Supabase via l’autosave.
-}
-
-
-function loadEvidencesForSession(_sessionId: string): Record<string, EvidenceItem[]> {
-  return {};
+async function loadDefaultAuditRows(): Promise<ControlItem[]> {
+  const response = await fetch("/listing.json");
+  if (!response.ok) throw new Error(`Unable to load listing.json (${response.status}).`);
+  const value = await response.json();
+  return Array.isArray(value) ? value as ControlItem[] : [];
 }
 
 
 
-function saveEvidencesForSession(_sessionId: string, _map: Record<string, EvidenceItem[]>) {
-  // Les preuves sont chargées depuis Supabase Storage et public.gaptrack_evidence_files.
-}
 
-function loadProofStatusForSession(_sessionId: string): EvidenceStatusMap {
-  return {};
-}
 
-function saveProofStatusForSession(_sessionId: string, _map: EvidenceStatusMap) {
-  // Les statuts de preuve sont enregistrés dans Supabase via l’autosave.
-}
+
+
+
+
+
+
+
+
+
+
+
 
 // Seed rows helper used when creating or resetting a session
 function seedRowsFrom(current: ControlItem[]): ControlItem[] {
@@ -4076,6 +4269,8 @@ body{margin:0}
 .break-words{word-break:break-word}
 
 `;
+
+void PRINT_BASE_CSS;
 
 function ThemeStyles(){
   return <style dangerouslySetInnerHTML={{ __html: THEME_CSS }} />;
@@ -4971,7 +5166,7 @@ function CreateAuditWizard({
     auditType?: AuditType;
     objectives?: string;
     context?: string;
-  }) => void;
+  }) => Promise<boolean | void>;
 }){
   useEffect(()=>{ document.body.style.overflow = open ? 'hidden' : ''; return () => { document.body.style.overflow = ''; }; }, [open]);
   const [step, setStep] = useState(0);
@@ -5067,36 +5262,45 @@ function CreateAuditWizard({
     setStep((s) => Math.min(s + 1, steps.length - 1));
   };
 
-  const createAudit = () => {
+  const createAudit = async () => {
     if (!stepValid[3] || !stepValid[2]) {
       explainMissing();
       return;
     }
+    if (busy) return;
 
     const baseRows = source === "current"
       ? []
       : (selected ? templateRowsToControlItems(selected.rows) : []);
 
-    onCreateAudit({
-      name: name.trim(),
-      frameworkId,
-      scope: scope.trim(),
-      criticality,
-      templateId: source === "template" ? selected?.id : undefined,
-      rows: baseRows,
-      organization: organization.trim(),
-      auditor: auditor.trim(),
-      sponsor: sponsor.trim(),
-      auditDate,
-      auditType,
-      objectives: objectives.trim(),
-      context: context.trim(),
-    });
-    onClose();
+    setBusy(true);
+    try {
+      const created = await onCreateAudit({
+        name: name.trim(),
+        frameworkId,
+        scope: scope.trim(),
+        criticality,
+        templateId: source === "template" ? selected?.id : undefined,
+        rows: baseRows,
+        organization: organization.trim(),
+        auditor: auditor.trim(),
+        sponsor: sponsor.trim(),
+        auditDate,
+        auditType,
+        objectives: objectives.trim(),
+        context: context.trim(),
+      });
+      if (created !== false) onClose();
+    } catch (error) {
+      console.error("Unable to create audit.", error);
+      toast.error(lang === "fr" ? "Impossible de créer l’audit sur le serveur." : "Unable to create the audit on the server.");
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
-    <div className="modal-overlay no-print" role="dialog" aria-modal="true" onClick={onClose}>
+    <div className="modal-overlay no-print" role="dialog" aria-modal="true" onClick={() => { if (!busy) onClose(); }}>
       <div className="modal wizard-modal onboarding-wizard" onClick={e=>e.stopPropagation()}>
         <header className="flex items-start justify-between gap-4">
           <div>
@@ -5112,7 +5316,7 @@ function CreateAuditWizard({
                 : "4 steps to avoid an empty audit and start with a clear baseline."}
             </div>
           </div>
-          <Button variant="ghost" size="sm" onClick={onClose}><X className="h-4 w-4" /></Button>
+          <Button variant="ghost" size="sm" onClick={onClose} disabled={busy}><X className="h-4 w-4" /></Button>
         </header>
 
         <div className="body" style={{color:"inherit"}}>
@@ -5480,20 +5684,20 @@ function CreateAuditWizard({
             {lang === "fr" ? `Étape ${step + 1} sur ${steps.length}` : `Step ${step + 1} of ${steps.length}`}
           </div>
           <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={onClose}>{lang==='fr' ? "Annuler" : "Cancel"}</Button>
+            <Button variant="ghost" onClick={onClose} disabled={busy}>{lang==='fr' ? "Annuler" : "Cancel"}</Button>
             {step > 0 && (
-              <Button variant="outline" onClick={() => setStep((s) => Math.max(0, s - 1))}>
+              <Button variant="outline" onClick={() => setStep((s) => Math.max(0, s - 1))} disabled={busy}>
                 {lang === "fr" ? "Retour" : "Back"}
               </Button>
             )}
             {step < steps.length - 1 ? (
-              <Button onClick={goNext}>
+              <Button onClick={goNext} disabled={busy}>
                 {lang === "fr" ? "Continuer" : "Continue"}
               </Button>
             ) : (
-              <Button onClick={createAudit} disabled={!stepValid[3] || !stepValid[2] || busy}>
-                <Plus className="h-4 w-4 mr-2" />
-                {lang==='fr' ? "Créer l’audit" : "Create audit"}
+              <Button onClick={() => { void createAudit(); }} disabled={!stepValid[3] || !stepValid[2] || busy}>
+                {busy ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Plus className="h-4 w-4 mr-2" />}
+                {busy ? (lang === "fr" ? "Création…" : "Creating…") : (lang==='fr' ? "Créer l’audit" : "Create audit")}
               </Button>
             )}
           </div>
@@ -5515,7 +5719,7 @@ function AuditProfileDialog({
   session: Session | null | undefined;
   lang: LangKey;
   onClose: () => void;
-  onSave: (patch: Partial<Session>) => void;
+  onSave: (patch: Partial<Session>) => Promise<boolean>;
 }) {
   useEffect(()=>{ document.body.style.overflow = open ? 'hidden' : ''; return () => { document.body.style.overflow = ''; }; }, [open]);
   const [name, setName] = useState("");
@@ -5529,6 +5733,7 @@ function AuditProfileDialog({
   const [scope, setScope] = useState("");
   const [objectives, setObjectives] = useState("");
   const [context, setContext] = useState("");
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (!open || !session) return;
@@ -5550,11 +5755,11 @@ function AuditProfileDialog({
   const canSave = name.trim().length > 0;
 
   return (
-    <div className="modal-overlay no-print" role="dialog" aria-modal="true" onClick={onClose}>
+    <div className="modal-overlay no-print" role="dialog" aria-modal="true" onClick={() => { if (!busy) onClose(); }}>
       <div className="modal wizard-modal" onClick={e=>e.stopPropagation()}>
         <header className="flex items-center justify-between">
           <span>{lang === "fr" ? "Fiche d’audit professionnelle" : "Professional audit profile"}</span>
-          <Button variant="ghost" size="sm" onClick={onClose}><X className="h-4 w-4" /></Button>
+          <Button variant="ghost" size="sm" onClick={onClose} disabled={busy}><X className="h-4 w-4" /></Button>
         </header>
         <div className="body" style={{color:"inherit"}}>
           <div className="text-sm text-muted-foreground mb-3">
@@ -5644,29 +5849,31 @@ function AuditProfileDialog({
           </div>
         </div>
         <footer>
-          <Button variant="ghost" onClick={onClose}>{lang === "fr" ? "Annuler" : "Cancel"}</Button>
+          <Button variant="ghost" onClick={onClose} disabled={busy}>{lang === "fr" ? "Annuler" : "Cancel"}</Button>
           <Button
-            onClick={()=>{
-              if (!canSave) return;
-              onSave({
-                name: name.trim(),
-                organization: organization.trim(),
-                frameworkId,
-                criticality,
-                auditType,
-                auditDate,
-                auditor: auditor.trim(),
-                sponsor: sponsor.trim(),
-                scope: scope.trim(),
-                objectives: objectives.trim(),
-                context: context.trim(),
-              });
-              onClose();
+            onClick={() => {
+              if (!canSave || busy) return;
+              setBusy(true);
+              void onSave({
+                  name: name.trim(),
+                  organization: organization.trim(),
+                  frameworkId,
+                  criticality,
+                  auditType,
+                  auditDate,
+                  auditor: auditor.trim(),
+                  sponsor: sponsor.trim(),
+                  scope: scope.trim(),
+                  objectives: objectives.trim(),
+                  context: context.trim(),
+                })
+                .then((saved) => { if (saved) onClose(); })
+                .finally(() => setBusy(false));
             }}
-            disabled={!canSave}
+            disabled={!canSave || busy}
           >
-            <ShieldCheck className="h-4 w-4 mr-2" />
-            {lang === "fr" ? "Enregistrer la fiche" : "Save profile"}
+            {busy ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <ShieldCheck className="h-4 w-4 mr-2" />}
+            {busy ? (lang === "fr" ? "Enregistrement…" : "Saving…") : (lang === "fr" ? "Enregistrer la fiche" : "Save profile")}
           </Button>
         </footer>
       </div>
@@ -5940,6 +6147,8 @@ function Toolbar({
   onRenameSession,
   onRetrySync,
   activeUser,
+  canChangeSession = true,
+  canEditAuditSession = true,
   canManageUsers,
   canManageAudits,
   canDeleteAudits,
@@ -5964,6 +6173,8 @@ function Toolbar({
   onRenameSession: (id: string, name: string) => void;
   onRetrySync?: () => void;
   activeUser?: AppUser | null;
+  canChangeSession?: boolean;
+  canEditAuditSession?: boolean;
   canManageUsers?: boolean;
   canManageAudits?: boolean;
   canDeleteAudits?: boolean;
@@ -6002,11 +6213,11 @@ function Toolbar({
 
           <div className="flex items-center gap-2">
             {/* Annuler / Rétablir (compact on mobile) */}
-            <Button size="sm" variant="outline" className="px-2" onClick={onUndo} title={lang === "fr" ? "Annuler" : "Undo"}>
+            <Button size="sm" variant="outline" className="px-2" onClick={onUndo} disabled={!canEditAuditSession} title={lang === "fr" ? "Annuler" : "Undo"}>
               <Undo2 className="h-4 w-4 sm:mr-1" />
               <span className="hidden sm:inline">{lang === "fr" ? "Annuler" : "Undo"}</span>
             </Button>
-            <Button size="sm" variant="outline" className="px-2" onClick={onRedo} title={lang === "fr" ? "Rétablir" : "Redo"}>
+            <Button size="sm" variant="outline" className="px-2" onClick={onRedo} disabled={!canEditAuditSession} title={lang === "fr" ? "Rétablir" : "Redo"}>
               <Redo2 className="h-4 w-4 sm:mr-1" />
               <span className="hidden sm:inline">{lang === "fr" ? "Rétablir" : "Redo"}</span>
             </Button>
@@ -6058,8 +6269,8 @@ function Toolbar({
 
         {/* Row 2: sessions + autosave */}
         <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2">
-          <Select value={activeSessionId} onValueChange={(v) => onChangeSession(v)}>
-            <SelectTrigger className="w-full sm:w-[260px]" title={t.session}>
+          <Select value={activeSessionId} onValueChange={(v) => onChangeSession(v)} disabled={!canChangeSession}>
+            <SelectTrigger className="w-full sm:w-[260px]" title={t.session} disabled={!canChangeSession}>
               <span className="truncate">{sessions.find((s) => s.id === activeSessionId)?.name || t.session}</span>
             </SelectTrigger>
             <SelectContent>
@@ -6076,6 +6287,7 @@ function Toolbar({
               size="sm"
               variant={showSessionActions ? "default" : "outline"}
               onClick={() => setShowSessionActions((v) => !v)}
+              disabled={!canChangeSession}
               aria-expanded={showSessionActions}
               title={lang === "fr" ? "Actions de session" : "Session actions"}
             >
@@ -6084,11 +6296,11 @@ function Toolbar({
 
             {showSessionActions && (
               <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-background/80 p-2">
-                <Button size="sm" variant="outline" onClick={onCreateSession} title={t.newSession} disabled={!canManageAudits}>
+                <Button size="sm" variant="outline" onClick={onCreateSession} title={t.newSession} disabled={!canManageAudits || !canEditAuditSession}>
                   <Plus className="h-4 w-4" />
                   <span className="hidden sm:inline ml-2">{t.newSession}</span>
                 </Button>
-                <Button size="sm" variant="outline" onClick={onDuplicateSession} title={t.duplicate} disabled={!canManageAudits}>
+                <Button size="sm" variant="outline" onClick={onDuplicateSession} title={t.duplicate} disabled={!canManageAudits || !canEditAuditSession}>
                   <Copy className="h-4 w-4" />
                   <span className="hidden sm:inline ml-2">{t.duplicate}</span>
                 </Button>
@@ -6096,7 +6308,7 @@ function Toolbar({
                 <Button
                   size="sm"
                   variant="outline"
-                  disabled={!canManageAudits}
+                  disabled={!canManageAudits || !canEditAuditSession}
                   onClick={() => {
                     const current = sessions.find((s) => s.id === activeSessionId)?.name || "";
                     const proposed = window.prompt(lang === "fr" ? "Nom de la session" : "Session name", current);
@@ -6109,7 +6321,7 @@ function Toolbar({
                   <span className="hidden sm:inline ml-2">{lang === "fr" ? "Renommer" : "Rename"}</span>
                 </Button>
 
-                <Button size="sm" variant="destructive" onClick={onDeleteSession} title={t.delete} disabled={!canDeleteAudits}>
+                <Button size="sm" variant="destructive" onClick={onDeleteSession} title={t.delete} disabled={!canDeleteAudits || !canEditAuditSession}>
                   <Trash2 className="h-4 w-4" />
                   <span className="hidden sm:inline ml-2">{t.delete}</span>
                 </Button>
@@ -10893,12 +11105,26 @@ function AuditLogView({ entries, lang, onExport, onClear, canClear, canExport = 
   );
 }
 
-function EvidenceDrawer({ open, onClose, control, auditSessionId, evidenceMap, proofStatusMap, commitEvidenceChange, lang, canAddEvidence, canReviewEvidence, canUseCloudStorage, onAuditEvent }: { open: boolean; onClose: ()=>void; control: ControlItem | null; auditSessionId: string; evidenceMap: Record<string, EvidenceItem[]>; proofStatusMap: EvidenceStatusMap; commitEvidenceChange: (nextEvidenceMap: Record<string, EvidenceItem[]>, nextProofStatusMap?: EvidenceStatusMap) => void; lang: LangKey; canAddEvidence: boolean; canReviewEvidence: boolean; canUseCloudStorage: boolean; onAuditEvent?: (entry: Omit<AuditLogEntry, "id" | "at" | "actor" | "actorEmail">) => void }){
+function EvidenceDrawer({ open, onClose, control, auditSessionId, evidenceMap, proofStatusMap, commitEvidenceChange, lang, canAddEvidence, canReviewEvidence, canUseCloudStorage, onAuditEvent, onBusyChange }: { open: boolean; onClose: ()=>void; control: ControlItem | null; auditSessionId: string; evidenceMap: Record<string, EvidenceItem[]>; proofStatusMap: EvidenceStatusMap; commitEvidenceChange: (nextEvidenceMap: Record<string, EvidenceItem[]>, nextProofStatusMap?: EvidenceStatusMap) => void; lang: LangKey; canAddEvidence: boolean; canReviewEvidence: boolean; canUseCloudStorage: boolean; onAuditEvent?: (entry: Omit<AuditLogEntry, "id" | "at" | "actor" | "actorEmail">) => void; onBusyChange?: (busy: boolean) => void }){
   const t = I18N[lang];
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
 
   useEffect(()=>{ if(!open){ setNote(""); } }, [open]);
+  useEffect(() => {
+    onBusyChange?.(busy);
+    return () => onBusyChange?.(false);
+  }, [busy, onBusyChange]);
+  useEffect(() => {
+    if (!busy) return;
+    const guard = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", guard);
+    return () => window.removeEventListener("beforeunload", guard);
+  }, [busy]);
   if(!open || !control) return null;
 
   const list = evidenceMap[control.id] || [];
@@ -10925,6 +11151,7 @@ function EvidenceDrawer({ open, onClose, control, auditSessionId, evidenceMap, p
   };
 
   const setProofStatus = (status: EvidenceStatus) => {
+    if (busy) return;
     const coerced = coerceEvidenceStatusForCount(status, list.length);
     if (["to_validate", "validated", "refused"].includes(coerced) && !canReviewEvidence) {
       toast.error(lang === "fr" ? "Le workflow de validation des preuves est réservé à Premium." : "The evidence validation workflow is reserved for Premium.");
@@ -10969,6 +11196,7 @@ function EvidenceDrawer({ open, onClose, control, auditSessionId, evidenceMap, p
   };
 
   const addFile = async (file: File) => {
+    if (busy) return;
     if (!canAddEvidence) {
       toast.error(lang === "fr" ? "Votre rôle ne permet pas d’ajouter une preuve." : "Your role cannot add evidence.");
       return;
@@ -10978,6 +11206,8 @@ function EvidenceDrawer({ open, onClose, control, auditSessionId, evidenceMap, p
       toast.error(lang === "fr" ? "Aucun audit actif pour rattacher cette preuve." : "No active audit to attach this evidence to.");
       return;
     }
+
+    setBusy(true);
 
     const id = createEvidenceUuid();
     const addedAt = new Date().toISOString();
@@ -11043,6 +11273,7 @@ function EvidenceDrawer({ open, onClose, control, auditSessionId, evidenceMap, p
           ? (lang === "fr" ? "Impossible d’envoyer la preuve dans le stockage sécurisé." : "Unable to upload the evidence to secure storage.")
           : (lang === "fr" ? "Impossible d’enregistrer la preuve localement." : "Unable to save the evidence locally.")
       );
+      setBusy(false);
       return;
     }
 
@@ -11055,8 +11286,10 @@ function EvidenceDrawer({ open, onClose, control, auditSessionId, evidenceMap, p
       lang === "fr" ? `Preuve ajoutée au contrôle ${control.ref}.` : `Evidence added to control ${control.ref}.`,
       { entityId: item.id, details: `${item.filename} • ${Math.round(item.size / 1024)} KB`, before: evidenceStatusLabel(proofStatus, lang), after: evidenceStatusLabel(nextStatus, lang) }
     );
+    setBusy(false);
   };
   const addNote = () => {
+    if (busy) return;
     if (!canAddEvidence) {
       toast.error(lang === "fr" ? "Votre rôle ne permet pas d’ajouter une note de preuve." : "Your role cannot add evidence notes.");
       return;
@@ -11084,10 +11317,13 @@ function EvidenceDrawer({ open, onClose, control, auditSessionId, evidenceMap, p
     setNote("");
   };
   const remove = async (id: string) => {
+    if (busy) return;
     if (!canAddEvidence) {
       toast.error(lang === "fr" ? "Votre rôle ne permet pas de supprimer une preuve." : "Your role cannot delete evidence.");
       return;
     }
+
+    setBusy(true);
 
     const removed = (evidenceMap[control.id] || []).find(i => i.id === id);
 
@@ -11101,10 +11337,11 @@ function EvidenceDrawer({ open, onClose, control, auditSessionId, evidenceMap, p
             ? "Impossible de supprimer la preuve du stockage sécurisé."
             : "Unable to delete the evidence from secure storage."
         );
+        setBusy(false);
         return;
       }
     } else if (removed?.storageKind === "indexeddb" && removed.storageKey) {
-      deleteEvidenceFile(removed.storageKey).catch(() => undefined);
+      await deleteEvidenceFile(removed.storageKey).catch(() => undefined);
     }
 
     const remaining = (evidenceMap[control.id] || []).filter(i => i.id !== id);
@@ -11116,16 +11353,17 @@ function EvidenceDrawer({ open, onClose, control, auditSessionId, evidenceMap, p
       lang === "fr" ? `Preuve supprimée du contrôle ${control.ref}.` : `Evidence removed from control ${control.ref}.`,
       { entityId: id, details: removed?.filename, before: evidenceStatusLabel(proofStatus, lang), after: evidenceStatusLabel(nextStatus, lang) }
     );
+    setBusy(false);
   };
 
 
   return (
     <>
-      <div className="drawer-overlay" onClick={onClose}/>
+      <div className="drawer-overlay" onClick={() => { if (!busy) onClose(); }}/>
       <div className="drawer" role="dialog" aria-modal="true" aria-label={t.evidence}>
         <header>
           <div className="font-medium">{t.evidence} — {control.ref}</div>
-          <Button variant="ghost" size="icon" onClick={onClose}><X className="h-5 w-5"/></Button>
+          <Button variant="ghost" size="icon" onClick={onClose} disabled={busy}><X className="h-5 w-5"/></Button>
         </header>
         <div className="body">
           <div className="text-sm text-muted-foreground">{control.description}</div>
@@ -11151,7 +11389,7 @@ function EvidenceDrawer({ open, onClose, control, auditSessionId, evidenceMap, p
                 {evidenceStatusLabel(proofStatus, lang)}
               </Badge>
             </div>
-            <Select value={proofStatus} disabled={list.length === 0 || !canReviewEvidence} onValueChange={(v) => setProofStatus(v as EvidenceStatus)}>
+            <Select value={proofStatus} disabled={busy || list.length === 0 || !canReviewEvidence} onValueChange={(v) => setProofStatus(v as EvidenceStatus)}>
               <SelectTrigger className="w-full">
                 <span>{evidenceStatusLabel(proofStatus, lang)}</span>
               </SelectTrigger>
@@ -11175,13 +11413,13 @@ function EvidenceDrawer({ open, onClose, control, auditSessionId, evidenceMap, p
           </div>
 
           <div className="flex gap-2 items-center">
-            <input ref={fileInputRef} type="file" accept={EVIDENCE_ACCEPT_ATTRIBUTE} onChange={(e)=>{ const f=e.target.files?.[0]; if(f) addFile(f); e.currentTarget.value=''; }} className="hidden"/>
-            <Button variant="outline" disabled={!canAddEvidence} onClick={()=>fileInputRef.current?.click()}><Paperclip className="h-4 w-4 mr-1"/>{t.addFile}</Button>
+            <input ref={fileInputRef} type="file" accept={EVIDENCE_ACCEPT_ATTRIBUTE} disabled={busy} onChange={(e)=>{ const f=e.target.files?.[0]; if(f) void addFile(f); e.currentTarget.value=''; }} className="hidden"/>
+            <Button variant="outline" disabled={busy || !canAddEvidence} onClick={()=>fileInputRef.current?.click()}>{busy ? <Loader2 className="h-4 w-4 mr-1 animate-spin"/> : <Paperclip className="h-4 w-4 mr-1"/>}{busy ? (lang === "fr" ? "Traitement…" : "Processing…") : t.addFile}</Button>
           </div>
           <div className="space-y-1">
             <label className="text-sm">{t.addNote}</label>
-            <textarea className="w-full min-h-[90px] rounded-md border bg-background p-2" value={note} onChange={e=>setNote(e.target.value)} placeholder="..."/>
-            <div><Button size="sm" disabled={!canAddEvidence} onClick={addNote}>{lang==='fr'? 'Enregistrer' : 'Save'}</Button></div>
+            <textarea className="w-full min-h-[90px] rounded-md border bg-background p-2" value={note} disabled={busy} onChange={e=>setNote(e.target.value)} placeholder="..."/>
+            <div><Button size="sm" disabled={busy || !canAddEvidence} onClick={addNote}>{lang==='fr'? 'Enregistrer' : 'Save'}</Button></div>
           </div>
 
           <div>
@@ -11220,11 +11458,11 @@ function EvidenceDrawer({ open, onClose, control, auditSessionId, evidenceMap, p
                   </div>
                   {it.note && <div className="text-sm mt-1 whitespace-pre-wrap">{it.note}</div>}
                   <div className="flex justify-end gap-2">
-                    <Button variant="outline" size="sm" onClick={() => downloadEvidenceItem(it, lang)}>
+                    <Button variant="outline" size="sm" disabled={busy} onClick={() => downloadEvidenceItem(it, lang)}>
                       <Download className="h-4 w-4 mr-1" />
                       {lang==='fr'? 'Télécharger' : 'Download'}
                     </Button>
-                    <Button variant="ghost" size="sm" disabled={!canAddEvidence} onClick={() => { void remove(it.id); }}>{lang==='fr'? 'Supprimer' : 'Delete'}</Button>
+                    <Button variant="ghost" size="sm" disabled={busy || !canAddEvidence} onClick={() => { void remove(it.id); }}>{lang==='fr'? 'Supprimer' : 'Delete'}</Button>
                   </div>
                 </div>
               ))}
@@ -11982,8 +12220,8 @@ function GapTrackApp({
   }, [route, lang]);
 
   // Sessions
-  const [sessions, setSessions] = useState<Session[]>(()=>loadSessions());
-  const [activeSessionId, setActiveSessionId] = useState<string>(()=>loadActiveSessionId() || "");
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [activeSessionId, setActiveSessionId] = useState("");
 
   // Templates (checklists) used by the onboarding wizard
   const [templates, setTemplates] = useState<ChecklistTemplate[]>(() => loadTemplates());
@@ -12145,7 +12383,6 @@ function GapTrackApp({
     setAuditLog((prev) => {
       const next = [nextEntry, ...prev].slice(0, 800);
       auditLogRef.current = next;
-      saveAuditLogForSession(activeSessionId, next);
       return next;
     });
   }, [activeSessionId, activeUser?.email, activeUser?.name]);
@@ -12156,7 +12393,6 @@ function GapTrackApp({
       toast.error(lang === "fr" ? "Seul un administrateur peut vider le journal." : "Only an administrator can clear the log.");
       return;
     }
-    saveAuditLogForSession(activeSessionId, []);
     auditLogRef.current = [];
     setAuditLog([]);
     toast.success(lang === "fr" ? "Journal vidé." : "Audit log cleared.");
@@ -12921,46 +13157,34 @@ function GapTrackApp({
     toast.success(lang === "fr" ? "E-mail de réinitialisation envoyé." : "Password reset email sent.");
   }, [activeUser, canManageSubscriptionsFlag, canManageUsersFlag, lang, users]);
 
-  useEffect(() => {
-    if (sessions.length <= 1) return;
+  const updateSessionProfile = React.useCallback(async (sessionId: string, patch: Partial<Session>): Promise<boolean> => {
+    if (!requireAuditManager()) return false;
+    const current = sessions.find((session) => session.id === sessionId);
+    if (!current) return false;
+    const updated: Session = { ...current, ...patch, bootstrap: false };
 
-    const removed = sessions.filter(isBootstrapAuditSession);
-    if (removed.length === 0) return;
-
-    const cleaned = sessions.filter((s) => !isBootstrapAuditSession(s));
-    if (cleaned.length === 0) return;
-
-    removed.forEach((s) => removeLocalAuditData(s.id));
-    saveSessions(cleaned);
-    setSessions(cleaned);
-
-    if (!cleaned.some((s) => s.id === activeSessionId)) {
-      const nextActive = cleaned[0].id;
-      saveActiveSessionId(nextActive);
-      setActiveSessionId(nextActive);
+    try {
+      await updateAuditSessionMetadataOnBackend(updated);
+      setSessions((prev) => prev.map((session) => session.id === sessionId ? updated : session));
+      appendAuditLog({
+        action: "audit_updated",
+        entityType: "audit",
+        entityId: sessionId,
+        message: lang === "fr" ? "Fiche d’audit mise à jour." : "Audit profile updated.",
+        details: Object.keys(patch).join(", "),
+      });
+      toast.success(lang === "fr" ? "Fiche d’audit mise à jour" : "Audit profile updated");
+      return true;
+    } catch (error) {
+      console.error("Unable to update audit profile.", error);
+      toast.error(lang === "fr" ? "La fiche n’a pas été enregistrée sur le serveur." : "The profile was not saved on the server.");
+      return false;
     }
-  }, [sessions, activeSessionId]);
-
-  const updateSessionProfile = React.useCallback((sessionId: string, patch: Partial<Session>) => {
-    if (!requireAuditManager()) return;
-    setSessions((prev) => {
-      const next = prev.map((s) => (s.id === sessionId ? { ...s, ...patch } : s));
-      saveSessions(next);
-      return next;
-    });
-    appendAuditLog({
-      action: "audit_updated",
-      entityType: "audit",
-      entityId: sessionId,
-      message: lang === "fr" ? "Fiche d’audit mise à jour." : "Audit profile updated.",
-      details: Object.keys(patch).join(", "),
-    });
-    toast.success(lang === "fr" ? "Fiche d’audit mise à jour" : "Audit profile updated");
-  }, [lang, requireAuditManager, appendAuditLog]);
+  }, [lang, requireAuditManager, appendAuditLog, sessions]);
 
   
   
-  const renameSession = React.useCallback((sessionId: string, newName: string) => {
+  const renameSession = React.useCallback(async (sessionId: string, newName: string) => {
       if (!requireAuditManager()) return;
 	  const name = newName.trim();
 	  if (!name) {
@@ -12968,21 +13192,26 @@ function GapTrackApp({
 		return;
 	  }
 
-	  setSessions((prev) => {
-		const before = prev.find((s) => s.id === sessionId)?.name;
-		const next = prev.map((s) => (s.id === sessionId ? { ...s, name } : s));
-		saveSessions(next); // <-- persistance
+      const current = sessions.find((session) => session.id === sessionId);
+      if (!current) return;
+      const updated: Session = { ...current, name, bootstrap: false };
+
+      try {
+        await updateAuditSessionMetadataOnBackend(updated);
+        setSessions((prev) => prev.map((session) => session.id === sessionId ? updated : session));
         appendAuditLog({
           action: "audit_updated",
           entityType: "audit",
           entityId: sessionId,
           message: lang === "fr" ? "Audit renommé." : "Audit renamed.",
-          before,
+          before: current.name,
           after: name,
         });
-		return next;
-	  });
-  }, [lang, requireAuditManager, appendAuditLog]);
+      } catch (error) {
+        console.error("Unable to rename audit.", error);
+        toast.error(lang === "fr" ? "Le nouvel intitulé n’a pas été enregistré." : "The new name was not saved.");
+      }
+  }, [lang, requireAuditManager, appendAuditLog, sessions]);
 
   
   
@@ -12995,10 +13224,35 @@ function GapTrackApp({
   // Plan d’action (persisté par session dans le navigateur)
   const [plans, setPlans] = useState<Record<string, PlanAction>>({});
 
+    // Autosave "pro" (debounce + indicateur)
+  const [saveState, setSaveState] = useState<SaveState>("saved");
+  const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
+  const [isAuditLoading, setIsAuditLoading] = useState(false);
+  const [isAuditMutating, setIsAuditMutating] = useState(false);
+  const [isEvidenceBusy, setIsEvidenceBusy] = useState(false);
+  const [auditLoadError, setAuditLoadError] = useState<string | null>(null);
+  const [auditReloadKey, setAuditReloadKey] = useState(0);
+  const [backendInitReloadKey, setBackendInitReloadKey] = useState(0);
+  const saveTimerRef = useRef<number | null>(null);
+  const saveSeqRef = useRef(0);
+  const skipNextAutosaveSessionRef = useRef<string | null>(null);
+  const activeSessionIdRef = useRef(activeSessionId);
+  const langRef = useRef(lang);
+  const snapshotCacheRef = useRef<Map<string, SnapshotPayload>>(new Map());
+  const saveQueueRef = useRef<Map<string, Promise<void>>>(new Map());
 
+  const rowsRef = useRef<ControlItem[]>([]);
+  const evidenceMapRef = useRef<Record<string, EvidenceItem[]>>({});
+  const proofStatusMapRef = useRef<EvidenceStatusMap>({});
+  const plansRef = useRef<Record<string, PlanAction>>({});
+  const undoStack = useRef<AuditSnapshot[]>([]);
+  const redoStack = useRef<AuditSnapshot[]>([]);
+
+  useEffect(() => { activeSessionIdRef.current = activeSessionId; }, [activeSessionId]);
+  useEffect(() => { langRef.current = lang; }, [lang]);
 
   useEffect(() => {
-    if (!currentSession) return;
+    if (!currentSession || isAuditLoading || auditLoadError) return;
     if (autoOpenedWizardForSessionRef.current === currentSession.id) return;
 
     const auditIsReady = Boolean(
@@ -13015,21 +13269,7 @@ function GapTrackApp({
       autoOpenedWizardForSessionRef.current = currentSession.id;
       setWizardOpen(true);
     }
-  }, [currentSession, rows.length]);
-  
-    // Autosave "pro" (debounce + indicateur)
-  const [saveState, setSaveState] = useState<SaveState>("saved");
-  const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
-  const saveTimerRef = useRef<number | null>(null);
-  const saveSeqRef = useRef(0);
-  const skipAutosaveRef = useRef(true);
-
-  const rowsRef = useRef<ControlItem[]>([]);
-  const evidenceMapRef = useRef<Record<string, EvidenceItem[]>>({});
-  const proofStatusMapRef = useRef<EvidenceStatusMap>({});
-  const plansRef = useRef<Record<string, PlanAction>>({});
-  const undoStack = useRef<AuditSnapshot[]>([]);
-  const redoStack = useRef<AuditSnapshot[]>([]);
+  }, [auditLoadError, currentSession, isAuditLoading, rows.length]);
 
   const cloneForHistory = React.useCallback(<T,>(value: T): T => {
     return JSON.parse(JSON.stringify(value ?? null));
@@ -13071,18 +13311,20 @@ function GapTrackApp({
   }, []);
 
   const undoAuditChange = React.useCallback(() => {
+    if (isAuditLoading || isAuditMutating || auditLoadError) return;
     const previous = undoStack.current.pop();
     if (!previous) return;
     redoStack.current.push(currentSnapshot());
     applySnapshot(previous);
-  }, [applySnapshot, currentSnapshot]);
+  }, [applySnapshot, auditLoadError, currentSnapshot, isAuditLoading, isAuditMutating]);
 
   const redoAuditChange = React.useCallback(() => {
+    if (isAuditLoading || isAuditMutating || auditLoadError) return;
     const next = redoStack.current.pop();
     if (!next) return;
     undoStack.current.push(currentSnapshot());
     applySnapshot(next);
-  }, [applySnapshot, currentSnapshot]);
+  }, [applySnapshot, auditLoadError, currentSnapshot, isAuditLoading, isAuditMutating]);
 
   useEffect(() => { rowsRef.current = rows; }, [rows]);
   useEffect(() => { evidenceMapRef.current = evidenceMap; }, [evidenceMap]);
@@ -13090,35 +13332,102 @@ function GapTrackApp({
   useEffect(() => { plansRef.current = plans; }, [plans]);
   useEffect(() => { auditLogRef.current = auditLog; }, [auditLog]);
 
-  const hydrateFromBackend = React.useCallback(async (sessionId: string) => {
-	  if (!isBackendSyncEnabled()) return false;
-	  const snap = await apiGetSnapshot(sessionId);
-	  if (!snap) return false;
+  const persistentSnapshot = React.useCallback((): SnapshotPayload => normalizeSnapshotPayload({
+    rows: cloneForHistory(rowsRef.current),
+    evidenceMap: cloneForHistory(evidenceMapRef.current),
+    plans: cloneForHistory(plansRef.current),
+    proofStatusMap: cloneForHistory(proofStatusMapRef.current),
+    auditLog: cloneForHistory(auditLogRef.current),
+  }), [cloneForHistory]);
 
-	  const backendEvidenceMap = await mergeEvidenceMapWithBackend(sessionId, snap.evidenceMap || {});
-
-	  applySnapshot({
-		rows: snap.rows || [],
-		evidenceMap: backendEvidenceMap,
-		proofStatusMap: snap.proofStatusMap || {},
-		plans: snap.plans || {},
-	  });
-	  const loadedLog = Array.isArray(snap.auditLog) ? snap.auditLog : [];
-	  auditLogRef.current = loadedLog;
-	  setAuditLog(loadedLog);
-	  resetHistory();
-	  return true;
+  const applyPersistedSnapshot = React.useCallback((snapshot: SnapshotPayload) => {
+    const normalized = normalizeSnapshotPayload(snapshot);
+    applySnapshot({
+      rows: normalized.rows,
+      evidenceMap: normalized.evidenceMap,
+      proofStatusMap: normalized.proofStatusMap || {},
+      plans: normalized.plans,
+    });
+    const nextLog = normalized.auditLog || [];
+    auditLogRef.current = nextLog;
+    setAuditLog(nextLog);
+    resetHistory();
   }, [applySnapshot, resetHistory]);
 
-  const pushToBackend = React.useCallback(async (sessionId: string, payload: {
-	  rows: ControlItem[];
-	  evidenceMap: Record<string, EvidenceItem[]>;
-	  plans: Record<string, PlanAction>;
-	  proofStatusMap?: EvidenceStatusMap;
-	  auditLog?: AuditLogEntry[];
-  }) => {
-	  await apiPutSnapshot(sessionId, payload);
+  const fetchPersistedSnapshot = React.useCallback(async (sessionId: string): Promise<SnapshotPayload | null> => {
+    const cached = snapshotCacheRef.current.get(sessionId);
+    if (cached) return normalizeSnapshotPayload(cached);
+
+    const remote = await apiGetSnapshot(sessionId);
+    if (!remote) return null;
+    const normalized = normalizeSnapshotPayload(remote);
+    normalized.evidenceMap = await mergeEvidenceMapWithBackend(sessionId, normalized.evidenceMap);
+    snapshotCacheRef.current.set(sessionId, normalized);
+    return normalizeSnapshotPayload(normalized);
   }, []);
+
+  const pushToBackend = React.useCallback(async (sessionId: string, payload: SnapshotPayload) => {
+    const normalized = normalizeSnapshotPayload(payload);
+    const previous = saveQueueRef.current.get(sessionId) || Promise.resolve();
+    const queued = previous
+      .catch(() => undefined)
+      .then(async () => {
+        await apiPutSnapshot(sessionId, normalized);
+        snapshotCacheRef.current.set(sessionId, normalizeSnapshotPayload(normalized));
+      });
+    saveQueueRef.current.set(sessionId, queued);
+
+    try {
+      await queued;
+    } finally {
+      if (saveQueueRef.current.get(sessionId) === queued) saveQueueRef.current.delete(sessionId);
+    }
+  }, []);
+
+  const waitForPendingSave = React.useCallback(async (sessionId: string) => {
+    const pending = saveQueueRef.current.get(sessionId);
+    if (pending) await pending;
+  }, []);
+
+  const cancelScheduledAutosave = React.useCallback(() => {
+    saveSeqRef.current += 1;
+    if (saveTimerRef.current !== null) {
+      window.clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+  }, []);
+
+  const flushActiveAudit = React.useCallback(async () => {
+    const sessionId = activeSessionIdRef.current;
+    if (!sessionId || auditLoadError) return;
+    cancelScheduledAutosave();
+    await waitForPendingSave(sessionId);
+    setSaveState("syncing");
+    await pushToBackend(sessionId, persistentSnapshot());
+    if (activeSessionIdRef.current === sessionId) {
+      setLastSavedAt(Date.now());
+      setSaveState("saved");
+    }
+  }, [auditLoadError, cancelScheduledAutosave, persistentSnapshot, pushToBackend, waitForPendingSave]);
+
+  const logoutAfterSaving = React.useCallback(async () => {
+    if (isAuditLoading || isAuditMutating || isEvidenceBusy) {
+      toast.info(lang === "fr" ? "Une opération d’audit est en cours." : "An audit operation is still running.");
+      return;
+    }
+    setIsAuditMutating(true);
+    try {
+      await flushActiveAudit();
+      logoutUser();
+      navigate("home", true);
+    } catch (error) {
+      console.error("Unable to save audit before logout.", error);
+      setSaveState("sync_error");
+      toast.error(lang === "fr" ? "Déconnexion annulée : l’audit n’a pas pu être sauvegardé." : "Sign-out cancelled: the audit could not be saved.");
+    } finally {
+      setIsAuditMutating(false);
+    }
+  }, [flushActiveAudit, isAuditLoading, isAuditMutating, isEvidenceBusy, lang, logoutUser, navigate]);
 
 
 
@@ -13216,17 +13525,32 @@ function GapTrackApp({
 
 
 
-  // Init sessions from Supabase only. No audit data is persisted in the browser.
-  useEffect(()=>{
+  // Initialize the user's audits from Supabase. The first placeholder and its
+  // snapshot are inserted together so the UI never exposes a half-created audit.
+  useEffect(() => {
     let cancelled = false;
 
     async function initBackendSessions() {
       if (!activeUser) {
+        cancelScheduledAutosave();
+        snapshotCacheRef.current.clear();
+        saveQueueRef.current.clear();
         setSessions([]);
         setActiveSessionId("");
+        activeSessionIdRef.current = "";
+        setAuditLoadError(null);
+        setIsAuditLoading(false);
         return;
       }
 
+      cancelScheduledAutosave();
+      snapshotCacheRef.current.clear();
+      saveQueueRef.current.clear();
+      setSessions([]);
+      setActiveSessionId("");
+      activeSessionIdRef.current = "";
+      setIsAuditLoading(true);
+      setAuditLoadError(null);
       try {
         const remoteSessions = await loadSessionsFromBackend();
         if (cancelled) return;
@@ -13239,24 +13563,35 @@ function GapTrackApp({
 
         const first: Session = {
           id: uuid(),
-          name: lang === "fr" ? "Audit 1" : "Audit 1",
+          name: "Audit 1",
           createdAt: new Date().toISOString(),
           auditDate: defaultAuditDate(),
           auditType: "initial",
           criticality: "medium",
+          bootstrap: true,
         };
+        const initialSnapshot = normalizeSnapshotPayload({
+          rows: await loadDefaultAuditRows().catch(() => seedRowsFrom([])),
+          evidenceMap: {},
+          proofStatusMap: {},
+          plans: {},
+          auditLog: [],
+        });
 
-        await saveSessionsToBackend([first]);
+        await createAuditSessionOnBackend(first, initialSnapshot);
         if (cancelled) return;
 
+        snapshotCacheRef.current.set(first.id, initialSnapshot);
         setSessions([first]);
         setActiveSessionId(first.id);
       } catch (error) {
         console.error("Unable to initialize Supabase audit sessions.", error);
         if (!cancelled) {
           setSaveState("sync_error");
-          toast.error(lang === "fr" ? "Impossible de charger les audits depuis Supabase." : "Unable to load audits from Supabase.");
+          setAuditLoadError(langRef.current === "fr" ? "Impossible de charger les audits depuis Supabase." : "Unable to load audits from Supabase.");
         }
+      } finally {
+        if (!cancelled && !activeSessionIdRef.current) setIsAuditLoading(false);
       }
     }
 
@@ -13265,114 +13600,125 @@ function GapTrackApp({
     return () => {
       cancelled = true;
     };
-  }, [activeUser?.id, lang]);
+  }, [activeUser?.id, backendInitReloadKey, cancelScheduledAutosave]);
 
-  // Load rows/evidences whenever active session changes
-  // Load rows/evidences whenever active session changes
-  // Load rows/evidences whenever active session changes
+  // Loading is deliberately blocking: stale rows from the previous audit are
+  // never editable while the target snapshot is being fetched.
   useEffect(() => {
     if (!activeSessionId) return;
+    const sessionId = activeSessionId;
+    activeSessionIdRef.current = sessionId;
+    let cancelled = false;
 
-    // ✅ skip autosave sur switch de session
-    skipAutosaveRef.current = true;
+    setIsAuditLoading(true);
+    setAuditLoadError(null);
+    skipNextAutosaveSessionRef.current = sessionId;
 
-    const loadedAuditLog = loadAuditLogForSession(activeSessionId);
-    auditLogRef.current = loadedAuditLog;
-    setAuditLog(loadedAuditLog);
+    void (async () => {
+      try {
+        let snapshot = await fetchPersistedSnapshot(sessionId);
+        if (!snapshot) {
+          snapshot = normalizeSnapshotPayload({
+            rows: await loadDefaultAuditRows().catch(() => seedRowsFrom([])),
+            evidenceMap: await mergeEvidenceMapWithBackend(sessionId, {}),
+            proofStatusMap: {},
+            plans: {},
+            auditLog: [],
+          });
+          await apiPutSnapshot(sessionId, snapshot);
+          snapshotCacheRef.current.set(sessionId, snapshot);
+        }
 
-    (async () => {
-      // 1) Essaie d’abord Supabase
-      const ok = await hydrateFromBackend(activeSessionId);
-      if (ok) return;
-
-      // 2) Si l’audit existe mais n’a pas encore de snapshot, initialise depuis listing.json
-      const loadedEvidenceMap = await mergeEvidenceMapWithBackend(activeSessionId, {});
-      const url = "/listing.json";
-      fetch(url)
-        .then((r) => (r.ok ? r.text() : Promise.reject(r.status)))
-        .then((text) => {
-          try {
-            const arr = JSON.parse(text);
-            applySnapshot({ rows: Array.isArray(arr) ? (arr as ControlItem[]) : [], evidenceMap: loadedEvidenceMap, proofStatusMap: {}, plans: {} });
-          } catch {
-            applySnapshot({ rows: [], evidenceMap: loadedEvidenceMap, proofStatusMap: {}, plans: {} });
-          }
-          resetHistory();
-        })
-        .catch(() => {
-          applySnapshot({ rows: [], evidenceMap: loadedEvidenceMap, proofStatusMap: {}, plans: {} });
-          resetHistory();
-        });
+        if (cancelled || activeSessionIdRef.current !== sessionId) return;
+        applyPersistedSnapshot(snapshot);
+        setSaveState("saved");
+      } catch (error) {
+        console.error("Unable to load audit snapshot.", error);
+        if (cancelled || activeSessionIdRef.current !== sessionId) return;
+        setAuditLoadError(langRef.current === "fr" ? "Impossible de charger cet audit. Aucune modification n’est autorisée tant qu’il n’est pas rechargé." : "Unable to load this audit. Editing is blocked until it is reloaded.");
+        setSaveState("sync_error");
+      } finally {
+        if (!cancelled && activeSessionIdRef.current === sessionId) setIsAuditLoading(false);
+      }
     })();
-  }, [activeSessionId, hydrateFromBackend, applySnapshot, resetHistory]);
 
+    return () => { cancelled = true; };
+  }, [activeSessionId, auditReloadKey, applyPersistedSnapshot, fetchPersistedSnapshot]);
 
-
-  
-    
-
-
-    // Autosave "pro" : debounce + indicateur (pas de toast)
+  // Debounced autosave. Every write is captured for one immutable session id
+  // and serialized with the previous write for that same audit.
   useEffect(() => {
-    if (!activeSessionId) return;
+    if (!activeSessionId || isAuditLoading || isAuditMutating || auditLoadError) return;
 
-    // Skip le 1er passage après hydratation (chargement session)
-    if (skipAutosaveRef.current) {
-      skipAutosaveRef.current = false;
+    if (skipNextAutosaveSessionRef.current === activeSessionId) {
+      skipNextAutosaveSessionRef.current = null;
       return;
     }
 
+    const sessionId = activeSessionId;
+    const payload = normalizeSnapshotPayload({ rows, evidenceMap, plans, proofStatusMap, auditLog });
     const saveSeq = ++saveSeqRef.current;
     setSaveState("saving");
 
-    if (saveTimerRef.current) {
+    if (saveTimerRef.current !== null) {
       window.clearTimeout(saveTimerRef.current);
     }
 
-    saveTimerRef.current = window.setTimeout(async () => {
-      const payload = { rows, evidenceMap, plans, proofStatusMap, auditLog };
-
+    const timerId = window.setTimeout(async () => {
+      if (saveTimerRef.current === timerId) saveTimerRef.current = null;
       try {
-        // Sauvegarde Supabase uniquement : aucun snapshot d’audit n’est écrit dans le navigateur.
-        setSaveState("syncing");
-        await pushToBackend(activeSessionId, payload);
+        if (activeSessionIdRef.current === sessionId) setSaveState("syncing");
+        await pushToBackend(sessionId, payload);
 
-        if (saveSeqRef.current === saveSeq) {
+        if (saveSeqRef.current === saveSeq && activeSessionIdRef.current === sessionId) {
           setLastSavedAt(Date.now());
           setSaveState("saved");
         }
       } catch (e) {
         console.error("Backend sync error:", e);
 
-        if (saveSeqRef.current === saveSeq) {
+        if (saveSeqRef.current === saveSeq && activeSessionIdRef.current === sessionId) {
           setSaveState("sync_error");
         }
       }
-    }, 650); // <-- debounce ms (ajuste si tu veux)
+    }, 650);
+    saveTimerRef.current = timerId;
 
     return () => {
-      if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
+      if (saveTimerRef.current === timerId) {
+        window.clearTimeout(timerId);
+        saveTimerRef.current = null;
+      }
     };
-  }, [activeSessionId, rows, evidenceMap, proofStatusMap, plans, auditLog, pushToBackend]);
+  }, [activeSessionId, auditLoadError, auditLog, evidenceMap, isAuditLoading, isAuditMutating, plans, proofStatusMap, pushToBackend, rows]);
 
-
-
-
+  useEffect(() => {
+    const shouldGuard = saveState === "saving" || saveState === "syncing" || isAuditMutating;
+    if (!shouldGuard) return;
+    const guard = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", guard);
+    return () => window.removeEventListener("beforeunload", guard);
+  }, [isAuditMutating, saveState]);
 
   const retryBackendSync = React.useCallback(async () => {
-    if (!activeSessionId) return;
+    if (!activeSessionId) {
+      setAuditLoadError(null);
+      setBackendInitReloadKey((value) => value + 1);
+      return;
+    }
 
-    const payload = {
-      rows: rowsRef.current,
-      evidenceMap: evidenceMapRef.current,
-      plans: plansRef.current,
-      proofStatusMap: proofStatusMapRef.current,
-      auditLog: auditLogRef.current,
-    };
+    if (auditLoadError) {
+      snapshotCacheRef.current.delete(activeSessionId);
+      setAuditReloadKey((value) => value + 1);
+      return;
+    }
 
     setSaveState("syncing");
     try {
-      await pushToBackend(activeSessionId, payload);
+      await pushToBackend(activeSessionId, persistentSnapshot());
       setLastSavedAt(Date.now());
       setSaveState("saved");
       toast.success(lang === "fr" ? "Synchronisation réussie." : "Sync completed.");
@@ -13381,7 +13727,7 @@ function GapTrackApp({
       setSaveState("sync_error");
       toast.error(lang === "fr" ? "Synchronisation serveur indisponible." : "Server sync unavailable.");
     }
-  }, [activeSessionId, lang, pushToBackend]);
+  }, [activeSessionId, auditLoadError, lang, persistentSnapshot, pushToBackend]);
 
 
 
@@ -13510,26 +13856,30 @@ function GapTrackApp({
     return false;
   }, [activeUser?.subscriptionPlan, lang, requestPremiumByEmail, sessions]);
 
-  const createSessionFromRows = React.useCallback((session: Session, baseRows: ControlItem[]) => {
-    if (!requireAuditManager()) return;
-    if (!allowCreateAuditForPlan()) return;
-    const bootstrap = sessions.length === 1 && isBootstrapAuditSession(sessions[0]) ? sessions[0] : null;
-    const next = bootstrap ? [session] : [session, ...sessions];
+  const isPristineBootstrapAudit = React.useCallback((session: Session | null | undefined) => {
+    return Boolean(
+      isBootstrapAuditSession(session) &&
+      Object.values(evidenceMapRef.current).every((items) => !items?.length) &&
+      Object.keys(proofStatusMapRef.current).length === 0 &&
+      Object.values(plansRef.current).every((plan) => !hasAnyPlanFields(plan)) &&
+      auditLogRef.current.length === 0
+    );
+  }, []);
 
-    setSessions(next);
-    saveSessions(next);
+  const activatePersistedAudit = React.useCallback((sessionId: string, snapshot: SnapshotPayload) => {
+    snapshotCacheRef.current.set(sessionId, normalizeSnapshotPayload(snapshot));
+    skipNextAutosaveSessionRef.current = sessionId;
+    activeSessionIdRef.current = sessionId;
+    setIsAuditLoading(true);
+    setActiveSessionId(sessionId);
+    setAuditLoadError(null);
+    resetHistory();
+  }, [resetHistory]);
 
-    if (bootstrap) {
-      removeLocalAuditData(bootstrap.id);
-    }
+  const createSessionFromRows = React.useCallback(async (requestedSession: Session, baseRows: ControlItem[]): Promise<boolean> => {
+    if (!requireAuditManager() || !allowCreateAuditForPlan() || isAuditLoading || isAuditMutating || isEvidenceBusy || auditLoadError) return false;
 
-    saveActiveSessionId(session.id);
-    setActiveSessionId(session.id);
-
-    saveRowsForSession(session.id, baseRows);
-    saveEvidencesForSession(session.id, {}); // fresh
-    saveProofStatusForSession(session.id, {});
-    savePlansForSession(session.id, {});
+    const session: Session = { ...requestedSession, bootstrap: false };
     const initialLog: AuditLogEntry[] = [{
       id: uuid(),
       at: new Date().toISOString(),
@@ -13539,79 +13889,67 @@ function GapTrackApp({
       entityType: "audit",
       entityId: session.id,
       message: lang === "fr" ? `Audit créé : ${session.name}` : `Audit created: ${session.name}`,
-      details: `${sessionFrameworkLabel(session, lang)} · ${baseRows.length} contrôles`,
+      details: `${sessionFrameworkLabel(session, lang)} · ${baseRows.length} ${lang === "fr" ? "contrôles" : "controls"}`,
     }];
-    saveAuditLogForSession(session.id, initialLog);
-    auditLogRef.current = initialLog;
-    setAuditLog(initialLog);
-    applySnapshot({ rows: baseRows, evidenceMap: {}, proofStatusMap: {}, plans: {} });
-    resetHistory();
+    const snapshot = normalizeSnapshotPayload({
+      rows: baseRows,
+      evidenceMap: {},
+      proofStatusMap: {},
+      plans: {},
+      auditLog: initialLog,
+    });
+    const bootstrap = sessions.length === 1 && isPristineBootstrapAudit(sessions[0]) ? sessions[0] : null;
+    let created = false;
 
-    toast.success(lang === "fr" ? "Audit créé" : "Audit created");
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessions, lang, applySnapshot, resetHistory, requireAuditManager, allowCreateAuditForPlan, activeUser?.name, activeUser?.email]);
+    setIsAuditMutating(true);
+    try {
+      await flushActiveAudit();
+      await createAuditSessionOnBackend(session, snapshot);
+      created = true;
 
-  // Sessions API
-  const createSession = () => {
-    if (!requireAuditManager()) return;
-    if (!allowCreateAuditForPlan()) return;
-    const s: Session = {
+      if (bootstrap) {
+        try {
+          await deleteAuditSessionFromBackend(bootstrap.id);
+          snapshotCacheRef.current.delete(bootstrap.id);
+        } catch (error) {
+          await deleteAuditSessionFromBackend(session.id).catch(() => undefined);
+          created = false;
+          throw error;
+        }
+      }
+
+      setSessions(bootstrap ? [session] : [session, ...sessions]);
+      activatePersistedAudit(session.id, snapshot);
+      setWizardOpen(false);
+      toast.success(lang === "fr" ? "Audit créé" : "Audit created");
+      return true;
+    } catch (error) {
+      if (created) await deleteAuditSessionFromBackend(session.id).catch(() => undefined);
+      console.error("Unable to create audit transactionally.", error);
+      toast.error(lang === "fr" ? "L’audit n’a pas été créé : aucune donnée partielle n’a été conservée." : "The audit was not created; no partial data was kept.");
+      return false;
+    } finally {
+      setIsAuditMutating(false);
+    }
+  }, [activeUser?.email, activeUser?.name, activatePersistedAudit, allowCreateAuditForPlan, auditLoadError, flushActiveAudit, isAuditLoading, isAuditMutating, isEvidenceBusy, isPristineBootstrapAudit, lang, requireAuditManager, sessions]);
+
+  const duplicateSession = React.useCallback(async () => {
+    if (!requireAuditManager() || !allowCreateAuditForPlan() || isAuditLoading || isAuditMutating || isEvidenceBusy || auditLoadError) return;
+    if (!activeSessionId) {
+      setWizardOpen(true);
+      return;
+    }
+    const source = sessions.find((session) => session.id === activeSessionId);
+    if (!source) return;
+
+    const clone: Session = {
+      ...source,
       id: uuid(),
-      name: lang === "fr" ? `Audit ${sessions.length + 1}` : `Audit ${sessions.length + 1}`,
+      name: `${source.name || "Audit"}${lang === "fr" ? " (copie)" : " (copy)"}`,
       createdAt: new Date().toISOString(),
-      auditDate: defaultAuditDate(),
-      auditType: "initial",
-      criticality: "medium",
+      bootstrap: false,
     };
-
-    const next = [s, ...sessions];
-    setSessions(next);
-    saveSessions(next);
-
-    saveActiveSessionId(s.id);
-    setActiveSessionId(s.id);
- 
-    // ✅ NOUVEL AUDIT = mêmes contrôles mais statuts réinitialisés
-    const base = seedRowsFrom(rows);
-
-    saveRowsForSession(s.id, base);
-    saveEvidencesForSession(s.id, {}); // (optionnel mais propre)
-    saveProofStatusForSession(s.id, {});
-    savePlansForSession(s.id, {});
-    const initialLog: AuditLogEntry[] = [{
-      id: uuid(),
-      at: new Date().toISOString(),
-      actor: activeUser?.name || currentEvidenceActor(),
-      actorEmail: activeUser?.email,
-      action: "audit_created",
-      entityType: "audit",
-      entityId: s.id,
-      message: lang === "fr" ? `Nouvelle session créée : ${s.name}` : `New session created: ${s.name}`,
-      details: `${base.length} contrôles`,
-    }];
-    saveAuditLogForSession(s.id, initialLog);
-    auditLogRef.current = initialLog;
-    setAuditLog(initialLog);
-
-    applySnapshot({ rows: base, evidenceMap: {}, proofStatusMap: {}, plans: {} });
-    resetHistory();
-
-    toast.success(lang === "fr" ? "Nouvelle session créée" : "New session created");
-  };
-
-
-  const duplicateSession = () => {
-    if (!requireAuditManager()) return;
-    if (!allowCreateAuditForPlan()) return;
-    if(!activeSessionId){ createSession(); return; }
-    const cur = sessions.find(s=>s.id===activeSessionId);
-    const clone: Session = { ...(cur || {}), id: uuid(), name: (cur?.name || 'Audit') + ' (copy)', createdAt: new Date().toISOString() };
-    const next = [clone, ...sessions]; setSessions(next); saveSessions(next); saveActiveSessionId(clone.id); resetHistory(); setActiveSessionId(clone.id);
-    saveRowsForSession(clone.id, rows);
-    saveEvidencesForSession(clone.id, evidenceMap);
-    saveProofStatusForSession(clone.id, proofStatusMap);
-	savePlansForSession(clone.id, plans);
-    const clonedLog: AuditLogEntry[] = [{
+    const duplicateLog: AuditLogEntry[] = [{
       id: uuid(),
       at: new Date().toISOString(),
       actor: activeUser?.name || currentEvidenceActor(),
@@ -13619,76 +13957,105 @@ function GapTrackApp({
       action: "audit_duplicated",
       entityType: "audit",
       entityId: clone.id,
-      message: lang === "fr" ? `Audit dupliqué depuis ${cur?.name || "Audit"}.` : `Audit duplicated from ${cur?.name || "Audit"}.`,
-    }, ...auditLogRef.current];
-    saveAuditLogForSession(clone.id, clonedLog);
-    auditLogRef.current = clonedLog;
-    setAuditLog(clonedLog);
-    toast.success(lang==='fr'? 'Session dupliquée' : 'Session duplicated');
-  };
+      message: lang === "fr" ? `Audit dupliqué depuis ${source.name}.` : `Audit duplicated from ${source.name}.`,
+      details: `source_audit_id=${source.id}`,
+    }];
+    let created = false;
+    let copiedEvidence: Record<string, EvidenceItem[]> = {};
 
-  const performDeleteSession = () => {
-    if (!requireAuditDeletion()) return;
-    const idx = sessions.findIndex(s => s.id === activeSessionId);
-    const isLast = sessions.length <= 1;
-    if (isLast) {
-      // Reset to a fresh single session if we delete the last one
-      const fresh: Session = { id: uuid(), name: lang==='fr' ? 'Audit 1' : 'Audit 1', createdAt: new Date().toISOString(), auditDate: defaultAuditDate(), auditType: "initial", criticality: "medium" };
-      const base = seedRowsFrom(rows);
-      removeLocalAuditData(activeSessionId);
-      saveSessions([fresh]); setSessions([fresh]);
-      saveActiveSessionId(fresh.id); setActiveSessionId(fresh.id);
-      saveRowsForSession(fresh.id, base);
-      saveEvidencesForSession(fresh.id, {});
-      saveProofStatusForSession(fresh.id, {});
-      savePlansForSession(fresh.id, {});
-      saveAuditLogForSession(fresh.id, []);
-      auditLogRef.current = [];
-      setAuditLog([]);
-      applySnapshot({ rows: base, evidenceMap: {}, proofStatusMap: {}, plans: {} });
-      resetHistory();
-      autoOpenedWizardForSessionRef.current = null;
-      setWizardOpen(true);
-      toast.success(lang==='fr' ? 'Audit supprimé. Créez un nouvel audit.' : 'Audit deleted. Create a new audit.');
-      return;
+    setIsAuditMutating(true);
+    try {
+      await flushActiveAudit();
+      const sourceSnapshot = persistentSnapshot();
+      const provisional = normalizeSnapshotPayload({ ...sourceSnapshot, evidenceMap: {}, auditLog: duplicateLog });
+      await createAuditSessionOnBackend(clone, provisional);
+      created = true;
+
+      copiedEvidence = await duplicateEvidenceMapForAudit(sourceSnapshot.evidenceMap, clone.id);
+      const finalSnapshot = normalizeSnapshotPayload({ ...provisional, evidenceMap: copiedEvidence });
+      await apiPutSnapshot(clone.id, finalSnapshot);
+
+      setSessions([clone, ...sessions]);
+      activatePersistedAudit(clone.id, finalSnapshot);
+      toast.success(lang === "fr" ? "Audit dupliqué" : "Audit duplicated");
+    } catch (error) {
+      await cleanupDuplicatedEvidenceItems(copiedEvidence);
+      if (created) await deleteAuditSessionFromBackend(clone.id).catch(() => undefined);
+      console.error("Unable to duplicate audit transactionally.", error);
+      toast.error(lang === "fr" ? "La duplication a échoué. La copie partielle a été supprimée." : "Duplication failed. The partial copy was removed.");
+    } finally {
+      setIsAuditMutating(false);
     }
+  }, [activeSessionId, activeUser?.email, activeUser?.name, activatePersistedAudit, allowCreateAuditForPlan, auditLoadError, flushActiveAudit, isAuditLoading, isAuditMutating, isEvidenceBusy, lang, persistentSnapshot, requireAuditManager, sessions]);
 
-    // Normal deletion path
-    const survivors = sessions.filter(s => s.id !== activeSessionId);
-    saveSessions(survivors); setSessions(survivors);
-    removeLocalAuditData(activeSessionId);
+  const performDeleteSession = React.useCallback(async () => {
+    if (!requireAuditDeletion() || !activeSessionId || isAuditLoading || isAuditMutating || isEvidenceBusy || auditLoadError) return;
+    const deletedId = activeSessionId;
+    const index = sessions.findIndex((session) => session.id === deletedId);
 
+    setIsAuditMutating(true);
+    try {
+      cancelScheduledAutosave();
+      await waitForPendingSave(deletedId);
 
-    const neighbor = survivors[idx - 1] || survivors[idx] || survivors[0];
-    const newActive = neighbor?.id || '';
-    if (newActive) {
-      saveActiveSessionId(newActive); setActiveSessionId(newActive);
-      const r = loadRowsForSession(newActive) || [];
-      applySnapshot({
-        rows: r,
-        evidenceMap: loadEvidencesForSession(newActive),
-        proofStatusMap: loadProofStatusForSession(newActive),
-        plans: loadPlansForSession(newActive),
-      });
-      const nextLog = loadAuditLogForSession(newActive);
-      auditLogRef.current = nextLog;
-      setAuditLog(nextLog);
-      resetHistory();
-    } else {
-      // Aucun identifiant d’audit actif n’est conservé dans le navigateur.
-      setActiveSessionId('');
-      auditLogRef.current = [];
-      setAuditLog([]);
-      applySnapshot({ rows: [], evidenceMap: {}, proofStatusMap: {}, plans: {} });
-      resetHistory();
+      if (sessions.length <= 1) {
+        const fresh: Session = {
+          id: uuid(),
+          name: "Audit 1",
+          createdAt: new Date().toISOString(),
+          auditDate: defaultAuditDate(),
+          auditType: "initial",
+          criticality: "medium",
+          bootstrap: true,
+        };
+        const freshSnapshot = normalizeSnapshotPayload({
+          rows: await loadDefaultAuditRows().catch(() => seedRowsFrom([])),
+          evidenceMap: {},
+          proofStatusMap: {},
+          plans: {},
+          auditLog: [],
+        });
+
+        await createAuditSessionOnBackend(fresh, freshSnapshot);
+        try {
+          await deleteAuditSessionFromBackend(deletedId);
+        } catch (error) {
+          await deleteAuditSessionFromBackend(fresh.id).catch(() => undefined);
+          throw error;
+        }
+
+        snapshotCacheRef.current.delete(deletedId);
+        setSessions([fresh]);
+        autoOpenedWizardForSessionRef.current = null;
+        activatePersistedAudit(fresh.id, freshSnapshot);
+        setWizardOpen(true);
+        toast.success(lang === "fr" ? "Audit supprimé. Créez un nouvel audit." : "Audit deleted. Create a new audit.");
+        return;
+      }
+
+      await deleteAuditSessionFromBackend(deletedId);
+      snapshotCacheRef.current.delete(deletedId);
+      const survivors = sessions.filter((session) => session.id !== deletedId);
+      const neighbor = survivors[index - 1] || survivors[index] || survivors[0];
+      setSessions(survivors);
+      if (neighbor) {
+        skipNextAutosaveSessionRef.current = neighbor.id;
+        activeSessionIdRef.current = neighbor.id;
+        setIsAuditLoading(true);
+        setActiveSessionId(neighbor.id);
+      }
+      toast.success(lang === "fr" ? "Audit supprimé" : "Audit deleted");
+    } catch (error) {
+      console.error("Unable to delete audit.", error);
+      toast.error(lang === "fr" ? "La suppression n’a pas été confirmée par le serveur." : "The deletion was not confirmed by the server.");
+    } finally {
+      setIsAuditMutating(false);
     }
-
-    toast.success(lang==='fr' ? 'Session supprimée' : 'Session deleted');
-  };
+  }, [activeSessionId, activatePersistedAudit, auditLoadError, cancelScheduledAutosave, isAuditLoading, isAuditMutating, isEvidenceBusy, lang, requireAuditDeletion, sessions, waitForPendingSave]);
 
   const [confirmDelOpen, setConfirmDelOpen] = useState(false);
   const deleteSession = () => {
-    if (!requireAuditDeletion()) return;
+    if (!requireAuditDeletion() || auditLoadError || isAuditLoading || isAuditMutating || isEvidenceBusy) return;
     setConfirmDelOpen(true);
   };
 
@@ -13698,14 +14065,55 @@ function GapTrackApp({
   const openEvidence = (control: ControlItem) => { setDrawerControl(control); setDrawerOpen(true); };
   const closeEvidence = () => setDrawerOpen(false);
 
-  // Baseline comparison (previous session by createdAt)
-  const compareRows = useMemo(()=>{
-    if(sessions.length < 2) return null;
-    const others = sessions.filter(s=>s.id !== activeSessionId).sort((a,b)=> new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    const prev = others[0];
-    if(!prev) return null;
-    return loadRowsForSession(prev.id);
-  }, [sessions, activeSessionId]);
+  const changeActiveSession = React.useCallback(async (nextSessionId: string) => {
+    if (!nextSessionId || nextSessionId === activeSessionIdRef.current || isAuditLoading || isAuditMutating || isEvidenceBusy) return;
+    if (!sessions.some((session) => session.id === nextSessionId)) return;
+
+    setIsAuditMutating(true);
+    try {
+      await flushActiveAudit();
+      setDrawerOpen(false);
+      setProfileOpen(false);
+      setWizardOpen(false);
+      skipNextAutosaveSessionRef.current = nextSessionId;
+      activeSessionIdRef.current = nextSessionId;
+      setIsAuditLoading(true);
+      setAuditLoadError(null);
+      setActiveSessionId(nextSessionId);
+      resetHistory();
+    } catch (error) {
+      console.error("Unable to flush audit before switching.", error);
+      setSaveState("sync_error");
+      toast.error(lang === "fr" ? "Changement annulé : l’audit actuel n’a pas pu être sauvegardé." : "Switch cancelled: the current audit could not be saved.");
+    } finally {
+      setIsAuditMutating(false);
+    }
+  }, [flushActiveAudit, isAuditLoading, isAuditMutating, isEvidenceBusy, lang, resetHistory, sessions]);
+
+  // Comparison is loaded from the real persisted snapshot of the closest older
+  // audit, restricted to the same framework whenever one is known.
+  const [compareRows, setCompareRows] = useState<ControlItem[] | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    setCompareRows(null);
+    const current = sessions.find((session) => session.id === activeSessionId);
+    if (!current) return () => { cancelled = true; };
+    const currentTime = new Date(current.createdAt).getTime();
+    const currentFramework = normalizeSessionFrameworkId(current.frameworkId);
+    const previous = sessions
+      .filter((session) => session.id !== current.id)
+      .filter((session) => new Date(session.createdAt).getTime() < currentTime)
+      .filter((session) => !currentFramework || normalizeSessionFrameworkId(session.frameworkId) === currentFramework)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+    if (!previous) return () => { cancelled = true; };
+
+    void fetchPersistedSnapshot(previous.id)
+      .then((snapshot) => {
+        if (!cancelled && activeSessionIdRef.current === current.id) setCompareRows(snapshot?.rows || null);
+      })
+      .catch((error) => console.warn("Unable to load comparison audit.", error));
+    return () => { cancelled = true; };
+  }, [activeSessionId, fetchPersistedSnapshot, sessions]);
 
   const handleExport = React.useCallback(async () => {
     if (!requirePremiumFeature(lang === "fr" ? "L’export PDF du rapport" : "PDF report export")) return;
@@ -13826,7 +14234,7 @@ function GapTrackApp({
         onRedo={redoAuditChange}
         sessions={sessions}
         activeSessionId={activeSessionId}
-        onChangeSession={(id)=>{ saveActiveSessionId(id); resetHistory(); setActiveSessionId(id); }}
+        onChangeSession={(id) => { void changeActiveSession(id); }}
         onCreateSession={() => {
           if (!allowCreateAuditForPlan()) return;
           setWizardOpen(true);
@@ -13838,19 +14246,43 @@ function GapTrackApp({
 		onRenameSession={renameSession}
 		onRetrySync={retryBackendSync}
         activeUser={activeUser}
+        canChangeSession={!isAuditLoading && !isAuditMutating && !isEvidenceBusy}
+        canEditAuditSession={!isAuditLoading && !isAuditMutating && !isEvidenceBusy && !auditLoadError}
         canManageUsers={canManageUsersFlag}
         canManageAudits={canManageAuditsFlag}
         canDeleteAudits={canDeleteAuditsFlag}
         onOpenUsers={() => setUsersDialogOpen(true)}
         onRequestPremium={() => requestPremiumByEmail("Barre d’outils GapTrack")}
-        onLogout={() => {
-          logoutUser();
-          navigate("home", true);
-        }}
+        onLogout={() => { void logoutAfterSaving(); }}
       />
       <div className="flex">
         <Sidebar current={tab} onNavigate={setTab} lang={lang} />
         <div className="main-surface flex-1">
+          {isAuditLoading ? (
+            <main className="mx-auto max-w-3xl p-6">
+              <Card>
+                <CardContent className="flex items-center gap-3 p-6 text-muted-foreground">
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  {lang === "fr" ? "Chargement sécurisé de l’audit…" : "Securely loading the audit…"}
+                </CardContent>
+              </Card>
+            </main>
+          ) : auditLoadError ? (
+            <main className="mx-auto max-w-3xl p-6">
+              <Card>
+                <CardContent className="space-y-4 p-6">
+                  <div className="flex items-start gap-3 text-destructive">
+                    <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
+                    <p>{auditLoadError}</p>
+                  </div>
+                  <Button variant="outline" onClick={() => { void retryBackendSync(); }}>
+                    {lang === "fr" ? "Recharger l’audit" : "Reload audit"}
+                  </Button>
+                </CardContent>
+              </Card>
+            </main>
+          ) : (
+          <>
           <PageHeader tab={tab} lang={lang} rows={rows} />
           <AuditIdentityBanner session={currentSession} lang={lang} onEdit={() => setProfileOpen(true)} />
             <AnimatePresence mode="wait">
@@ -14007,10 +14439,7 @@ function GapTrackApp({
                     lang={lang}
                     onSaveProfile={updateOwnProfile}
                     onRequestPasswordReset={requestOwnPasswordReset}
-                    onLogout={() => {
-                      logoutUser();
-                      navigate("home", true);
-                    }}
+                    onLogout={() => { void logoutAfterSaving(); }}
                     onRequestPremium={() => requestPremiumByEmail(lang === "fr" ? "Paramètres - Gestion de l’abonnement" : "Settings - Subscription management")}
                   />
                 </motion.div>
@@ -14039,6 +14468,8 @@ function GapTrackApp({
                 </motion.div>
               )}
             </AnimatePresence>
+          </>
+          )}
 </div>
       </div>
 
@@ -14048,7 +14479,7 @@ function GapTrackApp({
       <ScrollTopButton/>
 
       <EvidenceDrawer
-        open={drawerOpen}
+        open={drawerOpen && !isAuditLoading && !auditLoadError}
         onClose={closeEvidence}
         control={drawerControl}
         auditSessionId={activeSessionId}
@@ -14060,6 +14491,7 @@ function GapTrackApp({
         canReviewEvidence={canReviewEvidenceFlag && isPremiumUser}
         canUseCloudStorage={isPremiumUser}
         onAuditEvent={appendAuditLog}
+        onBusyChange={setIsEvidenceBusy}
       />
 	  
       </div>
@@ -14088,7 +14520,7 @@ function GapTrackApp({
         onImportTemplate={handleImportTemplate}
         canImportTemplates={isPremiumUser}
         onPremiumRequired={requirePremiumFeature}
-        onCreateAudit={({ name, frameworkId, scope, criticality, templateId, rows: tplRows, organization, auditor, sponsor, auditDate, auditType, objectives, context })=>{
+        onCreateAudit={async ({ name, frameworkId, scope, criticality, templateId, rows: tplRows, organization, auditor, sponsor, auditDate, auditType, objectives, context }) => {
           const sessionBase: Omit<Session, "id" | "createdAt"> = {
             name,
             frameworkId,
@@ -14106,13 +14538,12 @@ function GapTrackApp({
 
           if (tplRows && tplRows.length > 0) {
             const s: Session = { id: uuid(), createdAt: new Date().toISOString(), ...sessionBase };
-            createSessionFromRows(s, tplRows);
-            return;
+            return createSessionFromRows(s, tplRows);
           }
           // Source = current checklist (reset statuses)
           const s: Session = { id: uuid(), createdAt: new Date().toISOString(), ...sessionBase, templateId: undefined };
           const base = seedRowsFrom(rows);
-          createSessionFromRows(s, base);
+          return createSessionFromRows(s, base);
         }}
       />
 
@@ -14121,9 +14552,9 @@ function GapTrackApp({
         session={currentSession}
         lang={lang}
         onClose={() => setProfileOpen(false)}
-        onSave={(patch) => {
-          if (!activeSessionId) return;
-          updateSessionProfile(activeSessionId, patch);
+        onSave={async (patch) => {
+          if (!activeSessionId) return false;
+          return updateSessionProfile(activeSessionId, patch);
         }}
       />
 
@@ -14133,7 +14564,7 @@ function GapTrackApp({
         description={delDesc}
         confirmLabel={t.confirm}
         cancelLabel={t.cancel}
-        onConfirm={()=>{ setConfirmDelOpen(false); performDeleteSession(); }}
+        onConfirm={()=>{ setConfirmDelOpen(false); void performDeleteSession(); }}
         onCancel={()=>setConfirmDelOpen(false)}
       />
 
@@ -14151,4 +14582,3 @@ function GapTrackApp({
     </MotionConfig>
   );
 }
-
