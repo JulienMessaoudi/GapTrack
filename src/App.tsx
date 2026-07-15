@@ -10171,9 +10171,15 @@ function DashboardView({
   const level = assessmentMetrics.maturityControls > 0
     ? maturityLabel(agg.globalPercent, lang)
     : (lang === "fr" ? "Non calculable" : "Not available");
-  const radarData = agg.arr
-    .filter((d) => d.maturityCount > 0)
-    .map((d) => ({ domain: d.domain, value: d.percent }));
+  // The radar is always rendered. If an audit has no rows yet, these four
+  // neutral axes keep the figure visible instead of replacing it with an
+  // empty-state message. Real audit domains take over as soon as they exist.
+  const emptyRadarDomains = lang === "fr"
+    ? ["Organisation", "Personnes", "Physique", "Technologie"]
+    : ["Organization", "People", "Physical", "Technology"];
+  const radarData = agg.arr.length > 0
+    ? agg.arr.map((d) => ({ domain: d.domain, value: d.percent }))
+    : emptyRadarDomains.map((domain) => ({ domain, value: 0 }));
 
   const maturityTone = React.useCallback((p: number) => {
     if (p <= 20) return "border-rose-500/30 text-rose-700 dark:text-rose-200 bg-rose-500/10";
@@ -10758,33 +10764,27 @@ return (
               <CardHeader>
                 <CardTitle>{t.maturityRadar}</CardTitle>
                 <p className="text-sm text-muted-foreground">
-                  {lang === "fr" ? "Vue secondaire : utile quand plusieurs domaines commencent à progresser." : "Secondary view: useful once several domains start progressing."}
+                  {lang === "fr" ? "Tous les domaines restent visibles sur la figure, y compris à 0 %." : "Every domain remains visible on the figure, including at 0%."}
                 </p>
               </CardHeader>
               <CardContent>
-                {radarData.length > 0 ? (
-                  <div className="h-72">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <RadarChart data={radarData}>
-                        <PolarGrid />
-                        <PolarAngleAxis dataKey="domain" tick={{ fontSize: 12, fill: "var(--card-foreground)" }} />
-                        <PolarRadiusAxis angle={30} domain={[0, 100]} />
-                        <Radar name="%" dataKey="value" stroke="#8884d8" fill="#8884d8" fillOpacity={0.3} />
-                        <Tooltip
-                          contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", color: "var(--card-foreground)" }}
-                          labelStyle={{ color: "var(--card-foreground)", fontWeight: 600 }}
-                          itemStyle={{ color: "var(--card-foreground)" }}
-                          formatter={(value: any) => [`${value}%`, ""]}
-                          labelFormatter={(label: any) => `${label}`}
-                        />
-                      </RadarChart>
-                    </ResponsiveContainer>
-                  </div>
-                ) : (
-                  <div className="flex h-72 items-center justify-center text-sm text-muted-foreground">
-                    {lang === "fr" ? "Évaluez au moins un contrôle applicable pour afficher le radar." : "Assess at least one applicable control to display the radar."}
-                  </div>
-                )}
+                <div className="h-72">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <RadarChart data={radarData} outerRadius="72%">
+                      <PolarGrid />
+                      <PolarAngleAxis dataKey="domain" tick={{ fontSize: 12, fill: "var(--card-foreground)" }} />
+                      <PolarRadiusAxis angle={30} domain={[0, 100]} />
+                      <Radar name="%" dataKey="value" stroke="#8884d8" strokeWidth={2} fill="#8884d8" fillOpacity={0.3} dot={{ r: 3 }} />
+                      <Tooltip
+                        contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", color: "var(--card-foreground)" }}
+                        labelStyle={{ color: "var(--card-foreground)", fontWeight: 600 }}
+                        itemStyle={{ color: "var(--card-foreground)" }}
+                        formatter={(value: any) => [`${value}%`, ""]}
+                        labelFormatter={(label: any) => `${label}`}
+                      />
+                    </RadarChart>
+                  </ResponsiveContainer>
+                </div>
               </CardContent>
             </Card>
           </div>
