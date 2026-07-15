@@ -110,11 +110,64 @@ function isImplementedStatus(status: ControlStatus): boolean {
 }
 
 function isApplicableForMaturity(status: ControlStatus): boolean {
-  return status !== -1;
+  return status !== -1 && status !== -2;
 }
 
 function isEvaluatedStatus(status: ControlStatus): boolean {
   return status !== -2;
+}
+
+interface AssessmentMetrics {
+  totalControls: number;
+  evaluatedControls: number;
+  notEvaluatedControls: number;
+  notApplicableControls: number;
+  maturityControls: number;
+  evaluationPercent: number;
+  maturityPoints: number;
+  maturityMax: number;
+  maturityPercent: number;
+}
+
+function calculateAssessmentMetrics(rows: ControlItem[]): AssessmentMetrics {
+  const totalControls = rows.length;
+  const evaluatedControls = rows.filter((row) => isEvaluatedStatus(row.realized)).length;
+  const notEvaluatedControls = rows.filter((row) => row.realized === -2).length;
+  const notApplicableControls = rows.filter((row) => row.realized === -1).length;
+  const maturityRows = rows.filter((row) => isApplicableForMaturity(row.realized));
+  const maturityPoints = maturityRows.reduce(
+    (total, row) => total + row.impact * controlStatusScore(row.realized),
+    0
+  );
+  const maturityMax = maturityRows.reduce((total, row) => total + row.impact, 0);
+
+  return {
+    totalControls,
+    evaluatedControls,
+    notEvaluatedControls,
+    notApplicableControls,
+    maturityControls: maturityRows.length,
+    evaluationPercent: totalControls ? Math.round((evaluatedControls / totalControls) * 100) : 0,
+    maturityPoints,
+    maturityMax,
+    maturityPercent: maturityMax ? Number(((maturityPoints / maturityMax) * 100).toFixed(2)) : 0,
+  };
+}
+
+function assessmentCoverageNotice(metrics: AssessmentMetrics, lang: "fr" | "en"): string {
+  if (metrics.maturityControls === 0) {
+    return lang === "fr"
+      ? "Maturité non calculable : aucun contrôle évalué et applicable."
+      : "Maturity cannot be calculated: no assessed and applicable control.";
+  }
+  if (metrics.evaluationPercent < 100) {
+    return lang === "fr"
+      ? `Score provisoire calculé sur ${metrics.maturityControls} contrôle(s) évalué(s) et applicable(s) ; couverture de l’audit : ${metrics.evaluationPercent}%.`
+      : `Provisional score based on ${metrics.maturityControls} assessed and applicable control(s); audit coverage: ${metrics.evaluationPercent}%.`;
+  }
+  return lang === "fr"
+    ? `Score calculé sur les ${metrics.maturityControls} contrôle(s) évalué(s) et applicable(s).`
+    : `Score based on all ${metrics.maturityControls} assessed and applicable control(s).`;
 }
 
 type AuditCriticality = "low" | "medium" | "high";
@@ -398,6 +451,9 @@ interface Session {
   /** Explicit marker for the temporary first audit created during bootstrap. */
   bootstrap?: boolean;
   frameworkId?: string;
+  frameworkVersion?: string;
+  frameworkCatalogId?: string;
+  frameworkCatalogRevision?: string;
   scope?: string;
   criticality?: AuditCriticality;
   templateId?: string;
@@ -499,7 +555,7 @@ type FrameworkId = "ISO27001" | "NIS2" | "DORA" | "RGPD" | "PGSSI-S";
 function frameworkLabel(id: FrameworkId, lang: LangKey): string {
   switch (id) {
     case "ISO27001":
-      return "ISO 27001";
+      return "ISO/IEC 27001";
     case "NIS2":
       return "NIS2";
     case "DORA":
@@ -536,7 +592,18 @@ function normalizeSessionFrameworkId(v: any): FrameworkId | null {
 
 function sessionFrameworkLabel(session: Session | null | undefined, lang: LangKey): string {
   const fw = normalizeSessionFrameworkId(session?.frameworkId);
-  return fw ? frameworkLabel(fw, lang) : (lang === "fr" ? "Référentiel non renseigné" : "Framework not set");
+  if (!fw) return lang === "fr" ? "Référentiel non renseigné" : "Framework not set";
+  const version = session?.frameworkVersion?.trim();
+  return version ? `${frameworkLabel(fw, lang)}:${version}` : frameworkLabel(fw, lang);
+}
+
+function isVersionedFrameworkSession(session: Session | null | undefined): boolean {
+  return Boolean(
+    session?.frameworkId?.trim() &&
+    session?.frameworkVersion?.trim() &&
+    session?.frameworkCatalogId?.trim() &&
+    session?.frameworkCatalogRevision?.trim()
+  );
 }
 
 function criticalityLabel(value: AuditCriticality | undefined, lang: LangKey): string {
@@ -606,7 +673,26 @@ interface ChecklistTemplate {
   name: string;
   frameworkId: FrameworkId;
   version?: string;
+  builtIn?: boolean;
+  catalogId?: string;
+  revision?: string;
+  sourceUrl?: string;
+  sourceNotice?: string;
   createdAt: string; // ISO
+  rows: TemplateRow[];
+}
+
+interface BuiltInFrameworkCatalog {
+  schemaVersion: number;
+  id: string;
+  frameworkId: FrameworkId;
+  name: string;
+  version: string;
+  revision: string;
+  publishedAt: string;
+  sourceUrl: string;
+  notice: string;
+  controlCount: number;
   rows: TemplateRow[];
 }
 
@@ -1337,10 +1423,10 @@ const I18N = {
     controlPoint: "Point de contrôle",
     realized: "État du contrôle",
     ref: "Référence",
-    globalScore: "Maturité globale",
-	scoringShort: "Score selon l’état du contrôle / impacts totaux.",
+    globalScore: "Maturité des contrôles évalués",
+	scoringShort: "Score sur les contrôles évalués et applicables.",
 	scoringHint:
-	"Score global = somme pondérée des contrôles conformes et partiels ÷ somme des impacts applicables (tous domaines).",
+	"Maturité = somme pondérée des contrôles conformes et partiels ÷ somme des impacts des contrôles évalués et applicables. Le taux d’évaluation est affiché séparément.",
     level: "Niveau",
     empty: "Aucune ligne. Données manquantes.",
     autosaved: "Modifications enregistrées",
@@ -1392,10 +1478,10 @@ const I18N = {
     controlPoint: "Control point",
     realized: "Control status",
     ref: "Ref",
-    globalScore: "Global maturity",
-	scoringShort: "Score based on control status / total impact.",
+    globalScore: "Maturity of assessed controls",
+	scoringShort: "Score for assessed and applicable controls.",
 	scoringHint:
-	"Score global = somme pondérée des contrôles conformes et partiels ÷ somme des impacts applicables (tous domaines).",
+	"Maturity = weighted compliant and partial controls divided by the impact of assessed and applicable controls. Assessment coverage is shown separately.",
     level: "Level",
     empty: "No rows yet.",
     autosaved: "Changes saved",
@@ -2358,17 +2444,15 @@ async function saveSearchableAuditReportPDF({
 
   const hasPlan = (id: string) => hasAnyPlanFields(plans?.[id]);
 
-  const maturityFor = (items: ControlItem[]) => {
-    const applicable = items.filter((r) => isApplicableForMaturity(r.realized));
-    const global = applicable.reduce((total, r) => total + r.impact * controlStatusScore(r.realized), 0);
-    const globalMax = applicable.reduce((total, r) => total + r.impact, 0);
-    return globalMax ? Number(((global / globalMax) * 100).toFixed(2)) : 0;
-  };
+  const assessmentMetrics = calculateAssessmentMetrics(rows);
+  const baselineMetrics = baseline?.length ? calculateAssessmentMetrics(baseline) : null;
 
   const byDomain: Record<string, {
     points: number;
     max: number;
     count: number;
+    evaluated: number;
+    maturityCount: number;
     gaps: number;
     criticalGaps: number;
     missingProof: number;
@@ -2379,17 +2463,21 @@ async function saveSearchableAuditReportPDF({
       points: 0,
       max: 0,
       count: 0,
+      evaluated: 0,
+      maturityCount: 0,
       gaps: 0,
       criticalGaps: 0,
       missingProof: 0,
     });
 
     x.count += 1;
+    if (isEvaluatedStatus(r.realized)) x.evaluated += 1;
     if (isGapStatus(r.realized)) x.gaps += 1;
     if (r.impact === 3 && isGapStatus(r.realized)) x.criticalGaps += 1;
     if (isImplementedStatus(r.realized) && proofStatusFor(r.id) !== "validated") x.missingProof += 1;
 
     if (!isApplicableForMaturity(r.realized)) continue;
+    x.maturityCount += 1;
     x.max += r.impact;
     x.points += r.impact * controlStatusScore(r.realized);
   }
@@ -2398,14 +2486,21 @@ async function saveSearchableAuditReportPDF({
     domain,
     ...v,
     percent: v.max ? Number(((v.points / v.max) * 100).toFixed(2)) : 0,
+    evaluationPercent: v.count ? Math.round((v.evaluated / v.count) * 100) : 0,
   }));
 
-  const global = domains.reduce((total, d) => total + d.points, 0);
-  const globalMax = domains.reduce((total, d) => total + d.max, 0);
-  const globalPercent = globalMax ? Number(((global / globalMax) * 100).toFixed(2)) : 0;
-  const level = maturityLabel(globalPercent, lang);
-  const baselinePercent = baseline?.length ? maturityFor(baseline) : null;
-  const delta = baselinePercent === null ? null : Number((globalPercent - baselinePercent).toFixed(2));
+  const global = assessmentMetrics.maturityPoints;
+  const globalMax = assessmentMetrics.maturityMax;
+  const globalPercent = assessmentMetrics.maturityPercent;
+  const level = assessmentMetrics.maturityControls > 0
+    ? maturityLabel(globalPercent, lang)
+    : (lang === "fr" ? "Non calculable" : "Not available");
+  const baselinePercent = baselineMetrics && baselineMetrics.maturityControls > 0
+    ? baselineMetrics.maturityPercent
+    : null;
+  const delta = baselinePercent === null || assessmentMetrics.maturityControls === 0
+    ? null
+    : Number((globalPercent - baselinePercent).toFixed(2));
 
   const gaps = rows
     .filter((r) => isGapStatus(r.realized))
@@ -2431,12 +2526,11 @@ async function saveSearchableAuditReportPDF({
   const allEvidenceCount = rows.reduce((total, r) => total + (evidenceMap?.[r.id]?.length || 0), 0);
   const evidenceValidatedControls = rows.filter((r) => proofStatusFor(r.id) === "validated").length;
   const evidenceAddedControls = rows.filter((r) => proofStatusFor(r.id) !== "absent").length;
-  const applicableControls = rows.filter((r) => isApplicableForMaturity(r.realized)).length;
   const conformControls = rows.filter((r) => r.realized === 1).length;
   const partialControls = rows.filter((r) => r.realized === 0.5).length;
   const nonConformControls = rows.filter((r) => r.realized === 0).length;
-  const notEvaluatedControls = rows.filter((r) => r.realized === -2).length;
-  const notApplicableControls = rows.filter((r) => r.realized === -1).length;
+  const notEvaluatedControls = assessmentMetrics.notEvaluatedControls;
+  const notApplicableControls = assessmentMetrics.notApplicableControls;
   const topDomains = domains
     .slice()
     .sort((a, b) =>
@@ -2448,6 +2542,16 @@ async function saveSearchableAuditReportPDF({
     .slice(0, 6);
 
   const reportConclusion = (() => {
+    if (assessmentMetrics.maturityControls === 0) {
+      return lang === "fr"
+        ? "Aucune conclusion de maturité ne peut encore être formulée : aucun contrôle évalué et applicable n’entre dans le calcul."
+        : "No maturity conclusion can be drawn yet: no assessed and applicable control is included in the calculation.";
+    }
+    if (assessmentMetrics.evaluationPercent < 100) {
+      return lang === "fr"
+        ? `La maturité des contrôles évalués est de ${globalPercent}%. Ce résultat reste provisoire avec ${assessmentMetrics.evaluationPercent}% de couverture ; une conclusion sur l’ensemble du périmètre nécessite de terminer l’évaluation.`
+        : `Maturity of assessed controls is ${globalPercent}%. This result remains provisional at ${assessmentMetrics.evaluationPercent}% coverage; a conclusion about the full scope requires completing the assessment.`;
+    }
     if (lang === "fr") {
       if (globalPercent <= 20) return "Le dispositif de sécurité est à un niveau critique. La priorité est de structurer les fondamentaux, de traiter les écarts d’impact 3 et de produire des preuves vérifiables.";
       if (globalPercent <= 40) return "Le dispositif est en phase initiale. Des mesures existent probablement, mais elles doivent être formalisées, pilotées et rattachées à des preuves.";
@@ -2520,8 +2624,8 @@ async function saveSearchableAuditReportPDF({
 
   autoTable(doc, {
     startY: ((doc as any).lastAutoTable?.finalY || 72) + 8,
-    head: [[lang === "fr" ? "Maturité globale" : "Global maturity", lang === "fr" ? "Contrôles évalués" : "Assessed controls", lang === "fr" ? "Écarts critiques" : "Critical gaps", lang === "fr" ? "Preuves validées" : "Validated evidence"]],
-    body: [[`${globalPercent}%\n${level}\n${global} / ${globalMax} pts`, `${rows.filter((r) => isEvaluatedStatus(r.realized)).length} / ${rows.length}\n${applicableControls} applicable(s)`, `${criticalGaps.length}\nImpact 3`, `${evidenceValidatedControls}\n${allEvidenceCount} preuve(s)`]],
+    head: [[lang === "fr" ? "Maturité évaluée" : "Assessed maturity", lang === "fr" ? "Taux d’évaluation" : "Assessment coverage", lang === "fr" ? "Écarts critiques" : "Critical gaps", lang === "fr" ? "Preuves validées" : "Validated evidence"]],
+    body: [[`${globalPercent}%\n${level}\n${global} / ${globalMax} pts`, `${assessmentMetrics.evaluatedControls} / ${assessmentMetrics.totalControls}\n${assessmentMetrics.evaluationPercent}%`, `${criticalGaps.length}\nImpact 3`, `${evidenceValidatedControls}\n${allEvidenceCount} preuve(s)`]],
     styles: { font: "helvetica", fontSize: 9, cellPadding: 3, lineColor: [226, 232, 240], lineWidth: 0.15, valign: "top" },
     headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255] },
     margin: { left: 14, right: 14 },
@@ -2536,6 +2640,7 @@ async function saveSearchableAuditReportPDF({
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
   y = addPdfWrappedText(doc, reportConclusion, 14, y, 182, 5) + 2;
+  y = addPdfWrappedText(doc, assessmentCoverageNotice(assessmentMetrics, lang), 14, y, 182, 5) + 2;
   for (const rec of recommendations.slice(0, 5)) {
     y = addPdfWrappedText(doc, `• ${rec}`, 18, y, 176, 5);
   }
@@ -2555,9 +2660,10 @@ async function saveSearchableAuditReportPDF({
       [lang === "fr" ? "Non conforme" : "Non-compliant", nonConformControls],
       [lang === "fr" ? "Non évalué" : "Not evaluated", notEvaluatedControls],
       [lang === "fr" ? "Non applicable" : "Not applicable", notApplicableControls],
+      [lang === "fr" ? "Taux d’évaluation" : "Assessment coverage", `${assessmentMetrics.evaluationPercent}% (${assessmentMetrics.evaluatedControls} / ${assessmentMetrics.totalControls})`],
       [lang === "fr" ? "Contrôles avec preuve" : "Controls with evidence", evidenceAddedControls],
       [lang === "fr" ? "Preuves manquantes ou non validées" : "Missing or unvalidated evidence", missingProofs.length],
-      [lang === "fr" ? "Évolution vs audit précédent" : "Change vs previous audit", delta === null ? "—" : `${delta >= 0 ? "+" : ""}${delta} pts (${baselinePercent}% → ${globalPercent}%)`],
+      [lang === "fr" ? "Évolution vs audit précédent" : "Change vs previous audit", delta === null ? "—" : `${delta >= 0 ? "+" : ""}${delta} pts (${baselinePercent}% → ${globalPercent}%) · ${lang === "fr" ? "couverture" : "coverage"} ${baselineMetrics?.evaluationPercent ?? 0}% → ${assessmentMetrics.evaluationPercent}%`],
     ],
     styles: { font: "helvetica", fontSize: 9, cellPadding: 2.3, lineColor: [226, 232, 240], lineWidth: 0.15 },
     headStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42] },
@@ -2566,14 +2672,14 @@ async function saveSearchableAuditReportPDF({
 
   autoTable(doc, {
     startY: ((doc as any).lastAutoTable?.finalY || 80) + 8,
-    head: [[lang === "fr" ? "Domaine" : "Domain", lang === "fr" ? "Maturité" : "Maturity", "Score", lang === "fr" ? "Écarts" : "Gaps", "Impact 3", lang === "fr" ? "Preuves à revoir" : "Evidence to review"]],
+    head: [[lang === "fr" ? "Domaine" : "Domain", lang === "fr" ? "Maturité évaluée" : "Assessed maturity", lang === "fr" ? "Évaluation" : "Assessment", "Score", lang === "fr" ? "Écarts" : "Gaps", "Impact 3", lang === "fr" ? "Preuves à revoir" : "Evidence to review"]],
     body: domains
       .slice()
       .sort((a, b) => a.domain.localeCompare(b.domain, lang === "fr" ? "fr" : "en"))
-      .map((d) => [d.domain, `${d.percent}%\n${maturityLabel(d.percent, lang)}`, `${d.points} / ${d.max}`, d.gaps, d.criticalGaps, d.missingProof]),
+      .map((d) => [d.domain, d.maturityCount ? `${d.percent}%\n${maturityLabel(d.percent, lang)}` : "—", `${d.evaluated} / ${d.count}\n${d.evaluationPercent}%`, `${d.points} / ${d.max}`, d.gaps, d.criticalGaps, d.missingProof]),
     styles: { font: "helvetica", fontSize: 8, cellPadding: 2, lineColor: [226, 232, 240], lineWidth: 0.15, overflow: "linebreak", valign: "top" },
     headStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42] },
-    columnStyles: { 0: { cellWidth: 60 }, 1: { cellWidth: 28 }, 2: { cellWidth: 24 }, 3: { cellWidth: 20 }, 4: { cellWidth: 22 }, 5: { cellWidth: 32 } },
+    columnStyles: { 0: { cellWidth: 48 }, 1: { cellWidth: 27 }, 2: { cellWidth: 25 }, 3: { cellWidth: 22 }, 4: { cellWidth: 17 }, 5: { cellWidth: 19 }, 6: { cellWidth: 24 } },
     margin: { left: 14, right: 14 },
   });
 
@@ -3156,6 +3262,81 @@ function userCanDeleteAudits(user: AppUser | null | undefined): boolean {
 // ==================
 // Templates helpers
 // ==================
+const BUILT_IN_FRAMEWORK_CATALOG_PATHS = [
+  "/frameworks/iso-27001-2022-annex-a.json",
+];
+
+function parseBuiltInFrameworkCatalog(value: unknown): ChecklistTemplate {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Invalid built-in framework catalog.");
+  }
+
+  const raw = value as Partial<BuiltInFrameworkCatalog> & Record<string, unknown>;
+  const frameworkId = normalizeLoadedFrameworkId(raw.frameworkId);
+  const id = typeof raw.id === "string" ? raw.id.trim() : "";
+  const name = typeof raw.name === "string" ? raw.name.trim() : "";
+  const version = typeof raw.version === "string" ? raw.version.trim() : "";
+  const revision = typeof raw.revision === "string" ? raw.revision.trim() : "";
+  const sourceUrl = typeof raw.sourceUrl === "string" ? raw.sourceUrl.trim() : "";
+  const sourceNotice = typeof raw.notice === "string" ? raw.notice.trim() : "";
+  const publishedAt = typeof raw.publishedAt === "string" ? raw.publishedAt.trim() : "";
+
+  if (raw.schemaVersion !== 1 || !frameworkId || !id || !name || !version || !revision || !sourceUrl || !sourceNotice) {
+    throw new Error("Incomplete built-in framework catalog metadata.");
+  }
+  if (!Array.isArray(raw.rows)) throw new Error("Built-in framework catalog rows are missing.");
+
+  const rows = (raw.rows as unknown[]).map((row) => {
+    const item = row && typeof row === "object" && !Array.isArray(row)
+      ? row as Record<string, unknown>
+      : {};
+    return {
+      ref: String(item.ref ?? "").trim(),
+      domain: String(item.domain ?? "").trim(),
+      impact: normalizeImpact(item.impact),
+      description: String(item.description ?? "").trim(),
+    };
+  }).filter((row) => row.ref && row.domain && row.description);
+
+  const expectedCount = typeof raw.controlCount === "number" ? raw.controlCount : 0;
+  const uniqueRefs = new Set(rows.map((row) => row.ref));
+  if (!expectedCount || rows.length !== expectedCount || uniqueRefs.size !== rows.length) {
+    throw new Error("Built-in framework catalog control count or references are invalid.");
+  }
+  if (frameworkId === "ISO27001" && version === "2022" && rows.length !== 93) {
+    throw new Error("The ISO/IEC 27001:2022 Annex A assessment catalog must contain 93 controls.");
+  }
+
+  return {
+    id,
+    name,
+    frameworkId,
+    version,
+    builtIn: true,
+    catalogId: id,
+    revision,
+    sourceUrl,
+    sourceNotice,
+    createdAt: publishedAt || new Date().toISOString(),
+    rows,
+  };
+}
+
+async function loadBuiltInTemplates(): Promise<ChecklistTemplate[]> {
+  const results = await Promise.allSettled(BUILT_IN_FRAMEWORK_CATALOG_PATHS.map(async (path) => {
+    const response = await fetch(path, { cache: "no-cache" });
+    if (!response.ok) throw new Error(`Unable to load ${path} (${response.status}).`);
+    return parseBuiltInFrameworkCatalog(await response.json());
+  }));
+
+  const templates: ChecklistTemplate[] = [];
+  results.forEach((result) => {
+    if (result.status === "fulfilled") templates.push(result.value);
+    else console.error("Unable to load a built-in framework catalog.", result.reason);
+  });
+  return templates;
+}
+
 function loadTemplates(): ChecklistTemplate[] {
   const raw = localStorage.getItem(TEMPLATES_KEY);
   if (!raw || raw === "null" || raw === "undefined") return [];
@@ -3172,6 +3353,7 @@ function loadTemplates(): ChecklistTemplate[] {
           name: String(t.name),
           frameworkId: fw,
           version: t.version ? String(t.version) : undefined,
+          builtIn: false,
           createdAt: t.createdAt ? String(t.createdAt) : new Date().toISOString(),
           rows: (t.rows as any[])
             .map((r: any) => ({
@@ -3190,7 +3372,7 @@ function loadTemplates(): ChecklistTemplate[] {
 }
 
 function saveTemplates(list: ChecklistTemplate[]) {
-  localStorage.setItem(TEMPLATES_KEY, JSON.stringify(list));
+  localStorage.setItem(TEMPLATES_KEY, JSON.stringify(list.filter((template) => !template.builtIn)));
 }
 
 function loadLastTemplateByFramework(): Record<string, string> {
@@ -3445,6 +3627,9 @@ function normalizeBackendSession(value: any): Session | null {
     createdAt: value.createdAt,
     bootstrap: value.bootstrap === true,
     frameworkId: typeof value.frameworkId === "string" ? value.frameworkId : undefined,
+    frameworkVersion: typeof value.frameworkVersion === "string" ? value.frameworkVersion : undefined,
+    frameworkCatalogId: typeof value.frameworkCatalogId === "string" ? value.frameworkCatalogId : undefined,
+    frameworkCatalogRevision: typeof value.frameworkCatalogRevision === "string" ? value.frameworkCatalogRevision : undefined,
     scope: typeof value.scope === "string" ? value.scope : undefined,
     criticality: value.criticality === "low" || value.criticality === "medium" || value.criticality === "high" ? value.criticality : undefined,
     templateId: typeof value.templateId === "string" ? value.templateId : undefined,
@@ -5155,6 +5340,9 @@ function CreateAuditWizard({
   onCreateAudit: (payload: {
     name: string;
     frameworkId: FrameworkId;
+    frameworkVersion?: string;
+    frameworkCatalogId?: string;
+    frameworkCatalogRevision?: string;
     scope: string;
     criticality: AuditCriticality;
     templateId?: string;
@@ -5184,22 +5372,37 @@ function CreateAuditWizard({
   const [context, setContext] = useState("");
   const [templateId, setTemplateId] = useState<string>("");
   const [busy, setBusy] = useState(false);
+  const autoSelectedVersionedSourceRef = useRef(false);
 
   const available = templates.filter(t=>t.frameworkId === frameworkId);
   const selected = available.find(t=>t.id === templateId) || null;
 
   useEffect(()=>{
     const list = templates.filter(t=>t.frameworkId === frameworkId);
-    setTemplateId((prev) => list.some((tpl) => tpl.id === prev) ? prev : (list[0]?.id || ""));
+    const preferred = list.find((template) => template.builtIn) || list[0];
+    setTemplateId((prev) => list.some((tpl) => tpl.id === prev) ? prev : (preferred?.id || ""));
   }, [frameworkId, templates]);
 
   useEffect(()=>{
-    if (!open) return;
+    if (!open) {
+      autoSelectedVersionedSourceRef.current = false;
+      return;
+    }
     setStep(0);
     setSource(currentRowsCount > 0 ? "current" : "template");
+    autoSelectedVersionedSourceRef.current = false;
     setAuditDate((prev) => prev || defaultAuditDate());
     setAuditor((prev) => prev || currentEvidenceActor());
   }, [open, currentRowsCount]);
+
+  useEffect(() => {
+    if (!open || autoSelectedVersionedSourceRef.current) return;
+    const versioned = templates.find((template) => template.frameworkId === frameworkId && template.builtIn);
+    if (!versioned) return;
+    setTemplateId(versioned.id);
+    setSource("template");
+    autoSelectedVersionedSourceRef.current = true;
+  }, [frameworkId, open, templates]);
 
   useEffect(()=>{
     if (!open) return;
@@ -5278,6 +5481,9 @@ function CreateAuditWizard({
       const created = await onCreateAudit({
         name: name.trim(),
         frameworkId,
+        frameworkVersion: source === "template" ? selected?.version : undefined,
+        frameworkCatalogId: source === "template" ? selected?.catalogId : undefined,
+        frameworkCatalogRevision: source === "template" ? selected?.revision : undefined,
         scope: scope.trim(),
         criticality,
         templateId: source === "template" ? selected?.id : undefined,
@@ -5406,12 +5612,18 @@ function CreateAuditWizard({
               <div className="wizard-grid">
                 <div>
                   <div className="text-xs text-muted-foreground mb-1">{lang==='fr' ? "Référentiel" : "Framework"}</div>
-                  <Select value={frameworkId} onValueChange={(v)=>setFrameworkId(v as FrameworkId)}>
+                  <Select value={frameworkId} onValueChange={(v)=>{
+                    const nextFramework = v as FrameworkId;
+                    setFrameworkId(nextFramework);
+                    if (templates.some((template) => template.frameworkId === nextFramework && template.builtIn)) {
+                      setSource("template");
+                    }
+                  }}>
                     <SelectTrigger className="w-full">
                       <span className="truncate">{frameworkLabel(frameworkId, lang)}</span>
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="ISO27001">ISO 27001</SelectItem>
+                      <SelectItem value="ISO27001">ISO/IEC 27001</SelectItem>
                       <SelectItem value="NIS2">NIS2</SelectItem>
                       <SelectItem value="DORA">DORA</SelectItem>
                       <SelectItem value="RGPD">{lang === "fr" ? "RGPD" : "GDPR"}</SelectItem>
@@ -5466,10 +5678,15 @@ function CreateAuditWizard({
                 </div>
 
                 {source === "current" && (
-                  <div className="rounded-lg bg-muted/30 p-3 text-sm text-muted-foreground">
-                    {currentRowsCount > 0
-                      ? (lang === "fr" ? `${currentRowsCount} contrôles seront repris avec des statuts réinitialisés.` : `${currentRowsCount} controls will be reused with reset statuses.`)
-                      : (lang === "fr" ? "Aucune checklist actuelle disponible." : "No current checklist available.")}
+                  <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-900 dark:text-amber-100">
+                    <div className="font-medium">
+                      {lang === "fr" ? "Checklist actuelle — version non renseignée" : "Current checklist — version not set"}
+                    </div>
+                    <div className="mt-1">
+                      {currentRowsCount > 0
+                        ? (lang === "fr" ? `${currentRowsCount} contrôles seront repris avec des statuts réinitialisés.` : `${currentRowsCount} controls will be reused with reset statuses.`)
+                        : (lang === "fr" ? "Aucune checklist actuelle disponible." : "No current checklist available.")}
+                    </div>
                   </div>
                 )}
 
@@ -5564,17 +5781,39 @@ function CreateAuditWizard({
                           </SelectTrigger>
                           <SelectContent>
                             {available.map(tpl => (
-                              <SelectItem key={tpl.id} value={tpl.id}>{tpl.name}</SelectItem>
+                              <SelectItem key={tpl.id} value={tpl.id}>
+                                {tpl.name}{tpl.version ? ` · ${tpl.version}` : ""}
+                              </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
                         <div className="mt-2 text-xs text-muted-foreground">
                           {selected ? (
-                            <span>{selected.rows.length} {lang==='fr' ? "contrôles" : "controls"} • {lang==='fr' ? "créé" : "created"} {new Date(selected.createdAt).toLocaleString()}</span>
+                            <span className="flex flex-wrap items-center gap-2">
+                              <span>{selected.rows.length} {lang==='fr' ? "contrôles" : "controls"}</span>
+                              {selected.version && <Badge variant="outline">{frameworkLabel(selected.frameworkId, lang)}:{selected.version}</Badge>}
+                              {selected.builtIn ? (
+                                <Badge variant="outline" className="border-emerald-500/50 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
+                                  {lang === "fr" ? "Catalogue versionné" : "Versioned catalog"} · {selected.revision}
+                                </Badge>
+                              ) : (
+                                <span>• {lang==='fr' ? "créé" : "created"} {new Date(selected.createdAt).toLocaleString()}</span>
+                              )}
+                            </span>
                           ) : (
                             <span>{lang==='fr' ? "Aucun template sélectionné." : "No template selected."}</span>
                           )}
                         </div>
+                        {selected?.sourceNotice && (
+                          <div className="mt-3 rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground">
+                            <div>{selected.sourceNotice}</div>
+                            {selected.sourceUrl && (
+                              <a className="mt-2 inline-block text-primary hover:underline" href={selected.sourceUrl} target="_blank" rel="noreferrer">
+                                {lang === "fr" ? "Consulter la référence ISO" : "View the ISO reference"}
+                              </a>
+                            )}
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <div className="mt-3 rounded-lg bg-muted/30 p-3 text-sm text-muted-foreground">
@@ -5642,14 +5881,18 @@ function CreateAuditWizard({
                   </div>
                   <div className="flex justify-between gap-4 border-b pb-2">
                     <span className="text-muted-foreground">{lang === "fr" ? "Référentiel" : "Framework"}</span>
-                    <span className="text-right font-medium">{frameworkLabel(frameworkId, lang)}</span>
+                    <span className="text-right font-medium">
+                      {source === "template" && selected?.version
+                        ? `${frameworkLabel(frameworkId, lang)}:${selected.version}`
+                        : frameworkLabel(frameworkId, lang)}
+                    </span>
                   </div>
                   <div className="flex justify-between gap-4 border-b pb-2">
                     <span className="text-muted-foreground">{lang === "fr" ? "Checklist" : "Checklist"}</span>
                     <span className="text-right font-medium">
                       {source === "current"
-                        ? `${currentRowsCount} ${lang === "fr" ? "contrôles actuels" : "current controls"}`
-                        : `${selected?.rows.length || 0} ${lang === "fr" ? "contrôles importés" : "imported controls"}`}
+                        ? `${currentRowsCount} ${lang === "fr" ? "contrôles actuels · non versionnés" : "current controls · unversioned"}`
+                        : `${selected?.rows.length || 0} ${lang === "fr" ? "contrôles" : "controls"}${selected?.revision ? ` · révision ${selected.revision}` : ""}`}
                     </span>
                   </div>
                   <div className="flex justify-between gap-4 border-b pb-2">
@@ -5724,7 +5967,6 @@ function AuditProfileDialog({
   useEffect(()=>{ document.body.style.overflow = open ? 'hidden' : ''; return () => { document.body.style.overflow = ''; }; }, [open]);
   const [name, setName] = useState("");
   const [organization, setOrganization] = useState("");
-  const [frameworkId, setFrameworkId] = useState<FrameworkId>("ISO27001");
   const [criticality, setCriticality] = useState<AuditCriticality>("medium");
   const [auditType, setAuditType] = useState<AuditType>("initial");
   const [auditDate, setAuditDate] = useState(defaultAuditDate());
@@ -5739,7 +5981,6 @@ function AuditProfileDialog({
     if (!open || !session) return;
     setName(session.name || "Audit");
     setOrganization(session.organization || "");
-    setFrameworkId(normalizeSessionFrameworkId(session.frameworkId) || "ISO27001");
     setCriticality(session.criticality || "medium");
     setAuditType(session.auditType || "initial");
     setAuditDate(session.auditDate || defaultAuditDate());
@@ -5785,16 +6026,14 @@ function AuditProfileDialog({
 
             <div>
               <div className="text-xs text-muted-foreground mb-1">{lang === "fr" ? "Référentiel" : "Framework"}</div>
-              <Select value={frameworkId} onValueChange={(v)=>setFrameworkId(v as FrameworkId)}>
-                <SelectTrigger className="w-full"><span>{frameworkLabel(frameworkId, lang)}</span></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ISO27001">ISO 27001</SelectItem>
-                  <SelectItem value="NIS2">NIS2</SelectItem>
-                  <SelectItem value="DORA">DORA</SelectItem>
-                  <SelectItem value="RGPD">{lang === "fr" ? "RGPD" : "GDPR"}</SelectItem>
-                  <SelectItem value="PGSSI-S">PGSSI-S</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
+                <div className="font-medium">{sessionFrameworkLabel(session, lang)}</div>
+                <div className="mt-1 text-xs text-muted-foreground">
+                  {lang === "fr"
+                    ? "Le référentiel et sa version sont figés à la création pour préserver la traçabilité de l’audit."
+                    : "The framework and version are fixed at creation to preserve audit traceability."}
+                </div>
+              </div>
             </div>
 
             <div>
@@ -5857,7 +6096,6 @@ function AuditProfileDialog({
               void onSave({
                   name: name.trim(),
                   organization: organization.trim(),
-                  frameworkId,
                   criticality,
                   auditType,
                   auditDate,
@@ -5903,6 +6141,16 @@ function AuditIdentityBanner({ session, lang, onEdit }: { session: Session | nul
                   : (lang === "fr" ? `Fiche audit ${completion.done}/${completion.total}` : `Audit profile ${completion.done}/${completion.total}`)}
               </Badge>
               <Badge variant="secondary">{sessionFrameworkLabel(session, lang)}</Badge>
+              <Badge
+                variant="outline"
+                className={isVersionedFrameworkSession(session)
+                  ? "border-emerald-500/50 text-emerald-700 dark:text-emerald-300 bg-emerald-500/10"
+                  : "border-amber-500/50 text-amber-700 dark:text-amber-300 bg-amber-500/10"}
+              >
+                {isVersionedFrameworkSession(session)
+                  ? (lang === "fr" ? `Référentiel versionné · rév. ${session.frameworkCatalogRevision}` : `Versioned framework · rev. ${session.frameworkCatalogRevision}`)
+                  : (lang === "fr" ? "Version non renseignée" : "Version not set")}
+              </Badge>
               <Badge variant="outline">{auditTypeLabel(session.auditType, lang)}</Badge>
               <Badge variant="outline">{lang === "fr" ? "Criticité " : "Criticality "}{criticalityLabel(session.criticality, lang)}</Badge>
             </div>
@@ -9847,6 +10095,7 @@ function DashboardView({
 
   const roundPct = (value: number) => Number(value.toFixed(2));
   const clampPct = (value: number) => Math.max(0, Math.min(100, value));
+  const assessmentMetrics = React.useMemo(() => calculateAssessmentMetrics(rows), [rows]);
 
   // Agrégations : maturité déclarée d'un côté, preuve validée de l'autre.
   const agg = React.useMemo(() => {
@@ -9854,6 +10103,8 @@ function DashboardView({
       points: number;
       max: number;
       count: number;
+      evaluatedCount: number;
+      maturityCount: number;
       realizedCount: number;
       validatedProofCount: number;
     }> = {};
@@ -9863,15 +10114,21 @@ function DashboardView({
         points: 0,
         max: 0,
         count: 0,
+        evaluatedCount: 0,
+        maturityCount: 0,
         realizedCount: 0,
         validatedProofCount: 0,
       });
 
-      // Non applicable est exclu du score. Non évalué compte comme applicable à 0 point.
+      rec.count += 1;
+      if (isEvaluatedStatus(r.realized)) rec.evaluatedCount += 1;
+
+      // Non applicable et non évalué sont exclus de la maturité. La couverture
+      // d'évaluation reste calculée séparément sur tous les contrôles.
       if (!isApplicableForMaturity(r.realized)) continue;
 
       rec.max += r.impact;
-      rec.count += 1;
+      rec.maturityCount += 1;
       rec.points += r.impact * controlStatusScore(r.realized);
 
       if (isImplementedStatus(r.realized)) {
@@ -9890,12 +10147,9 @@ function DashboardView({
       realizedCount: v.realizedCount,
       validatedProofCount: v.validatedProofCount,
       percent: v.max > 0 ? roundPct((v.points / v.max) * 100) : 0,
+      evaluationPercent: v.count > 0 ? Math.round((v.evaluatedCount / v.count) * 100) : 0,
       proofPercent: v.realizedCount > 0 ? Math.round((v.validatedProofCount / v.realizedCount) * 100) : 0,
     }));
-
-    const global = arr.reduce((a, c) => a + c.points, 0);
-    const globalMax = arr.reduce((a, c) => a + c.max, 0);
-    const globalPercent = globalMax > 0 ? roundPct((global / globalMax) * 100) : 0;
 
     const realizedTotal = arr.reduce((a, c) => a + c.realizedCount, 0);
     const validatedTotal = arr.reduce((a, c) => a + c.validatedProofCount, 0);
@@ -9903,19 +10157,23 @@ function DashboardView({
 
     return {
       arr,
-      global,
-      globalMax,
-      globalPercent,
+      global: assessmentMetrics.maturityPoints,
+      globalMax: assessmentMetrics.maturityMax,
+      globalPercent: assessmentMetrics.maturityPercent,
       proof: {
         realizedTotal,
         validatedTotal,
         percent: proofPercent,
       },
     };
-  }, [rows, proofStatusFor]);
+  }, [rows, proofStatusFor, assessmentMetrics]);
 
-  const level = maturityLabel(agg.globalPercent, lang);
-  const radarData = agg.arr.map((d) => ({ domain: d.domain, value: d.percent }));
+  const level = assessmentMetrics.maturityControls > 0
+    ? maturityLabel(agg.globalPercent, lang)
+    : (lang === "fr" ? "Non calculable" : "Not available");
+  const radarData = agg.arr
+    .filter((d) => d.maturityCount > 0)
+    .map((d) => ({ domain: d.domain, value: d.percent }));
 
   const maturityTone = React.useCallback((p: number) => {
     if (p <= 20) return "border-rose-500/30 text-rose-700 dark:text-rose-200 bg-rose-500/10";
@@ -9951,11 +10209,19 @@ function DashboardView({
   // Texte détaillé "Signification globale" : on parle explicitement de maturité, pas de preuve.
   const sig = React.useMemo(() => {
     const p = agg.globalPercent;
+    if (assessmentMetrics.maturityControls === 0) {
+      return {
+        icon: <Info className="h-5 w-5" />,
+        title: lang === "fr" ? "Maturité non calculable" : "Maturity not available",
+        lead: lang === "fr" ? "Commencez par évaluer les contrôles applicables" : "Start by assessing applicable controls",
+        lines: [assessmentCoverageNotice(assessmentMetrics, lang)],
+      };
+    }
     if (lang === "fr") {
       if (p <= 20) {
         return {
           icon: <AlertTriangle className="h-5 w-5" />,
-          title: `Score de maturité ${p}%`,
+          title: `Maturité des contrôles évalués ${p}%`,
           lead: "Aucun dispositif de sécurité structuré",
           lines: [
             "L’organisation est exposée à des risques majeurs.",
@@ -9966,7 +10232,7 @@ function DashboardView({
       if (p <= 40) {
         return {
           icon: <Info className="h-5 w-5" />,
-          title: `Score de maturité ${p}%`,
+          title: `Maturité des contrôles évalués ${p}%`,
           lead: "Quelques actions isolées ont été mises en place",
           lines: [
             "Cependant, la cohérence et le pilotage global sont encore insuffisants.",
@@ -9978,7 +10244,7 @@ function DashboardView({
       if (p <= 60) {
         return {
           icon: <Lightbulb className="h-5 w-5" />,
-          title: `Score de maturité ${p}%`,
+          title: `Maturité des contrôles évalués ${p}%`,
           lead: "Les premières briques sont là, mais l’ensemble reste fragile",
           lines: [
             "Des efforts existent, parfois locaux, sans vision d’ensemble ni formalisation.",
@@ -9989,7 +10255,7 @@ function DashboardView({
       if (p <= 80) {
         return {
           icon: <Shield className="h-5 w-5" />,
-          title: `Score de maturité ${p}%`,
+          title: `Maturité des contrôles évalués ${p}%`,
           lead: "La sécurité est prise en compte de manière cohérente",
           lines: [
             "Les pratiques sont ancrées, les processus documentés et appliqués.",
@@ -9999,7 +10265,7 @@ function DashboardView({
       }
       return {
         icon: <ShieldCheck className="h-5 w-5" />,
-        title: `Score de maturité ${p}%`,
+        title: `Maturité des contrôles évalués ${p}%`,
         lead: "La sécurité fait partie de la culture d’entreprise",
         lines: [
           "Processus robustes, contrôles efficaces, amélioration continue en place.",
@@ -10008,12 +10274,12 @@ function DashboardView({
       };
     }
 
-    if (p <= 20) return { icon: <AlertTriangle className="h-5 w-5" />, title: `Maturity score ${p}%`, lead: "No structured security program", lines: ["Major risks. Urgent measures required."] };
-    if (p <= 40) return { icon: <Info className="h-5 w-5" />, title: `Maturity score ${p}%`, lead: "Some isolated actions", lines: ["Still lacking coherence and governance. Start a structured program."] };
-    if (p <= 60) return { icon: <Lightbulb className="h-5 w-5" />, title: `Maturity score ${p}%`, lead: "Foundations exist, remains fragile", lines: ["Local efforts without company-wide formalization."] };
-    if (p <= 80) return { icon: <Shield className="h-5 w-5" />, title: `Maturity score ${p}%`, lead: "Security handled coherently", lines: ["Practices documented and applied. Solid baseline."] };
-    return { icon: <ShieldCheck className="h-5 w-5" />, title: `Maturity score ${p}%`, lead: "Security is part of the culture", lines: ["Robust processes and continuous improvement."] };
-  }, [agg.globalPercent, lang]);
+    if (p <= 20) return { icon: <AlertTriangle className="h-5 w-5" />, title: `Assessed-control maturity ${p}%`, lead: "No structured security program", lines: ["Major risks. Urgent measures required."] };
+    if (p <= 40) return { icon: <Info className="h-5 w-5" />, title: `Assessed-control maturity ${p}%`, lead: "Some isolated actions", lines: ["Still lacking coherence and governance. Start a structured program."] };
+    if (p <= 60) return { icon: <Lightbulb className="h-5 w-5" />, title: `Assessed-control maturity ${p}%`, lead: "Foundations exist, remains fragile", lines: ["Local efforts without company-wide formalization."] };
+    if (p <= 80) return { icon: <Shield className="h-5 w-5" />, title: `Assessed-control maturity ${p}%`, lead: "Security handled coherently", lines: ["Practices documented and applied. Solid baseline."] };
+    return { icon: <ShieldCheck className="h-5 w-5" />, title: `Assessed-control maturity ${p}%`, lead: "Security is part of the culture", lines: ["Robust processes and continuous improvement."] };
+  }, [agg.globalPercent, assessmentMetrics, lang]);
 
 
   const dashboardOps = React.useMemo(() => {
@@ -10025,10 +10291,6 @@ function DashboardView({
       if (!p) return false;
       return !!((p.owner || "").trim() || p.due || p.priority || (p.comment || "").trim());
     };
-
-    const evaluatedControls = rows.filter((r) => isEvaluatedStatus(r.realized)).length;
-    const totalControls = rows.length;
-    const evaluatedPercent = totalControls ? Math.round((evaluatedControls / totalControls) * 100) : 0;
 
     const criticalGaps = rows.filter((r) => r.impact === 3 && isGapStatus(r.realized));
     const impact3WithoutPlan = criticalGaps
@@ -10071,9 +10333,9 @@ function DashboardView({
       .slice(0, 5);
 
     return {
-      evaluatedControls,
-      totalControls,
-      evaluatedPercent,
+      evaluatedControls: assessmentMetrics.evaluatedControls,
+      totalControls: assessmentMetrics.totalControls,
+      evaluatedPercent: assessmentMetrics.evaluationPercent,
       criticalGapCount: criticalGaps.length,
       impact3WithoutPlanCount: criticalGaps.filter((r) => !hasPlan(r.id)).length,
       impact3WithoutPlan,
@@ -10084,7 +10346,7 @@ function DashboardView({
       criticalDomains,
       domainRows,
     };
-  }, [rows, plans, proofStatusFor, agg.arr, lang]);
+  }, [rows, plans, proofStatusFor, agg.arr, lang, assessmentMetrics]);
 
   const credibilityGap = agg.proof.realizedTotal > 0 && (
     agg.globalPercent - agg.proof.percent >= 30 ||
@@ -10099,7 +10361,7 @@ return (
               {lang === "fr" ? "Comprendre le niveau de maturité" : "Understand maturity level"}
             </div>
             <div className="text-sm text-muted-foreground">
-              {level} • {agg.globalPercent}%
+              {level} • {agg.globalPercent}% · {lang === "fr" ? "évaluation" : "assessment"} {assessmentMetrics.evaluationPercent}%
             </div>
           </div>
           <div className="flex flex-col sm:flex-row gap-2">
@@ -10129,7 +10391,9 @@ return (
                 <div className="text-4xl font-bold tabular-nums">{agg.globalPercent}%</div>
                 <Badge className="bg-primary text-primary-foreground border-0">{level}</Badge>
               </div>
-              <div className="mt-2 text-xs text-muted-foreground tabular-nums">{agg.global} / {agg.globalMax} {lang === "fr" ? "points" : "pts"}</div>
+              <div className="mt-2 text-xs text-muted-foreground tabular-nums">
+                {agg.global} / {agg.globalMax} {lang === "fr" ? "points" : "pts"} · {assessmentMetrics.maturityControls} {lang === "fr" ? "contrôle(s) évalué(s) applicable(s)" : "assessed applicable control(s)"}
+              </div>
             </CardContent>
           </Card>
 
@@ -10165,15 +10429,29 @@ return (
           </Card>
         </div>
 
+        {(assessmentMetrics.evaluationPercent < 100 || assessmentMetrics.maturityControls === 0) && (
+          <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-900 dark:text-amber-100">
+            <div className="flex items-center gap-2 font-semibold">
+              <AlertTriangle className="h-4 w-4" />
+              {assessmentMetrics.maturityControls === 0
+                ? (lang === "fr" ? "Maturité non calculable" : "Maturity not available")
+                : (lang === "fr" ? "Score de maturité provisoire" : "Provisional maturity score")}
+            </div>
+            <p className="mt-1">{assessmentCoverageNotice(assessmentMetrics, lang)}</p>
+          </div>
+        )}
+
         <Card className="border-primary/20">
           <CardContent className="p-4">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
                 <div className="text-sm font-semibold">
-                  {lang === "fr" ? "Progression de maturité globale" : "Global maturity progress"}
+                  {lang === "fr" ? "Maturité des contrôles évalués" : "Maturity of assessed controls"}
                 </div>
                 <div className="text-sm text-muted-foreground">
-                  {lang === "fr" ? "Objectif : faire monter les domaines critiques avant de viser le radar complet." : "Goal: raise critical domains before focusing on the full radar."}
+                  {lang === "fr"
+                    ? `Le taux d’évaluation (${assessmentMetrics.evaluationPercent}%) reste un indicateur distinct du score de maturité.`
+                    : `Assessment coverage (${assessmentMetrics.evaluationPercent}%) remains separate from the maturity score.`}
                 </div>
               </div>
               <div className="text-2xl font-bold tabular-nums">{agg.globalPercent}%</div>
@@ -10295,21 +10573,22 @@ return (
           <CardHeader className="pb-3">
             <CardTitle>{t.byDomain}</CardTitle>
             <p className="text-sm text-muted-foreground">
-              {lang === "fr" ? "Maturité par domaine en barres horizontales, avec preuves et volumes de contrôle." : "Domain maturity as horizontal bars, with evidence and control volume."}
+              {lang === "fr" ? "La maturité porte uniquement sur les contrôles évalués et applicables ; la couverture d’évaluation est affichée séparément." : "Maturity only covers assessed and applicable controls; assessment coverage is shown separately."}
             </p>
           </CardHeader>
           <CardContent>
             <div className="rounded-2xl border overflow-hidden">
               <div className="overflow-x-auto">
                 <div ref={dashSentinelRef} className="h-px" />
-                <table className="w-full text-sm min-w-[880px]" data-compare-active={hasComparison ? "1" : "0"}>
+                <table className="w-full text-sm min-w-[1020px]" data-compare-active={hasComparison ? "1" : "0"}>
                   <thead className={"sticky top-0 z-10 bg-background/70 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-border/40 dark:border-white/5 " + (dashStuck ? "shadow-sm shadow-black/20 dark:shadow-black/40" : "")}>
                     <tr className="text-xs uppercase tracking-wide text-muted-foreground">
-                      <th className="p-2 text-left w-[32%]">{t.domain}</th>
-                      <th className="p-2 text-left w-[30%]">{lang === "fr" ? "Maturité" : "Maturity"}</th>
-                      <th className="p-2 text-left w-[24%]">{lang === "fr" ? "Preuve" : "Evidence"}</th>
-                      <th className="p-2 text-right w-[8%]">{lang === "fr" ? "Score" : "Score"}</th>
-                      <th className="p-2 text-right w-[6%]">{lang === "fr" ? "Ctrl." : "Ctrls"}</th>
+                      <th className="p-2 text-left w-[27%]">{t.domain}</th>
+                      <th className="p-2 text-left w-[25%]">{lang === "fr" ? "Maturité évaluée" : "Assessed maturity"}</th>
+                      <th className="p-2 text-left w-[16%]">{lang === "fr" ? "Évaluation" : "Assessment"}</th>
+                      <th className="p-2 text-left w-[20%]">{lang === "fr" ? "Preuve" : "Evidence"}</th>
+                      <th className="p-2 text-right w-[7%]">{lang === "fr" ? "Score" : "Score"}</th>
+                      <th className="p-2 text-right w-[5%]">{lang === "fr" ? "Ctrl." : "Ctrls"}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -10352,8 +10631,18 @@ return (
                                   <span className="font-medium" title={d.domain}>{d.domain}</span>
                                 )}
                                 <span className="text-xs text-muted-foreground">
-                                  {d.points}/{d.max} {lang === "fr" ? "points" : "pts"} • {d.count} {lang === "fr" ? "contrôles" : "controls"}
+                                  {d.points}/{d.max} {lang === "fr" ? "points évalués" : "assessed pts"} • {d.count} {lang === "fr" ? "contrôles au total" : "total controls"}
                                 </span>
+                              </div>
+                            </td>
+
+                            <td className="p-2 align-top">
+                              <div className="flex min-w-[130px] items-center gap-2">
+                                <span className="tabular-nums font-semibold min-w-[44px] text-right">{d.evaluationPercent}%</span>
+                                <ProgressBar value={clampPct(d.evaluationPercent)} />
+                              </div>
+                              <div className="mt-1 text-xs text-muted-foreground text-right tabular-nums">
+                                {d.evaluatedCount} / {d.count}
                               </div>
                             </td>
 
@@ -10473,23 +10762,29 @@ return (
                 </p>
               </CardHeader>
               <CardContent>
-                <div className="h-72">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <RadarChart data={radarData}>
-                      <PolarGrid />
-                      <PolarAngleAxis dataKey="domain" tick={{ fontSize: 12, fill: "var(--card-foreground)" }} />
-                      <PolarRadiusAxis angle={30} domain={[0, 100]} />
-                      <Radar name="%" dataKey="value" stroke="#8884d8" fill="#8884d8" fillOpacity={0.3} />
-                      <Tooltip
-                        contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", color: "var(--card-foreground)" }}
-                        labelStyle={{ color: "var(--card-foreground)", fontWeight: 600 }}
-                        itemStyle={{ color: "var(--card-foreground)" }}
-                        formatter={(value: any) => [`${value}%`, ""]}
-                        labelFormatter={(label: any) => `${label}`}
-                      />
-                    </RadarChart>
-                  </ResponsiveContainer>
-                </div>
+                {radarData.length > 0 ? (
+                  <div className="h-72">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <RadarChart data={radarData}>
+                        <PolarGrid />
+                        <PolarAngleAxis dataKey="domain" tick={{ fontSize: 12, fill: "var(--card-foreground)" }} />
+                        <PolarRadiusAxis angle={30} domain={[0, 100]} />
+                        <Radar name="%" dataKey="value" stroke="#8884d8" fill="#8884d8" fillOpacity={0.3} />
+                        <Tooltip
+                          contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", color: "var(--card-foreground)" }}
+                          labelStyle={{ color: "var(--card-foreground)", fontWeight: 600 }}
+                          itemStyle={{ color: "var(--card-foreground)" }}
+                          formatter={(value: any) => [`${value}%`, ""]}
+                          labelFormatter={(label: any) => `${label}`}
+                        />
+                      </RadarChart>
+                    </ResponsiveContainer>
+                  </div>
+                ) : (
+                  <div className="flex h-72 items-center justify-center text-sm text-muted-foreground">
+                    {lang === "fr" ? "Évaluez au moins un contrôle applicable pour afficher le radar." : "Assess at least one applicable control to display the radar."}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -11493,7 +11788,6 @@ function PrintExecutive({
   evidenceMap?: Record<string, EvidenceItem[]>;
   proofStatusMap?: EvidenceStatusMap;
 }) {
-  const sum = (a: number, b: number) => a + b;
   const cmpRef = React.useCallback((a: string, b: string) =>
     a.localeCompare(b, lang === "fr" ? "fr" : "en", { numeric: true, sensitivity: "base" }),
   [lang]);
@@ -11503,13 +11797,11 @@ function PrintExecutive({
   [evidenceMap, proofStatusMap]);
 
   const hasPlan = React.useCallback((id: string) => hasAnyPlanFields(plans?.[id]), [plans]);
-
-  const maturityFor = React.useCallback((items: ControlItem[]) => {
-    const applicable = items.filter((r) => isApplicableForMaturity(r.realized));
-    const global = applicable.reduce((total, r) => total + r.impact * controlStatusScore(r.realized), 0);
-    const globalMax = applicable.reduce((total, r) => total + r.impact, 0);
-    return globalMax ? Number(((global / globalMax) * 100).toFixed(2)) : 0;
-  }, []);
+  const assessmentMetrics = React.useMemo(() => calculateAssessmentMetrics(rows), [rows]);
+  const baselineMetrics = React.useMemo(
+    () => baseline?.length ? calculateAssessmentMetrics(baseline) : null,
+    [baseline]
+  );
 
   const agg = React.useMemo(() => {
     const byDomain: Record<string, {
@@ -11517,6 +11809,7 @@ function PrintExecutive({
       max: number;
       count: number;
       evaluated: number;
+      maturityCount: number;
       gaps: number;
       criticalGaps: number;
       missingProof: number;
@@ -11530,6 +11823,7 @@ function PrintExecutive({
         max: 0,
         count: 0,
         evaluated: 0,
+        maturityCount: 0,
         gaps: 0,
         criticalGaps: 0,
         missingProof: 0,
@@ -11546,6 +11840,7 @@ function PrintExecutive({
       if (isGapStatus(r.realized) && hasPlan(r.id)) x.withPlan += 1;
 
       if (!isApplicableForMaturity(r.realized)) continue;
+      x.maturityCount += 1;
       x.max += r.impact;
       x.points += r.impact * controlStatusScore(r.realized);
     }
@@ -11554,19 +11849,27 @@ function PrintExecutive({
       domain,
       ...v,
       percent: v.max ? Number(((v.points / v.max) * 100).toFixed(2)) : 0,
+      evaluationPercent: v.count ? Math.round((v.evaluated / v.count) * 100) : 0,
     }));
 
-    const global = arr.map((d) => d.points).reduce(sum, 0);
-    const globalMax = arr.map((d) => d.max).reduce(sum, 0);
-    const globalPercent = globalMax ? Number(((global / globalMax) * 100).toFixed(2)) : 0;
-
-    return { arr, global, globalMax, globalPercent };
-  }, [rows, proofStatusFor, hasPlan]);
+    return {
+      arr,
+      global: assessmentMetrics.maturityPoints,
+      globalMax: assessmentMetrics.maturityMax,
+      globalPercent: assessmentMetrics.maturityPercent,
+    };
+  }, [rows, proofStatusFor, hasPlan, assessmentMetrics]);
 
   const t = I18N[lang];
-  const level = maturityLabel(agg.globalPercent, lang);
-  const baselinePercent = baseline?.length ? maturityFor(baseline) : null;
-  const delta = baselinePercent === null ? null : Number((agg.globalPercent - baselinePercent).toFixed(2));
+  const level = assessmentMetrics.maturityControls > 0
+    ? maturityLabel(agg.globalPercent, lang)
+    : (lang === "fr" ? "Non calculable" : "Not available");
+  const baselinePercent = baselineMetrics && baselineMetrics.maturityControls > 0
+    ? baselineMetrics.maturityPercent
+    : null;
+  const delta = baselinePercent === null || assessmentMetrics.maturityControls === 0
+    ? null
+    : Number((agg.globalPercent - baselinePercent).toFixed(2));
 
   const gaps = React.useMemo(() => rows
     .filter((r) => isGapStatus(r.realized))
@@ -11594,14 +11897,14 @@ function PrintExecutive({
   const allEvidenceCount = rows.reduce((total, r) => total + (evidenceMap?.[r.id]?.length || 0), 0);
   const evidenceValidatedControls = rows.filter((r) => proofStatusFor(r.id) === "validated").length;
   const evidenceAddedControls = rows.filter((r) => proofStatusFor(r.id) !== "absent").length;
-  const evaluatedControls = rows.filter((r) => isEvaluatedStatus(r.realized)).length;
-  const evaluatedPercent = rows.length ? Math.round((evaluatedControls / rows.length) * 100) : 0;
-  const applicableControls = rows.filter((r) => isApplicableForMaturity(r.realized)).length;
+  const evaluatedControls = assessmentMetrics.evaluatedControls;
+  const evaluatedPercent = assessmentMetrics.evaluationPercent;
+  const applicableControls = assessmentMetrics.maturityControls;
   const conformControls = rows.filter((r) => r.realized === 1).length;
   const partialControls = rows.filter((r) => r.realized === 0.5).length;
   const nonConformControls = rows.filter((r) => r.realized === 0).length;
-  const notEvaluatedControls = rows.filter((r) => r.realized === -2).length;
-  const notApplicableControls = rows.filter((r) => r.realized === -1).length;
+  const notEvaluatedControls = assessmentMetrics.notEvaluatedControls;
+  const notApplicableControls = assessmentMetrics.notApplicableControls;
 
   const topDomains = React.useMemo(() => [...agg.arr]
     .sort((a, b) =>
@@ -11613,6 +11916,16 @@ function PrintExecutive({
     .slice(0, 6), [agg.arr, lang]);
 
   const reportConclusion = React.useMemo(() => {
+    if (assessmentMetrics.maturityControls === 0) {
+      return lang === "fr"
+        ? "Aucune conclusion de maturité ne peut encore être formulée : aucun contrôle évalué et applicable n’entre dans le calcul."
+        : "No maturity conclusion can be drawn yet: no assessed and applicable control is included in the calculation.";
+    }
+    if (assessmentMetrics.evaluationPercent < 100) {
+      return lang === "fr"
+        ? `La maturité des contrôles évalués est de ${agg.globalPercent}%. Ce résultat reste provisoire avec ${assessmentMetrics.evaluationPercent}% de couverture ; une conclusion sur l’ensemble du périmètre nécessite de terminer l’évaluation.`
+        : `Maturity of assessed controls is ${agg.globalPercent}%. This result remains provisional at ${assessmentMetrics.evaluationPercent}% coverage; a conclusion about the full scope requires completing the assessment.`;
+    }
     if (lang === "fr") {
       if (agg.globalPercent <= 20) return "Le dispositif de sécurité est à un niveau critique. La priorité est de structurer les fondamentaux, de traiter les écarts d’impact 3 et de produire des preuves vérifiables.";
       if (agg.globalPercent <= 40) return "Le dispositif est en phase initiale. Des mesures existent probablement, mais elles doivent être formalisées, pilotées et rattachées à des preuves.";
@@ -11625,7 +11938,7 @@ function PrintExecutive({
     if (agg.globalPercent <= 60) return "The program is progressing but remains uneven. Actions should focus on weak domains, evidence and major gaps.";
     if (agg.globalPercent <= 80) return "The program is broadly managed. The main challenge is consolidation, periodic monitoring and evidence.";
     return "The program is mature. The report mainly supports continuous improvement and evidence retention.";
-  }, [agg.globalPercent, lang]);
+  }, [agg.globalPercent, assessmentMetrics, lang]);
 
   const recommendations = React.useMemo(() => {
     const out: string[] = [];
@@ -11711,11 +12024,25 @@ function PrintExecutive({
           </div>
         </div>
 
+        {(assessmentMetrics.evaluationPercent < 100 || assessmentMetrics.maturityControls === 0) && (
+          <div className="mt-6 report-callout report-callout-warning">
+            <div className="report-section-kicker">
+              {assessmentMetrics.maturityControls === 0
+                ? (lang === "fr" ? "Maturité non calculable" : "Maturity not available")
+                : (lang === "fr" ? "Résultat provisoire" : "Provisional result")}
+            </div>
+            <div>{assessmentCoverageNotice(assessmentMetrics, lang)}</div>
+          </div>
+        )}
+
         {delta !== null && (
           <div className="mt-6 report-card">
             <div className="report-kpi-label">{lang === "fr" ? "Évolution vs session précédente" : "Change vs previous session"}</div>
             <div className="font-semibold tabular-nums">
               {delta >= 0 ? "+" : ""}{delta} {lang === "fr" ? "points" : "pts"} · {baselinePercent}% → {agg.globalPercent}%
+            </div>
+            <div className="report-kpi-note">
+              {lang === "fr" ? "Couverture" : "Coverage"}: {baselineMetrics?.evaluationPercent ?? 0}% → {assessmentMetrics.evaluationPercent}%
             </div>
           </div>
         )}
@@ -11748,7 +12075,7 @@ function PrintExecutive({
 
         <div className="report-grid report-grid-3 mb-3">
           <div className="report-card">
-            <div className="report-kpi-label">{lang === "fr" ? "Contrôles applicables" : "Applicable controls"}</div>
+            <div className="report-kpi-label">{lang === "fr" ? "Évalués et applicables" : "Assessed and applicable"}</div>
             <div className="report-kpi-value tabular-nums">{applicableControls}</div>
             <div className="report-kpi-note">{notApplicableControls} {lang === "fr" ? "non applicable(s)" : "not applicable"}</div>
           </div>
@@ -11796,7 +12123,8 @@ function PrintExecutive({
           <thead>
             <tr>
               <th>{t.domain}</th>
-              <th className="text-right">{lang === "fr" ? "Maturité" : "Maturity"}</th>
+              <th className="text-right">{lang === "fr" ? "Maturité évaluée" : "Assessed maturity"}</th>
+              <th className="text-right">{lang === "fr" ? "Évaluation" : "Assessment"}</th>
               <th className="text-right">{lang === "fr" ? "Score" : "Score"}</th>
               <th className="text-right">{lang === "fr" ? "Écarts" : "Gaps"}</th>
               <th className="text-right">{lang === "fr" ? "Impact 3" : "Impact 3"}</th>
@@ -11810,10 +12138,11 @@ function PrintExecutive({
                 <tr key={d.domain}>
                   <td><strong>{d.domain}</strong><br /><span className="report-muted report-small">{d.count} {lang === "fr" ? "contrôle(s)" : "control(s)"}</span></td>
                   <td className="text-right tabular-nums">
-                    <strong>{d.percent}%</strong>
+                    <strong>{d.maturityCount ? `${d.percent}%` : "—"}</strong>
                     <div className="report-maturity-track"><div className="report-maturity-fill" style={{ width: `${pctClamped}%` }} /></div>
-                    <span className="report-muted report-small">{maturityLabel(d.percent, lang)}</span>
+                    <span className="report-muted report-small">{d.maturityCount ? maturityLabel(d.percent, lang) : (lang === "fr" ? "Non calculable" : "Not available")}</span>
                   </td>
+                  <td className="text-right tabular-nums"><strong>{d.evaluationPercent}%</strong><br /><span className="report-muted report-small">{d.evaluated} / {d.count}</span></td>
                   <td className="text-right tabular-nums">{d.points} / {d.max}</td>
                   <td className="text-right tabular-nums">{d.gaps}</td>
                   <td className="text-right tabular-nums">{d.criticalGaps}</td>
@@ -12223,9 +12552,23 @@ function GapTrackApp({
   const [sessions, setSessions] = useState<Session[]>([]);
   const [activeSessionId, setActiveSessionId] = useState("");
 
-  // Templates (checklists) used by the onboarding wizard
-  const [templates, setTemplates] = useState<ChecklistTemplate[]>(() => loadTemplates());
-  useEffect(() => { try { saveTemplates(templates); } catch {} }, [templates]);
+  // Built-in versioned catalogs are loaded from public assets. Only custom
+  // templates are persisted in localStorage.
+  const [customTemplates, setCustomTemplates] = useState<ChecklistTemplate[]>(() => loadTemplates());
+  const [builtInTemplates, setBuiltInTemplates] = useState<ChecklistTemplate[]>([]);
+  const templates = React.useMemo(
+    () => [...builtInTemplates, ...customTemplates],
+    [builtInTemplates, customTemplates]
+  );
+
+  useEffect(() => { try { saveTemplates(customTemplates); } catch {} }, [customTemplates]);
+  useEffect(() => {
+    let cancelled = false;
+    void loadBuiltInTemplates().then((loaded) => {
+      if (!cancelled) setBuiltInTemplates(loaded);
+    });
+    return () => { cancelled = true; };
+  }, []);
 
   const [wizardOpen, setWizardOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -13780,6 +14123,18 @@ function GapTrackApp({
       console.assert(significationText(85, "fr").toLowerCase().includes("optimis"), "signification FR");
       const seeded = seedRowsFrom(sample);
       console.assert(seeded.every(r=>r.realized===-2), 'seed resets to non evaluated');
+      const untouchedMetrics = calculateAssessmentMetrics(seeded);
+      console.assert(untouchedMetrics.evaluationPercent === 0 && untouchedMetrics.maturityMax === 0, "non-evaluated controls are excluded from maturity");
+      const partialCoverageMetrics = calculateAssessmentMetrics([
+        { ...sample[0], realized: 1 },
+        { ...sample[1], realized: -2 },
+      ]);
+      console.assert(partialCoverageMetrics.evaluationPercent === 50 && partialCoverageMetrics.maturityPercent === 100, "coverage and assessed maturity stay separate");
+      const balancedMetrics = calculateAssessmentMetrics([
+        { ...sample[0], impact: 2, realized: 1 },
+        { ...sample[1], impact: 2, realized: 0 },
+      ]);
+      console.assert(balancedMetrics.maturityPercent === 50, "weighted assessed maturity");
     } catch (e) {
       console.warn("Self-tests failed", e);
     }
@@ -13824,7 +14179,7 @@ function GapTrackApp({
       throw new Error(lang === "fr" ? "Import réservé à Premium" : "Premium required for import");
     }
     const tpl = await importTemplateFile(frameworkId, file);
-    setTemplates((prev) => {
+    setCustomTemplates((prev) => {
       const next = [tpl, ...prev.filter(p => p.id !== tpl.id)];
       return next;
     });
@@ -14100,10 +14455,14 @@ function GapTrackApp({
     if (!current) return () => { cancelled = true; };
     const currentTime = new Date(current.createdAt).getTime();
     const currentFramework = normalizeSessionFrameworkId(current.frameworkId);
+    const currentFrameworkVersion = current.frameworkVersion?.trim();
+    const currentCatalogId = current.frameworkCatalogId?.trim();
     const previous = sessions
       .filter((session) => session.id !== current.id)
       .filter((session) => new Date(session.createdAt).getTime() < currentTime)
       .filter((session) => !currentFramework || normalizeSessionFrameworkId(session.frameworkId) === currentFramework)
+      .filter((session) => !currentFrameworkVersion || session.frameworkVersion?.trim() === currentFrameworkVersion)
+      .filter((session) => !currentCatalogId || session.frameworkCatalogId?.trim() === currentCatalogId)
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
     if (!previous) return () => { cancelled = true; };
 
@@ -14520,10 +14879,13 @@ function GapTrackApp({
         onImportTemplate={handleImportTemplate}
         canImportTemplates={isPremiumUser}
         onPremiumRequired={requirePremiumFeature}
-        onCreateAudit={async ({ name, frameworkId, scope, criticality, templateId, rows: tplRows, organization, auditor, sponsor, auditDate, auditType, objectives, context }) => {
+        onCreateAudit={async ({ name, frameworkId, frameworkVersion, frameworkCatalogId, frameworkCatalogRevision, scope, criticality, templateId, rows: tplRows, organization, auditor, sponsor, auditDate, auditType, objectives, context }) => {
           const sessionBase: Omit<Session, "id" | "createdAt"> = {
             name,
             frameworkId,
+            frameworkVersion,
+            frameworkCatalogId,
+            frameworkCatalogRevision,
             scope,
             criticality,
             templateId,
@@ -14541,7 +14903,15 @@ function GapTrackApp({
             return createSessionFromRows(s, tplRows);
           }
           // Source = current checklist (reset statuses)
-          const s: Session = { id: uuid(), createdAt: new Date().toISOString(), ...sessionBase, templateId: undefined };
+          const s: Session = {
+            id: uuid(),
+            createdAt: new Date().toISOString(),
+            ...sessionBase,
+            templateId: undefined,
+            frameworkVersion: undefined,
+            frameworkCatalogId: undefined,
+            frameworkCatalogRevision: undefined,
+          };
           const base = seedRowsFrom(rows);
           return createSessionFromRows(s, base);
         }}
