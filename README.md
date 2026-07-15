@@ -1,10 +1,10 @@
-# GapTrack — Plateforme d’audit GRC/SSI
+# GapTrack — Plateforme d’audit GRC / SSI
 
-**GapTrack** est une application web permettant de réaliser un audit de maturité cybersécurité, de suivre les écarts, d’associer des preuves et de générer un plan d’action priorisé.
+**GapTrack** est une application web de gestion d’audits de cybersécurité permettant d’évaluer un périmètre, de mesurer sa maturité, de suivre les écarts, d’associer des preuves et de construire un plan d’action priorisé.
 
-Ce projet a été conçu dans une logique de **GRC cybersécurité** afin de simuler une mission d’audit SSI : évaluation de contrôles, scoring de maturité, identification des écarts, priorisation des remédiations et restitution exploitable.
+Le projet reproduit les principales étapes d’une mission GRC / SSI : cadrage, évaluation des contrôles, collecte d’éléments justificatifs, analyse des écarts, scoring, priorisation et restitution.
 
-🔗 **Démo en ligne** : https://gaptrack.fr/  
+🔗 **Application en ligne** : https://gaptrack.fr/  
 🔗 **Code source** : https://github.com/JulienMessaoudi/GapTrack
 
 ---
@@ -29,18 +29,19 @@ Ce projet a été conçu dans une logique de **GRC cybersécurité** afin de sim
 
 ## Contexte du projet
 
-Les démarches de gouvernance cybersécurité, d’audit SSI et de conformité reposent souvent sur plusieurs livrables : référentiel de contrôles, matrice d’écarts, preuves d’audit, scoring de maturité, rapport de synthèse et plan d’action.
+Les démarches de gouvernance cybersécurité, d’audit SSI et de conformité s’appuient généralement sur plusieurs éléments : référentiel de contrôles, périmètre audité, évaluations, preuves, matrice d’écarts, scoring de maturité, plan d’action et rapport de synthèse.
 
-L’objectif de GapTrack est de centraliser ces éléments dans une interface simple afin de faciliter :
+GapTrack centralise ces éléments dans une même application afin de faciliter :
 
-- l’évaluation d’un niveau de maturité cybersécurité ;
-- le suivi des contrôles conformes, partiels, non conformes ou non applicables ;
-- la collecte de preuves ou références associées aux contrôles ;
-- la comparaison entre plusieurs sessions d’audit ;
+- la création et le suivi de plusieurs audits ;
+- l’évaluation des contrôles d’un référentiel ;
+- le suivi des contrôles conformes, partiels, non conformes, non applicables ou non encore évalués ;
+- l’association de notes et de références de preuve ;
+- la comparaison entre plusieurs audits ;
 - la génération d’un plan d’action priorisé ;
-- la production d’une restitution synthétique.
+- la production d’une restitution exploitable.
 
-Ce projet s’inscrit dans une logique de **mission conseil cybersécurité / GRC**, avec une attention particulière portée à la structuration des livrables et à leur compréhension par des interlocuteurs techniques ou non techniques.
+Le projet s’inscrit dans une logique de **mission de conseil en cybersécurité et GRC**, avec une attention particulière portée à la lisibilité des résultats pour des interlocuteurs techniques comme non techniques.
 
 ---
 
@@ -48,100 +49,137 @@ Ce projet s’inscrit dans une logique de **mission conseil cybersécurité / GR
 
 GapTrack vise à répondre à plusieurs besoins rencontrés lors d’un audit SSI ou d’une démarche de mise en conformité :
 
-- fournir une vision claire de l’état de conformité d’un périmètre audité ;
+- fournir une vision claire de l’état de conformité d’un périmètre ;
+- mesurer la couverture et la maturité de l’audit ;
 - identifier rapidement les domaines les plus faibles ;
 - suivre les écarts et les actions de remédiation ;
 - prioriser les mesures selon leur impact ;
-- conserver des preuves ou références utiles à l’audit ;
+- conserver les notes et références utiles à l’audit ;
 - comparer l’évolution de la maturité entre plusieurs sessions ;
-- produire une restitution exploitable sous forme de rapport.
+- produire une restitution synthétique sous forme de rapport.
 
 ---
 
 ## Fonctionnalités principales
 
-### Audit et suivi des contrôles
+### Gestion des audits
 
-- Création et gestion de sessions d’audit.
-- Listing des contrôles SSI.
-- Statut des contrôles :
-  - conforme ;
-  - partiel ;
-  - non conforme ;
-  - non applicable.
-- Recherche et filtres sur les contrôles.
-- Classement par domaine, impact, priorité ou statut.
-- Suivi des écarts identifiés.
+- Création de plusieurs audits.
+- Duplication d’un audit existant.
+- Modification des informations générales d’un audit.
+- Suppression d’un audit.
+- Sélection du périmètre et du contexte d’évaluation.
+- Sauvegarde persistante des données dans Supabase.
+- Comparaison entre plusieurs audits.
+
+### Évaluation des contrôles
+
+Chaque contrôle peut être associé à l’un des statuts suivants :
+
+- non évalué ;
+- conforme ;
+- partiellement conforme ;
+- non conforme ;
+- non applicable.
+
+L’application permet également :
+
+- de rechercher un contrôle ;
+- de filtrer les contrôles par statut, domaine ou priorité ;
+- de classer les résultats ;
+- d’ajouter une note d’audit ;
+- d’associer une référence de preuve ;
+- d’identifier les écarts nécessitant une action.
 
 ### Tableau de bord de maturité
 
 - Calcul d’un score global de maturité.
-- Score de maturité par domaine.
-- Visualisation radar.
-- Identification des domaines à prioriser.
-- Comparaison entre plusieurs sessions d’audit.
-- Légende de maturité pour faciliter l’interprétation.
+- Calcul d’un score par domaine.
+- Calcul du taux de couverture de l’audit.
+- Visualisation radar des résultats.
+- Identification des domaines prioritaires.
+- Comparaison entre plusieurs audits.
+- Légende de maturité facilitant l’interprétation du score.
 
 ### Plan d’action
 
-- Génération d’un plan d’action à partir des écarts.
-- Priorisation des actions.
+- Génération d’actions à partir des écarts identifiés.
+- Définition d’une priorité.
 - Attribution d’un responsable.
-- Suivi d’une échéance.
-- Ajout de commentaires.
+- Ajout d’une échéance.
+- Ajout de commentaires et de recommandations.
+- Suivi de l’avancement des actions.
 - Export des résultats.
 
 ### Preuves et documentation
 
-- Ajout de preuves ou références sur les contrôles.
+- Ajout de références de preuve sur les contrôles.
 - Ajout de notes d’audit.
-- Conservation des éléments justificatifs liés aux contrôles.
-- Préparation d’une restitution plus complète.
+- Conservation des éléments justificatifs associés aux évaluations.
+- Préparation d’une restitution structurée.
 
 ### Export et restitution
 
-- Export du rapport au format PDF.
+- Génération d’un rapport PDF.
 - Export CSV pour exploitation externe.
 - Présentation synthétique des résultats.
-- Support de restitution pour une logique de mission conseil.
+- Restitution adaptée à une logique de mission de conseil.
+
+### Comptes et accès
+
+- Création de compte et connexion avec Supabase Auth.
+- Réinitialisation du mot de passe.
+- Gestion d’une session utilisateur dans le navigateur.
+- Option « Se souvenir de moi ».
+- Gestion de profils et de rôles applicatifs.
+- Déconnexion et invalidation de la session active.
 
 ### Expérience utilisateur
 
 - Interface bilingue français / anglais.
-- Mode clair / sombre.
-- Sauvegarde locale dans le navigateur.
-- Synchronisation backend possible selon la configuration.
+- Mode clair et mode sombre.
 - Interface responsive.
+- Navigation adaptée aux principaux écrans de l’application.
+- Notifications de confirmation et d’erreur.
+- Animations et transitions d’interface.
 
 ---
 
 ## Approche GRC / SSI
 
-GapTrack ne se limite pas à une application technique. Le projet cherche à reproduire une démarche de conseil cybersécurité structurée :
+GapTrack cherche à reproduire une démarche d’audit structurée.
 
-1. **Cadrage du périmètre audité**  
-   Définition d’une session d’audit et d’un ensemble de contrôles.
+### 1. Cadrage du périmètre
 
-2. **Évaluation des contrôles**  
-   Analyse de l’état de conformité ou de maturité de chaque point de contrôle.
+Création d’un audit, définition de son contexte, de son type, de sa criticité et du périmètre concerné.
 
-3. **Collecte de preuves**  
-   Association de notes, preuves ou références permettant de justifier l’évaluation.
+### 2. Évaluation des contrôles
 
-4. **Analyse des écarts**  
-   Identification des contrôles non satisfaits ou partiellement satisfaits.
+Analyse de l’état de conformité ou de maturité de chaque point de contrôle.
 
-5. **Scoring de maturité**  
-   Calcul d’un score global et par domaine afin d’obtenir une vision synthétique.
+### 3. Collecte de preuves
 
-6. **Priorisation**  
-   Mise en évidence des domaines et actions à traiter en priorité.
+Association de notes et de références permettant de justifier les évaluations réalisées.
 
-7. **Plan d’action**  
-   Construction d’une feuille de route de remédiation.
+### 4. Analyse des écarts
 
-8. **Restitution**  
-   Génération d’un rapport exploitable pour un décideur, un RSSI ou une équipe projet.
+Identification des contrôles non conformes ou partiellement conformes.
+
+### 5. Scoring de maturité
+
+Calcul d’un score global et par domaine afin d’obtenir une vision synthétique de la situation.
+
+### 6. Priorisation
+
+Mise en évidence des domaines, contrôles et actions nécessitant une attention prioritaire.
+
+### 7. Plan d’action
+
+Construction d’une feuille de route de remédiation avec responsables, priorités, échéances et commentaires.
+
+### 8. Restitution
+
+Génération d’un rapport exploitable par un décideur, un RSSI, un auditeur ou une équipe projet.
 
 ---
 
@@ -149,17 +187,21 @@ GapTrack ne se limite pas à une application technique. Le projet cherche à rep
 
 Le scoring de maturité repose sur une logique pondérée.
 
-Chaque contrôle possède un niveau d’impact. Le score global est calculé à partir des contrôles applicables et de leur niveau de réalisation.
-
-Principe général :
+Chaque contrôle possède un niveau d’impact. Le score est calculé à partir des contrôles évalués et applicables, en tenant compte de leur niveau de réalisation.
 
 ```text
-Score de maturité = somme pondérée des contrôles réalisés / somme des impacts applicables
+Score de maturité =
+somme des points pondérés obtenus
+/
+somme des impacts des contrôles évalués et applicables
 ```
 
-Les contrôles non applicables sont exclus du calcul afin de ne pas fausser le score.
+Les contrôles non applicables et les contrôles non encore évalués sont exclus du calcul de maturité afin de ne pas fausser le résultat.
 
-Une légende permet d’interpréter le niveau de maturité obtenu :
+L’application distingue également :
+
+- le **score de maturité**, qui mesure le niveau atteint sur les contrôles évalués et applicables ;
+- la **couverture de l’audit**, qui indique la proportion de contrôles effectivement évalués.
 
 | Score | Niveau | Interprétation |
 |---:|---|---|
@@ -173,22 +215,24 @@ Une légende permet d’interpréter le niveau de maturité obtenu :
 
 ## Cas d’usage
 
-### Exemple : audit cybersécurité d’une PME fictive
+### Exemple : audit cybersécurité d’une PME
 
-Une PME souhaite évaluer sa maturité SSI avant une revue client ou une démarche de conformité.
+Une PME souhaite évaluer sa maturité SSI avant une revue client, une démarche de conformité ou la mise en place d’un programme d’amélioration.
 
 Avec GapTrack, l’auditeur peut :
 
 1. créer une session d’audit ;
-2. parcourir les contrôles du référentiel ;
-3. qualifier chaque contrôle : conforme, partiel, non conforme ou non applicable ;
-4. ajouter des preuves ou notes d’audit ;
-5. visualiser le score de maturité global et par domaine ;
-6. identifier les domaines les plus faibles ;
-7. construire un plan d’action priorisé ;
-8. exporter une restitution PDF ou CSV.
+2. renseigner le périmètre et le contexte ;
+3. parcourir les contrôles du référentiel ;
+4. qualifier chaque contrôle ;
+5. ajouter des notes et des références de preuve ;
+6. visualiser la couverture et le score de maturité ;
+7. identifier les domaines les plus faibles ;
+8. construire un plan d’action priorisé ;
+9. comparer les résultats avec un autre audit ;
+10. exporter une restitution PDF ou CSV.
 
-Ce cas d’usage permet de simuler une mission GRC complète : diagnostic, analyse d’écarts, recommandations et restitution.
+Ce cas d’usage permet de simuler une mission GRC complète : diagnostic, analyse d’écarts, recommandations, suivi et restitution.
 
 ---
 
@@ -199,134 +243,163 @@ Ce cas d’usage permet de simuler une mission GRC complète : diagnostic, analy
 Le tableau de bord permet de visualiser :
 
 - la maturité globale ;
+- la couverture de l’audit ;
 - la maturité par domaine ;
 - les domaines prioritaires ;
-- la comparaison entre sessions ;
+- la répartition des statuts ;
+- la comparaison entre plusieurs audits ;
 - la signification du score obtenu.
 
-### Listing des contrôles
+### Liste des contrôles
 
-La vue de listing permet de :
+La vue des contrôles permet de :
 
-- parcourir les contrôles ;
-- filtrer les résultats ;
-- modifier leur statut ;
-- ajouter des preuves ;
-- suivre les écarts.
+- parcourir le référentiel ;
+- rechercher et filtrer les résultats ;
+- modifier le statut d’un contrôle ;
+- ajouter une note ;
+- associer une référence de preuve ;
+- identifier et suivre les écarts.
 
 ### Plan d’action
 
-Le plan d’action permet de structurer les mesures de remédiation avec :
+Le plan d’action structure les mesures de remédiation avec :
 
 - priorité ;
 - responsable ;
 - échéance ;
+- statut ;
 - commentaire ;
+- recommandation ;
 - export.
+
+### Gestion des utilisateurs
+
+Selon les droits attribués, l’application permet de gérer différents profils :
+
+- administrateur ;
+- auditeur ;
+- contributeur ;
+- lecteur.
 
 ---
 
 ## Stack technique
 
-### Frontend
+### Application web
 
-- React
-- TypeScript
-- Vite
-- Tailwind CSS
-- Recharts
-- Radix UI
-- Lucide React
+- **Astro** pour la structure du site et la génération statique.
+- **React** pour les interfaces interactives.
+- **TypeScript** pour le typage et la fiabilité du code.
+- **Tailwind CSS** pour la mise en forme.
+- **Radix UI** pour certains composants d’interface accessibles.
+- **Lucide React** pour les icônes.
+- **Recharts** pour les graphiques et visualisations.
+- **Motion** et **GSAP** pour les animations.
+- **Sonner** pour les notifications.
 
-### Backend
+### Authentification et données
 
-- Node.js
-- Fastify
-- TypeScript
-- Prisma
-- SQLite
-- JWT
-- Argon2
-- Zod
+- **Supabase Auth** pour la création de compte, la connexion, la déconnexion et la réinitialisation du mot de passe.
+- **Supabase Database** pour la persistance des profils, audits et données associées.
+- **Supabase JavaScript Client** pour les échanges entre l’application et Supabase.
+- Fonctions RPC Supabase pour certaines opérations applicatives et administratives.
 
-### Outils
+### Export
 
-- ESLint
-- Prettier
-- pnpm
-- Vercel pour le déploiement frontend
+- **jsPDF** pour la génération des rapports PDF.
+- **jsPDF AutoTable** pour la création de tableaux dans les rapports.
+- Export CSV pour l’exploitation des données dans d’autres outils.
+
+### Qualité et déploiement
+
+- **ESLint** pour l’analyse statique du code.
+- **Prettier** pour le formatage.
+- **Vite**, utilisé par Astro pour le développement et la construction.
+- **Vercel** pour l’hébergement et le déploiement.
+
+> La version actuelle de GapTrack repose principalement sur Astro, React et Supabase. L’ancienne architecture Fastify, Prisma et SQLite ne décrit plus le fonctionnement principal de l’application déployée.
 
 ---
 
 ## Sécurité et confidentialité
 
-GapTrack est un projet académique et démonstratif. Il ne doit pas être utilisé en production sans revue de sécurité préalable.
+GapTrack utilise désormais **Supabase Auth** pour gérer l’authentification.
 
-Points pris en compte :
+La session n’est pas gérée par un cookie HTTP-only provenant d’un backend Fastify. Elle est gérée côté navigateur par le client Supabase :
 
-- authentification par cookie HTTP-only côté backend ;
-- hachage des mots de passe avec Argon2 ;
-- validation des entrées avec Zod ;
-- séparation frontend / backend ;
-- gestion d’un secret JWT via variable d’environnement ;
-- sauvegarde locale possible dans le navigateur ;
-- synchronisation backend configurable.
+- la session est conservée dans `sessionStorage` par défaut ;
+- lorsque l’option « Se souvenir de moi » est activée, elle est conservée dans `localStorage` ;
+- le jeton de session peut être rafraîchi automatiquement par Supabase ;
+- les liens de confirmation ou de réinitialisation peuvent être détectés depuis l’URL ;
+- la déconnexion supprime les données de session du stockage navigateur.
 
-Limites actuelles :
+Les paramètres publics de connexion à Supabase sont fournis à l’application par des variables d’environnement. Les opérations sensibles et les règles d’accès aux données doivent être protégées côté Supabase, notamment au moyen de politiques de sécurité adaptées et de fonctions SQL contrôlées.
 
-- le mode `DEV_BYPASS_AUTH` est destiné uniquement au développement local ;
-- le secret JWT doit être remplacé par une valeur robuste en production ;
-- la gestion fine des rôles et permissions doit être renforcée avant usage réel ;
-- aucune donnée sensible réelle ne doit être saisie dans la version de démonstration.
+### Points de vigilance
+
+- Les jetons de session sont accessibles au contexte JavaScript du navigateur : la prévention des failles XSS est donc essentielle.
+- Les politiques Row Level Security de Supabase doivent être vérifiées pour chaque table exposée.
+- Les rôles affichés dans l’interface ne remplacent pas des contrôles d’autorisation côté base de données.
+- Les fonctions RPC doivent vérifier les droits de l’utilisateur appelant.
+- Les clés de service Supabase ne doivent jamais être exposées dans le frontend.
+- Aucune donnée sensible réelle ne doit être saisie dans une version de démonstration sans revue de sécurité préalable.
+- Une revue de sécurité complète reste nécessaire avant tout usage en production.
 
 ---
 
 ## Compétences démontrées
 
-Ce projet démontre plusieurs compétences utiles dans un contexte cybersécurité, GRC et conseil.
-
 ### GRC / SSI
 
 - Structuration d’un audit SSI.
 - Modélisation d’un référentiel de contrôles.
+- Évaluation de conformité.
+- Calcul d’un score de maturité.
+- Mesure de la couverture d’un audit.
 - Suivi des écarts.
-- Gestion de preuves.
+- Gestion de preuves et de notes d’audit.
 - Construction d’un plan d’action.
-- Scoring de maturité.
-- Restitution synthétique pour décideurs.
+- Comparaison entre plusieurs audits.
+- Restitution synthétique pour des décideurs.
 
 ### Cybersécurité
 
-- Sensibilisation aux démarches de conformité.
-- Notions de gouvernance SSI.
-- Gestion des risques et priorisation.
-- Prise en compte de la confidentialité des données.
-- Authentification et gestion de session côté backend.
+- Gouvernance de la sécurité des systèmes d’information.
+- Analyse des écarts et priorisation.
+- Gestion des risques et des actions de remédiation.
+- Gestion de l’authentification et des sessions.
+- Prise en compte des droits d’accès.
+- Sensibilisation aux politiques de sécurité côté base de données.
+- Prise en compte de la confidentialité et de l’intégrité des données.
 
 ### Développement
 
-- Développement frontend avec React et TypeScript.
-- Création d’une interface utilisateur structurée.
-- Visualisation de données avec graphiques.
-- Développement backend avec Fastify.
-- Utilisation de Prisma et SQLite.
-- Validation des données avec Zod.
-- Organisation d’un projet full-stack.
+- Développement d’une application avec Astro, React et TypeScript.
+- Intégration de Supabase Auth et Supabase Database.
+- Gestion d’une session persistante dans le navigateur.
+- Création d’interfaces responsives.
+- Visualisation de données avec des graphiques.
+- Génération de rapports PDF.
+- Export de données au format CSV.
+- Organisation d’une application web déployée sur Vercel.
 
 ### Conseil
 
-- Capacité à transformer un besoin métier en outil.
+- Transformation d’un besoin métier en outil.
 - Formalisation d’un diagnostic.
 - Production de livrables exploitables.
 - Vulgarisation des résultats de sécurité.
 - Priorisation des recommandations.
+- Présentation d’indicateurs à des interlocuteurs techniques ou non techniques.
 
 ---
 
 ## Auteur
 
 **Julien Messaoudi**  
-Étudiant ingénieur en cybersécurité — ESIEE Paris  
+Étudiant ingénieur en cybersécurité — ESIEE Paris
+
 Orientation : GRC, analyse de risques, conformité SSI, cybersécurité et développement d’outils d’audit.
 
 - GitHub : https://github.com/JulienMessaoudi
@@ -336,12 +409,14 @@ Orientation : GRC, analyse de risques, conformité SSI, cybersécurité et déve
 
 ## Licence
 
-Projet réalisé à des fins académiques et de démonstration.
+Projet réalisé à des fins académiques, de démonstration et d’apprentissage.
 
-Aucune donnée sensible réelle ne doit être utilisée dans l’application de démonstration.
+Aucune donnée sensible réelle ne doit être utilisée dans l’application de démonstration sans mesures de sécurité adaptées.
 
 ---
 
 ## Note
 
-GapTrack est un projet d’apprentissage visant à démontrer une capacité à relier cybersécurité, GRC, développement logiciel et restitution conseil. Il ne constitue pas un outil certifié d’audit ou de conformité.
+GapTrack est un projet d’apprentissage visant à démontrer une capacité à relier cybersécurité, GRC, développement logiciel et restitution de conseil.
+
+Il ne constitue pas un outil certifié d’audit, de conformité ou de gestion des risques. Les résultats produits doivent être interprétés et validés par une personne compétente avant toute utilisation dans un contexte réel.
