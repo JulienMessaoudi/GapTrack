@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "concurrently \"npm run dev --prefix backend\" \"astro dev\"",
     "build": "astro build"
-  }
+  },
   "scripts": {
     "dev": "concurrently \"npm run dev --prefix backend\" \"astro dev\"",
     "dev:front": "astro dev",
