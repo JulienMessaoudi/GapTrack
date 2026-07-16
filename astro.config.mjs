@@ -13,21 +13,30 @@ export default defineConfig({
     csp: {
       algorithm: "SHA-256",
 
-      /*
-       * Autorise les fichiers JavaScript de GapTrack.
-       * Astro ajoutera automatiquement les hashes nécessaires
-       * pour ses scripts inline d'hydratation.
-       */
       scriptDirective: {
-        resources: ["'self'"],
+        resources: [
+          {
+            resource: "'self'",
+            kind: "element",
+          },
+          {
+            resource: "'none'",
+            kind: "attribute",
+          },
+        ],
       },
 
-      /*
-       * On conserve temporairement unsafe-inline uniquement
-       * pour les styles React dynamiques.
-       */
       styleDirective: {
-        resources: ["'self'", "'unsafe-inline'"],
+        resources: [
+          {
+            resource: "'self'",
+            kind: "element",
+          },
+          {
+            resource: "'unsafe-inline'",
+            kind: "attribute",
+          },
+        ],
       },
 
       directives: [
@@ -36,11 +45,6 @@ export default defineConfig({
         "object-src 'none'",
         "frame-src 'none'",
         "form-action 'self'",
-
-        /*
-         * Interdit les attributs onclick, onerror, etc.
-         */
-        "script-src-attr 'none'",
 
         "img-src 'self' data: blob:",
         "font-src 'self' data:",
