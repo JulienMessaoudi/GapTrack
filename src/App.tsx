@@ -13,7 +13,6 @@ import { ResetPasswordPage } from "./components/ResetPasswordPage";
 import { LandingHomePage } from "./components/LandingHomePage";
 import { supabase } from "./lib/supabase";
 import { authErrorMessage } from "./lib/authErrorMessages";
-import { useInactivityLogout } from "./hooks/useInactivityLogout";
 
 
 // ==================
@@ -13037,11 +13036,7 @@ function GapTrackApp({
   }, [lang]);
 
   const logoutUser = React.useCallback(() => {
-    // Une expiration liée à l’inactivité ne doit fermer que la session
-    // de ce navigateur, sans déconnecter les autres appareils.
-    void supabase.auth.signOut({
-      scope: "local",
-    });
+    void supabase.auth.signOut();
     clearActiveUserId();
     setActiveUserId("");
     setLocalActorFromUser(null);
@@ -13776,14 +13771,6 @@ function GapTrackApp({
       setIsAuditMutating(false);
     }
   }, [flushActiveAudit, isAuditLoading, isAuditMutating, isEvidenceBusy, lang, logoutUser, navigate]);
-
-  useInactivityLogout({
-    enabled: Boolean(activeUser),
-    timeoutMs: 30 * 60 * 1_000,
-    warningMs: 2 * 60 * 1_000,
-    lang,
-    onTimeout: logoutAfterSaving,
-  });
 
 
 
