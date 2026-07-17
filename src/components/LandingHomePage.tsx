@@ -25,7 +25,7 @@ import "./LandingHomePage.css";
 type LandingPageView = "plateforme" | "apropos" | "securite" | "confidentialite" | "mentions-legales" | "cgu";
 type SubscriptionPlan = "free" | "premium";
 
-const PREMIUM_CONTACT_EMAIL = "julien.messaoudi@edu.esiee.fr";
+const PREMIUM_CONTACT_EMAIL = "contact@gaptrack.fr";
 const SITE_URL = "https://gaptrack.fr";
 const JULIEN_LINKEDIN_URL = "https://www.linkedin.com/in/julien-messaoudi/";
 
@@ -1308,7 +1308,7 @@ function AboutPage() {
           </p>
 
           <div className="gth-hero-actions gth-about-actions">
-            <a className="gth-primary gth-about-contact-primary" href="mailto:julien.messaoudi@edu.esiee.fr">
+            <a className="gth-primary gth-about-contact-primary" href="mailto:contact@gaptrack.fr">
               Contacter le créateur
               <Mail aria-hidden="true" />
             </a>

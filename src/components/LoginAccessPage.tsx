@@ -90,7 +90,7 @@ function isExistingAccountError(error: { message?: string; status?: number } | n
   );
 }
 
-const PREMIUM_CONTACT_EMAIL = "julien.messaoudi@edu.esiee.fr";
+const PREMIUM_CONTACT_EMAIL = "contact@gaptrack.fr";
 
 function buildPremiumRequestMailto(params: { email?: string; name?: string; organization?: string; source?: string } = {}): string {
   const subject = "Demande d’activation Premium GapTrack";

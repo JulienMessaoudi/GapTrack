@@ -89,37 +89,5 @@ const imageUrl = new URL("/icon-512.png", siteUrl).toString();
   <body>
     <slot />
 
-    <script is:inline>
-      const legacyContactEmail = "julien.messaoudi@edu.esiee.fr";
-      const gapTrackContactEmail = "contact@gaptrack.fr";
-
-      const updateGapTrackContactLinks = () => {
-        document.querySelectorAll('a[href^="mailto:"]').forEach((link) => {
-          const href = link.getAttribute("href");
-
-          if (!href || !href.includes(legacyContactEmail)) {
-            return;
-          }
-
-          link.setAttribute(
-            "href",
-            href.replaceAll(legacyContactEmail, gapTrackContactEmail),
-          );
-        });
-      };
-
-      updateGapTrackContactLinks();
-
-      const contactLinkObserver = new MutationObserver(
-        updateGapTrackContactLinks,
-      );
-
-      contactLinkObserver.observe(document.body, {
-        subtree: true,
-        childList: true,
-        attributes: true,
-        attributeFilter: ["href"],
-      });
-    </script>
   </body>
 </html>

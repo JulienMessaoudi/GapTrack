@@ -211,7 +211,7 @@ function normalizeSubscriptionPlan(value: unknown): SubscriptionPlan {
   return value === "premium" ? "premium" : "free";
 }
 
-const PREMIUM_CONTACT_EMAIL = "julien.messaoudi@edu.esiee.fr";
+const PREMIUM_CONTACT_EMAIL = "contact@gaptrack.fr";
 
 async function updateSubscriptionPlanOnServer(
   email: string,
