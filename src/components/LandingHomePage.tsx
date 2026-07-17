@@ -30,21 +30,34 @@ const SITE_URL = "https://gaptrack.fr";
 const JULIEN_LINKEDIN_URL = "https://www.linkedin.com/in/julien-messaoudi/";
 
 function buildPremiumRequestMailto(source: string): string {
-  const subject = "Demande d’activation Premium GapTrack";
+  const subject = "Demande Premium — GapTrack";
   const body = [
-    "Bonjour Julien,",
+    "Bonjour l’équipe GapTrack,",
     "",
-    "Je souhaite être recontacté pour activer GapTrack Premium.",
-    "E-mail à activer : ",
-    "Nom : ",
-    "Organisation : ",
-    "Besoin principal : audits illimités / exports PDF-CSV / preuves cloud / validation des preuves / utilisateurs et rôles / modèles personnalisés / autre",
-    "Contexte ou délai souhaité : ",
-    `Origine : ${source}`,
+    "Je souhaite être recontacté au sujet de l’offre GapTrack Premium.",
     "",
-    "J’ai compris que je peux commencer en Free en attendant l’activation Premium, sans perdre les données déjà saisies.",
+    "────────── COORDONNÉES ──────────",
+    "Nom :",
+    "E-mail :",
+    "Organisation :",
     "",
-    "Merci.",
+    "──────────── BESOIN ─────────────",
+    "Fonctionnalités recherchées :",
+    "☐ Audits illimités",
+    "☐ Exports PDF / CSV",
+    "☐ Stockage cloud des preuves",
+    "☐ Validation des preuves",
+    "☐ Utilisateurs et rôles avancés",
+    "☐ Modèles personnalisés",
+    "☐ Autre :",
+    "",
+    "Contexte ou délai souhaité :",
+    "",
+    `Origine de la demande : ${source}`,
+    "",
+    "Merci de me recontacter dès que possible.",
+    "",
+    "Cordialement,",
   ].join("\n");
 
   return `mailto:${PREMIUM_CONTACT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;

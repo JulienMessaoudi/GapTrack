@@ -92,22 +92,39 @@ function isExistingAccountError(error: { message?: string; status?: number } | n
 
 const PREMIUM_CONTACT_EMAIL = "contact@gaptrack.fr";
 
-function buildPremiumRequestMailto(params: { email?: string; name?: string; organization?: string; source?: string } = {}): string {
-  const subject = "Demande d’activation Premium GapTrack";
+function buildPremiumRequestMailto(
+  params: { email?: string; name?: string; organization?: string; source?: string } = {}
+): string {
+  const subject = "Demande Premium — GapTrack";
   const body = [
-    "Bonjour Julien,",
+    "Bonjour l’équipe GapTrack,",
     "",
-    "Je souhaite être recontacté pour activer GapTrack Premium.",
-    params.email ? `E-mail à activer : ${params.email}` : "E-mail à activer : ",
-    params.name ? `Nom : ${params.name}` : "Nom : ",
-    params.organization ? `Organisation : ${params.organization}` : "Organisation : ",
-    "Besoin principal : audits illimités / exports PDF-CSV / preuves cloud / validation des preuves / utilisateurs et rôles / modèles personnalisés / autre",
-    "Contexte ou délai souhaité : ",
-    params.source ? `Origine : ${params.source}` : "Origine : Page d’inscription GapTrack",
+    "Je souhaite être recontacté au sujet de l’offre GapTrack Premium.",
     "",
-    "J’ai compris que je peux créer ou utiliser mon compte Free en attendant l’activation Premium, sans perdre les données déjà saisies.",
+    "────────── COORDONNÉES ──────────",
+    params.name ? `Nom : ${params.name}` : "Nom :",
+    params.email ? `E-mail : ${params.email}` : "E-mail :",
+    params.organization ? `Organisation : ${params.organization}` : "Organisation :",
     "",
-    "Merci.",
+    "──────────── BESOIN ─────────────",
+    "Fonctionnalités recherchées :",
+    "☐ Audits illimités",
+    "☐ Exports PDF / CSV",
+    "☐ Stockage cloud des preuves",
+    "☐ Validation des preuves",
+    "☐ Utilisateurs et rôles avancés",
+    "☐ Modèles personnalisés",
+    "☐ Autre :",
+    "",
+    "Contexte ou délai souhaité :",
+    "",
+    params.source
+      ? `Origine de la demande : ${params.source}`
+      : "Origine de la demande : GapTrack",
+    "",
+    "Merci de me recontacter dès que possible.",
+    "",
+    "Cordialement,",
   ].join("\n");
 
   return `mailto:${PREMIUM_CONTACT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
