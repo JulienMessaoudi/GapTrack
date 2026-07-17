@@ -25,42 +25,28 @@ import "./LandingHomePage.css";
 type LandingPageView = "plateforme" | "apropos" | "securite" | "confidentialite" | "mentions-legales" | "cgu";
 type SubscriptionPlan = "free" | "premium";
 
-const PREMIUM_CONTACT_EMAIL = "contact@gaptrack.fr";
+const CONTACT_EMAIL = "contact@gaptrack.fr";
 const SITE_URL = "https://gaptrack.fr";
 const JULIEN_LINKEDIN_URL = "https://www.linkedin.com/in/julien-messaoudi/";
 
-function buildPremiumRequestMailto(source: string): string {
-  const subject = "Demande Premium — GapTrack";
-  const body = [
-    "Bonjour l’équipe GapTrack,",
-    "",
-    "Je souhaite être recontacté au sujet de l’offre GapTrack Premium.",
-    "",
-    "────────── COORDONNÉES ──────────",
-    "Nom :",
-    "E-mail :",
-    "Organisation :",
-    "",
-    "──────────── BESOIN ─────────────",
-    "Fonctionnalités recherchées :",
-    "☐ Audits illimités",
-    "☐ Exports PDF / CSV",
-    "☐ Stockage cloud des preuves",
-    "☐ Validation des preuves",
-    "☐ Utilisateurs et rôles avancés",
-    "☐ Modèles personnalisés",
-    "☐ Autre :",
-    "",
-    "Contexte ou délai souhaité :",
-    "",
-    `Origine de la demande : ${source}`,
-    "",
-    "Merci de me recontacter dès que possible.",
-    "",
-    "Cordialement,",
-  ].join("\n");
+type ContactRequestKind = "contact" | "premium" | "support" | "privacy";
 
-  return `mailto:${PREMIUM_CONTACT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+function buildContactFormUrl(params: {
+  type?: ContactRequestKind;
+  email?: string;
+  name?: string;
+  organization?: string;
+  source?: string;
+} = {}): string {
+  const search = new URLSearchParams();
+  search.set("type", params.type || "contact");
+
+  if (params.email?.trim()) search.set("email", params.email.trim());
+  if (params.name?.trim()) search.set("name", params.name.trim());
+  if (params.organization?.trim()) search.set("organization", params.organization.trim());
+  if (params.source?.trim()) search.set("source", params.source.trim());
+
+  return `/contact?${search.toString()}`;
 }
 
 function handleSeoLinkClick(event: React.MouseEvent<HTMLAnchorElement>, action: () => void): void {
@@ -415,7 +401,7 @@ export function LandingHomePage({
           <span aria-hidden="true">—</span>
           <a href="/securite" onClick={(event) => handleSeoLinkClick(event, () => openPage("securite"))}>Sécurité</a>
           <span aria-hidden="true">—</span>
-          <a href={`mailto:${PREMIUM_CONTACT_EMAIL}`}>Contact</a>
+          <a href="/contact">Contact</a>
         </nav>
       </footer>
     </main>
@@ -482,7 +468,7 @@ function HomePage({
       <PricingSection
         onSelectPlan={onAccess}
         onRequestPremium={() => {
-          window.location.href = buildPremiumRequestMailto("Landing page GapTrack");
+          window.location.href = buildContactFormUrl({ type: "premium", source: "Landing page GapTrack" });
         }}
       />
 
@@ -571,7 +557,7 @@ function PricingSection({ onSelectPlan, onRequestPremium }: { onSelectPlan: (pla
             ) : null}
             <a
               className={plan.highlighted ? "gth-primary" : "gth-secondary"}
-              href={plan.key === "premium" ? buildPremiumRequestMailto("Landing page GapTrack") : "/login"}
+              href={plan.key === "premium" ? buildContactFormUrl({ type: "premium", source: "Landing page GapTrack" }) : "/login"}
               onClick={(event) => handleSeoLinkClick(event, () => plan.key === "premium" ? onRequestPremium() : onSelectPlan(plan.key))}
             >
               {plan.cta}
@@ -758,7 +744,7 @@ function PrivacyPage() {
               >
                 <strong>Julien Messaoudi</strong>
               </a>
-              <br />Projet GapTrack<br /><a href={`mailto:${PREMIUM_CONTACT_EMAIL}`}>{PREMIUM_CONTACT_EMAIL}</a>
+              <br />Projet GapTrack<br /><a href={buildContactFormUrl({ type: "contact", source: "Site public GapTrack" })}>{CONTACT_EMAIL}</a>
             </p>
           </article>
           <article>
@@ -794,7 +780,7 @@ function PrivacyPage() {
           <p>
             Pour exercer vos droits ou poser une question sur la confidentialité, vous pouvez contacter GapTrack par e-mail.
           </p>
-          <a className="gth-primary" href={`mailto:${PREMIUM_CONTACT_EMAIL}`}>
+          <a className="gth-primary" href={buildContactFormUrl({ type: "privacy", source: "Politique de confidentialité" })}>
             Contacter GapTrack
             <Mail aria-hidden="true" />
           </a>
@@ -821,7 +807,7 @@ function LegalNoticePage() {
           Le site GapTrack, accessible à l’adresse <a href={SITE_URL}>{SITE_URL}</a>, est édité par{" "}
           <strong>Julien Messaoudi</strong>, dans le cadre du projet logiciel GapTrack.
           <br />
-          Contact : <a href={`mailto:${PREMIUM_CONTACT_EMAIL}`}>{PREMIUM_CONTACT_EMAIL}</a>
+          Contact : <a href={buildContactFormUrl({ type: "contact", source: "Site public GapTrack" })}>{CONTACT_EMAIL}</a>
         </>
       ),
     },
@@ -958,7 +944,7 @@ function LegalNoticePage() {
           <p>
             Vous pouvez contacter l’éditeur du site à l’adresse indiquée ci-dessous.
           </p>
-          <a className="gth-primary" href={`mailto:${PREMIUM_CONTACT_EMAIL}`}>
+          <a className="gth-primary" href={buildContactFormUrl({ type: "contact", source: "Mentions légales" })}>
             Contacter GapTrack
             <Mail aria-hidden="true" />
           </a>
@@ -1183,7 +1169,7 @@ function TermsPage() {
           <p>
             Vous pouvez contacter GapTrack pour toute question concernant l’accès au service, les comptes, les preuves ou les présentes CGU.
           </p>
-          <a className="gth-primary" href={`mailto:${PREMIUM_CONTACT_EMAIL}`}>
+          <a className="gth-primary" href={buildContactFormUrl({ type: "contact", source: "Conditions générales d’utilisation" })}>
             Contacter GapTrack
             <Mail aria-hidden="true" />
           </a>
@@ -1321,7 +1307,7 @@ function AboutPage() {
           </p>
 
           <div className="gth-hero-actions gth-about-actions">
-            <a className="gth-primary gth-about-contact-primary" href="mailto:contact@gaptrack.fr">
+            <a className="gth-primary gth-about-contact-primary" href={buildContactFormUrl({ type: "contact", source: "Page À propos" })}>
               Contacter le créateur
               <Mail aria-hidden="true" />
             </a>

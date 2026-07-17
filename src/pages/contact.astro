@@ -1,0 +1,12 @@
+---
+import PublicLayout from "../layouts/PublicLayout.astro";
+import ContactRequestPage from "../components/ContactRequestPage";
+---
+
+<PublicLayout
+  title="Contacter GapTrack — Demande Premium, assistance et confidentialité"
+  description="Envoyez une demande à GapTrack depuis un formulaire sécurisé : offre Premium, assistance, question générale ou exercice de vos droits."
+  canonicalPath="/contact"
+>
+  <ContactRequestPage client:load />
+</PublicLayout>

@@ -90,44 +90,24 @@ function isExistingAccountError(error: { message?: string; status?: number } | n
   );
 }
 
-const PREMIUM_CONTACT_EMAIL = "contact@gaptrack.fr";
+type ContactRequestKind = "contact" | "premium" | "support" | "privacy";
 
-function buildPremiumRequestMailto(
-  params: { email?: string; name?: string; organization?: string; source?: string } = {}
-): string {
-  const subject = "Demande Premium — GapTrack";
-  const body = [
-    "Bonjour l’équipe GapTrack,",
-    "",
-    "Je souhaite être recontacté au sujet de l’offre GapTrack Premium.",
-    "",
-    "────────── COORDONNÉES ──────────",
-    params.name ? `Nom : ${params.name}` : "Nom :",
-    params.email ? `E-mail : ${params.email}` : "E-mail :",
-    params.organization ? `Organisation : ${params.organization}` : "Organisation :",
-    "",
-    "──────────── BESOIN ─────────────",
-    "Fonctionnalités recherchées :",
-    "☐ Audits illimités",
-    "☐ Exports PDF / CSV",
-    "☐ Stockage cloud des preuves",
-    "☐ Validation des preuves",
-    "☐ Utilisateurs et rôles avancés",
-    "☐ Modèles personnalisés",
-    "☐ Autre :",
-    "",
-    "Contexte ou délai souhaité :",
-    "",
-    params.source
-      ? `Origine de la demande : ${params.source}`
-      : "Origine de la demande : GapTrack",
-    "",
-    "Merci de me recontacter dès que possible.",
-    "",
-    "Cordialement,",
-  ].join("\n");
+function buildContactFormUrl(params: {
+  type?: ContactRequestKind;
+  email?: string;
+  name?: string;
+  organization?: string;
+  source?: string;
+} = {}): string {
+  const search = new URLSearchParams();
+  search.set("type", params.type || "premium");
 
-  return `mailto:${PREMIUM_CONTACT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  if (params.email?.trim()) search.set("email", params.email.trim());
+  if (params.name?.trim()) search.set("name", params.name.trim());
+  if (params.organization?.trim()) search.set("organization", params.organization.trim());
+  if (params.source?.trim()) search.set("source", params.source.trim());
+
+  return `/contact?${search.toString()}`;
 }
 
 function normalizeSubscriptionPlan(value: unknown): SubscriptionPlan {
@@ -272,7 +252,7 @@ function planDescription(plan: SubscriptionPlan): string {
 
 function readSelectedPlan(): SubscriptionPlan {
   // Le Premium ne peut plus être auto-sélectionné par un visiteur :
-  // il se demande par e-mail puis s’active manuellement par le propriétaire.
+  // il se demande via le formulaire GapTrack puis s’active manuellement par le propriétaire.
   return "free";
 }
 
@@ -393,14 +373,14 @@ export function LoginAccessPage({
     }
   }
 
-  function requestPremiumByEmail() {
-    window.location.href = buildPremiumRequestMailto({
+  function requestPremiumViaForm() {
+    window.location.href = buildContactFormUrl({
       email: cleanEmail(email),
       name: name.trim(),
       organization: organization.trim(),
       source: "Page d’inscription GapTrack",
     });
-    toast.info(lang === "fr" ? "Votre demande Premium est prête : le compte Free reste utilisable en attendant l’activation." : "Your Premium request is ready: the Free account remains usable while activation is pending.");
+    toast.info(lang === "fr" ? "Le formulaire Premium est ouvert : votre compte Free reste utilisable en attendant l’activation." : "The Premium form is open: the Free account remains usable while activation is pending.");
   }
 
   function completeSupabaseAuthentication(profile: SupabaseAuthProfile, metadata: Record<string, unknown>) {
@@ -782,7 +762,7 @@ export function LoginAccessPage({
                 <button
                   type="button"
                   className="gt-plan-option gt-plan-option-premium"
-                  onClick={requestPremiumByEmail}
+                  onClick={requestPremiumViaForm}
                   aria-pressed={false}
                 >
                   <span>Premium</span>

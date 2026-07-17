@@ -211,7 +211,7 @@ function normalizeSubscriptionPlan(value: unknown): SubscriptionPlan {
   return value === "premium" ? "premium" : "free";
 }
 
-const PREMIUM_CONTACT_EMAIL = "contact@gaptrack.fr";
+const SERVICE_OWNER_EMAIL = "julien.messaoudi@edu.esiee.fr";
 
 async function updateSubscriptionPlanOnServer(
   email: string,
@@ -408,42 +408,24 @@ function isPremiumPlan(plan: SubscriptionPlan | undefined): boolean {
   return normalizeSubscriptionPlan(plan) === "premium";
 }
 
-function buildPremiumRequestMailto(
-  params: { email?: string; name?: string; organization?: string; source?: string } = {}
-): string {
-  const subject = "Demande Premium — GapTrack";
-  const body = [
-    "Bonjour l’équipe GapTrack,",
-    "",
-    "Je souhaite être recontacté au sujet de l’offre GapTrack Premium.",
-    "",
-    "────────── COORDONNÉES ──────────",
-    params.name ? `Nom : ${params.name}` : "Nom :",
-    params.email ? `E-mail : ${params.email}` : "E-mail :",
-    params.organization ? `Organisation : ${params.organization}` : "Organisation :",
-    "",
-    "──────────── BESOIN ─────────────",
-    "Fonctionnalités recherchées :",
-    "☐ Audits illimités",
-    "☐ Exports PDF / CSV",
-    "☐ Stockage cloud des preuves",
-    "☐ Validation des preuves",
-    "☐ Utilisateurs et rôles avancés",
-    "☐ Modèles personnalisés",
-    "☐ Autre :",
-    "",
-    "Contexte ou délai souhaité :",
-    "",
-    params.source
-      ? `Origine de la demande : ${params.source}`
-      : "Origine de la demande : GapTrack",
-    "",
-    "Merci de me recontacter dès que possible.",
-    "",
-    "Cordialement,",
-  ].join("\n");
+type ContactRequestKind = "contact" | "premium" | "support" | "privacy";
 
-  return `mailto:${PREMIUM_CONTACT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+function buildContactFormUrl(params: {
+  type?: ContactRequestKind;
+  email?: string;
+  name?: string;
+  organization?: string;
+  source?: string;
+} = {}): string {
+  const search = new URLSearchParams();
+  search.set("type", params.type || "premium");
+
+  if (params.email?.trim()) search.set("email", params.email.trim());
+  if (params.name?.trim()) search.set("name", params.name.trim());
+  if (params.organization?.trim()) search.set("organization", params.organization.trim());
+  if (params.source?.trim()) search.set("source", params.source.trim());
+
+  return `/contact?${search.toString()}`;
 }
 
 function saveSelectedSubscriptionPlan(plan: SubscriptionPlan) {
@@ -3025,11 +3007,11 @@ function userCanManageUsers(user: AppUser | null | undefined): boolean {
 }
 
 function userCanManageSubscriptions(user: AppUser | null | undefined): boolean {
-  return normalizeEmail(user?.email || "") === normalizeEmail(PREMIUM_CONTACT_EMAIL);
+  return normalizeEmail(user?.email || "") === normalizeEmail(SERVICE_OWNER_EMAIL);
 }
 
 function isServiceOwnerEmail(email: string | null | undefined): boolean {
-  return normalizeEmail(email || "") === normalizeEmail(PREMIUM_CONTACT_EMAIL);
+  return normalizeEmail(email || "") === normalizeEmail(SERVICE_OWNER_EMAIL);
 }
 
 function isServiceOwnerUser(user: AppUser | null | undefined): boolean {
@@ -6943,7 +6925,7 @@ function SettingsProfileView({
       return;
     }
 
-    window.location.href = buildPremiumRequestMailto({
+    window.location.href = buildContactFormUrl({
       email: activeUser?.email || "",
       name: activeUser?.name || "",
       organization: activeUser?.organization || "",
@@ -12791,8 +12773,8 @@ function GapTrackApp({
     return false;
   }, [canDeleteAuditsFlag, lang]);
 
-  const requestPremiumByEmail = React.useCallback((source?: string) => {
-    const href = buildPremiumRequestMailto({
+  const requestPremiumViaForm = React.useCallback((source?: string) => {
+    const href = buildContactFormUrl({
       email: activeUser?.email,
       name: activeUser?.name,
       organization: activeUser?.organization,
@@ -12810,12 +12792,12 @@ function GapTrackApp({
       {
         action: {
           label: lang === "fr" ? "Demander Premium" : "Request Premium",
-          onClick: () => requestPremiumByEmail(featureLabel),
+          onClick: () => requestPremiumViaForm(featureLabel),
         },
       }
     );
     return false;
-  }, [isPremiumUser, lang, requestPremiumByEmail]);
+  }, [isPremiumUser, lang, requestPremiumViaForm]);
 
 
   const updateOwnProfile = React.useCallback(async (patch: { name: string; organization?: string }) => {
@@ -14234,12 +14216,12 @@ function GapTrackApp({
       {
         action: {
           label: lang === "fr" ? "Demander Premium" : "Request Premium",
-          onClick: () => requestPremiumByEmail("Création de plusieurs audits"),
+          onClick: () => requestPremiumViaForm("Création de plusieurs audits"),
         },
       }
     );
     return false;
-  }, [activeUser?.subscriptionPlan, lang, requestPremiumByEmail, sessions]);
+  }, [activeUser?.subscriptionPlan, lang, requestPremiumViaForm, sessions]);
 
   const isPristineBootstrapAudit = React.useCallback((session: Session | null | undefined) => {
     return Boolean(
@@ -14641,7 +14623,7 @@ function GapTrackApp({
         canManageAudits={canManageAuditsFlag}
         canDeleteAudits={canDeleteAuditsFlag}
         onOpenUsers={() => setUsersDialogOpen(true)}
-        onRequestPremium={() => requestPremiumByEmail("Barre d’outils GapTrack")}
+        onRequestPremium={() => requestPremiumViaForm("Barre d’outils GapTrack")}
         onLogout={() => { void logoutAfterSaving(); }}
       />
       <div className="flex">
@@ -14809,7 +14791,7 @@ function GapTrackApp({
                       title={lang === "fr" ? "Journal d’audit avancé" : "Advanced audit log"}
                       description={lang === "fr" ? "Free enregistre l’essentiel pour votre audit en cours. Premium affiche et exporte le journal horodaté complet des preuves, validations, refus et modifications." : "Free keeps the essentials for your current audit. Premium displays and exports the full timestamped log of evidence, validation, rejection, and changes."}
                       bullets={lang === "fr" ? ["Historique horodaté", "Export CSV du journal", "Traçabilité des validations", "Support des audits équipe"] : ["Timestamped history", "CSV audit log export", "Validation traceability", "Team audit support"]}
-                      onRequestPremium={() => requestPremiumByEmail(lang === "fr" ? "Journal d’audit avancé" : "Advanced audit log")}
+                      onRequestPremium={() => requestPremiumViaForm(lang === "fr" ? "Journal d’audit avancé" : "Advanced audit log")}
                     />
                   )}
                 </motion.div>
@@ -14829,7 +14811,7 @@ function GapTrackApp({
                     onSaveProfile={updateOwnProfile}
                     onRequestPasswordReset={requestOwnPasswordReset}
                     onLogout={() => { void logoutAfterSaving(); }}
-                    onRequestPremium={() => requestPremiumByEmail(lang === "fr" ? "Paramètres - Gestion de l’abonnement" : "Settings - Subscription management")}
+                    onRequestPremium={() => requestPremiumViaForm(lang === "fr" ? "Paramètres - Gestion de l’abonnement" : "Settings - Subscription management")}
                   />
                 </motion.div>
               )}
