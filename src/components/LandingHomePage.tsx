@@ -702,13 +702,12 @@ function PrivacyPage() {
           </div>
 
           <h1>
-            Comprendre précisément <br />
-            quelles données sont traitées, <br />
-            <span>pourquoi et où</span>
+            Traitement des données <br />
+            <span>dans GapTrack</span>
           </h1>
 
           <p className="gth-lead gth-privacy-lead">
-            Cette page décrit les traitements actuellement associés à GapTrack, les prestataires techniques utilisés, les règles de conservation publiées et les moyens concrets d’exercer vos droits.
+            Retrouvez ici les informations relatives aux données traitées par GapTrack : catégories de données collectées, finalités des traitements, prestataires techniques, durées de conservation et modalités d’exercice de vos droits.
           </p>
 
           <div className="gth-privacy-meta" aria-label="Engagements principaux de confidentialité">
@@ -1374,13 +1373,12 @@ function SecurityPage() {
           </div>
 
           <h1>
-            Des mesures concrètes, <br />
-            expliquées sans promesse vague, <br />
-            <span>pour protéger vos audits</span>
+            Sécurité et protection des données <br />
+            <span>dans GapTrack</span>
           </h1>
 
           <p className="gth-lead gth-security-lead">
-            Cette page décrit les protections actuellement intégrées à GapTrack, leurs limites et les responsabilités partagées avec les utilisateurs. Elle est mise à jour lorsque l’architecture ou les garanties du service évoluent.
+            Retrouvez ici les mesures mises en œuvre pour protéger vos données et vos audits : contrôles d’accès, hébergement, sauvegardes, responsabilités partagées et limites des garanties proposées.
           </p>
 
           <div className="gth-security-meta" aria-label="État de la documentation sécurité">
