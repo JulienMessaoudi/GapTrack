@@ -4049,3 +4049,415 @@
     scroll-behavior: auto;
   }
 }
+
+/* =========================================================
+   Confidentialité : transparence détaillée dans la page existante
+   ========================================================= */
+
+.gth-privacy-detailed {
+  padding-bottom: 38px;
+}
+
+.gth-privacy-version {
+  max-width: 740px;
+  margin: 18px 0 0;
+  color: #8fa2bf;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.gth-privacy-version strong {
+  color: #dce8f8;
+}
+
+.gth-privacy-controller,
+.gth-privacy-browser,
+.gth-privacy-disclosure {
+  border: 1px solid rgba(145, 190, 255, .20);
+  background:
+    radial-gradient(circle at 90% 0%, rgba(56, 211, 209, .12), transparent 34%),
+    linear-gradient(180deg, rgba(20, 39, 75, .78), rgba(9, 23, 51, .68));
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.05),
+    0 24px 64px rgba(0,0,0,.18);
+}
+
+.gth-privacy-controller {
+  margin-top: 8px;
+  padding: 28px 30px;
+  display: grid;
+  grid-template-columns: 60px minmax(0, 1fr) auto;
+  gap: 22px;
+  align-items: center;
+  border-radius: 20px;
+}
+
+.gth-privacy-controller-icon {
+  width: 60px;
+  height: 60px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(88, 223, 240, .30);
+  border-radius: 18px;
+  color: #61dff0;
+  background: rgba(27, 84, 126, .24);
+  box-shadow: 0 0 28px rgba(88, 223, 240, .13);
+}
+
+.gth-privacy-controller-icon svg {
+  width: 30px;
+  height: 30px;
+}
+
+.gth-privacy-controller > div:nth-child(2) > span,
+.gth-privacy-purpose-card > div > span,
+.gth-privacy-processor > div:nth-child(2) > span {
+  color: #64a8ff;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: .075em;
+}
+
+.gth-privacy-controller h2 {
+  margin: 7px 0 8px;
+  color: #fff;
+  font-size: 24px;
+  line-height: 1.2;
+  font-weight: 850;
+}
+
+.gth-privacy-controller p {
+  margin: 0;
+  max-width: 880px;
+  color: #bdc8da;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.gth-privacy-controller .gth-secondary {
+  min-width: 215px;
+}
+
+.gth-privacy-grid-four {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.gth-privacy-grid-four .gth-privacy-card {
+  min-height: 225px;
+}
+
+.gth-privacy-purpose-grid,
+.gth-privacy-processor-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.gth-privacy-purpose-card,
+.gth-privacy-processor,
+.gth-privacy-browser-grid article {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(145, 169, 207, .18);
+  background:
+    radial-gradient(circle at 86% 0%, rgba(61, 126, 255, .13), transparent 38%),
+    linear-gradient(180deg, rgba(23, 44, 82, .76), rgba(10, 25, 54, .66));
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.045),
+    0 18px 42px rgba(0,0,0,.14);
+}
+
+.gth-privacy-purpose-card {
+  min-height: 210px;
+  padding: 25px;
+  border-radius: 17px;
+}
+
+.gth-privacy-purpose-card > div {
+  display: grid;
+  gap: 7px;
+  margin-bottom: 20px;
+}
+
+.gth-privacy-purpose-card > div > strong {
+  color: #cfe0ff;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.gth-privacy-purpose-card h3,
+.gth-privacy-processor h3 {
+  margin: 0 0 10px;
+  color: #fff;
+  font-size: 21px;
+  line-height: 1.2;
+  font-weight: 850;
+}
+
+.gth-privacy-purpose-card p,
+.gth-privacy-processor p,
+.gth-privacy-processor small {
+  margin: 0;
+  color: #bec9da;
+  font-size: 14px;
+  line-height: 1.62;
+}
+
+.gth-privacy-processor {
+  min-height: 260px;
+  padding: 26px;
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr);
+  gap: 18px;
+  border-radius: 17px;
+}
+
+.gth-privacy-processor .gth-privacy-card-icon {
+  margin: 0;
+}
+
+.gth-privacy-processor p strong {
+  color: #eef5ff;
+}
+
+.gth-privacy-processor small {
+  display: block;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(145, 169, 207, .12);
+  color: #93a5bf;
+  font-size: 12px;
+}
+
+.gth-privacy-processor-wide {
+  grid-column: 1 / -1;
+  min-height: 190px;
+}
+
+.gth-privacy-inline-link {
+  width: fit-content;
+  margin-top: 20px;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: #78cfff;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.gth-privacy-inline-link:hover,
+.gth-privacy-inline-link:focus-visible {
+  color: #fff;
+}
+
+.gth-privacy-inline-link svg {
+  width: 18px;
+  height: 18px;
+}
+
+.gth-privacy-table-wrap {
+  overflow-x: auto;
+  border: 1px solid rgba(145, 169, 207, .18);
+  border-radius: 18px;
+  background: rgba(7, 20, 45, .54);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.04);
+}
+
+.gth-privacy-table {
+  width: 100%;
+  min-width: 860px;
+  border-collapse: collapse;
+  color: #c7d2e2;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.gth-privacy-table caption {
+  padding: 20px 22px 14px;
+  text-align: left;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 850;
+}
+
+.gth-privacy-table th,
+.gth-privacy-table td {
+  padding: 17px 20px;
+  text-align: left;
+  vertical-align: top;
+  border-top: 1px solid rgba(145, 169, 207, .12);
+}
+
+.gth-privacy-table thead th {
+  color: #9fc4f4;
+  background: rgba(24, 49, 89, .45);
+  font-size: 12px;
+  letter-spacing: .035em;
+  text-transform: uppercase;
+}
+
+.gth-privacy-table tbody th {
+  width: 22%;
+  color: #f3f7ff;
+  font-weight: 800;
+}
+
+.gth-privacy-table tbody tr:hover {
+  background: rgba(57, 116, 215, .06);
+}
+
+.gth-privacy-browser {
+  margin-top: 42px;
+  padding: 34px;
+  display: grid;
+  grid-template-columns: minmax(300px, 470px) 1fr;
+  gap: 32px;
+  align-items: start;
+  border-radius: 24px;
+}
+
+.gth-privacy-browser-copy h2 {
+  margin: 0;
+  color: #fff;
+  font-size: clamp(30px, 2.8vw, 44px);
+  line-height: 1.08;
+  letter-spacing: -1px;
+  font-weight: 850;
+}
+
+.gth-privacy-browser-copy p {
+  margin: 16px 0 0;
+  color: #bdc8da;
+  font-size: 15px;
+  line-height: 1.65;
+}
+
+.gth-privacy-browser-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.gth-privacy-browser-grid article {
+  min-height: 150px;
+  padding: 21px;
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  border-radius: 15px;
+}
+
+.gth-privacy-browser-grid strong {
+  color: #fff;
+  font-size: 16px;
+  font-weight: 850;
+}
+
+.gth-privacy-browser-grid span {
+  color: #aebcd1;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.gth-privacy-rights-delay {
+  padding-left: 14px;
+  border-left: 3px solid rgba(88, 223, 240, .62);
+}
+
+.gth-privacy-right-actions {
+  margin-top: 24px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.gth-privacy-right-actions .gth-primary,
+.gth-privacy-right-actions .gth-secondary {
+  min-width: 220px;
+}
+
+.gth-privacy-disclosure {
+  margin-top: 22px;
+  padding: 24px 28px;
+  display: grid;
+  grid-template-columns: 44px 1fr;
+  gap: 17px;
+  align-items: start;
+  border-radius: 18px;
+  border-color: rgba(245, 199, 92, .22);
+  background:
+    radial-gradient(circle at 90% 0%, rgba(245, 199, 92, .08), transparent 35%),
+    linear-gradient(180deg, rgba(49, 43, 37, .66), rgba(24, 27, 42, .72));
+}
+
+.gth-privacy-disclosure > svg {
+  width: 32px;
+  height: 32px;
+  color: #f0c65b;
+}
+
+.gth-privacy-disclosure strong {
+  color: #fff3c6;
+  font-size: 16px;
+  font-weight: 850;
+}
+
+.gth-privacy-disclosure p {
+  margin: 8px 0 0;
+  color: #c7c4b7;
+  font-size: 14px;
+  line-height: 1.62;
+}
+
+@media (max-width: 1280px) {
+  .gth-privacy-controller {
+    grid-template-columns: 60px 1fr;
+  }
+
+  .gth-privacy-controller .gth-secondary {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+
+  .gth-privacy-browser {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 920px) {
+  .gth-privacy-grid-four,
+  .gth-privacy-purpose-grid,
+  .gth-privacy-processor-grid,
+  .gth-privacy-browser-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .gth-privacy-processor-wide {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 620px) {
+  .gth-privacy-controller,
+  .gth-privacy-processor,
+  .gth-privacy-disclosure {
+    grid-template-columns: 1fr;
+  }
+
+  .gth-privacy-controller,
+  .gth-privacy-browser {
+    padding: 22px;
+  }
+
+  .gth-privacy-right-actions {
+    display: grid;
+  }
+
+  .gth-privacy-right-actions .gth-primary,
+  .gth-privacy-right-actions .gth-secondary {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
