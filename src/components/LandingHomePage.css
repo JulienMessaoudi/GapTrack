@@ -3757,3 +3757,295 @@
     transform: none;
   }
 }
+
+
+/* =========================================================
+   Page Sécurité — transparence technique (18 juillet 2026)
+   Ces règles complètent les styles existants sans créer de page
+   ni de composant supplémentaire.
+   ========================================================= */
+
+.gth-security-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 26px;
+}
+
+.gth-security-meta span,
+.gth-security-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  padding: 9px 12px;
+  border: 1px solid rgba(91, 167, 255, .22);
+  border-radius: 999px;
+  background: rgba(12, 34, 75, .52);
+  color: #cfe0ff;
+  font-size: 12px;
+  line-height: 1.35;
+  font-weight: 750;
+}
+
+.gth-security-meta svg,
+.gth-security-status svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  color: #55dccd;
+}
+
+.gth-security-score .gth-security-status {
+  margin-bottom: 4px;
+  color: #c9fff7;
+  border-color: rgba(72, 223, 208, .24);
+  background: rgba(18, 116, 105, .14);
+  font-size: 11px;
+  letter-spacing: .035em;
+  text-transform: uppercase;
+}
+
+.gth-security-score .gth-security-status svg {
+  width: 14px;
+  height: 14px;
+}
+
+.gth-security-section-intro {
+  margin: 14px 0 0;
+  color: #9eacc1;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.gth-security-infrastructure,
+.gth-security-transparency {
+  grid-template-columns: 260px 1fr;
+}
+
+.gth-security-infrastructure-grid,
+.gth-security-transparency-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.gth-security-provider,
+.gth-security-state,
+.gth-security-report {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(145, 169, 207, .18);
+  background:
+    radial-gradient(circle at 88% 0%, rgba(62, 127, 255, .14), transparent 38%),
+    linear-gradient(180deg, rgba(22, 42, 79, .78), rgba(10, 25, 53, .68));
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.05),
+    0 20px 48px rgba(0,0,0,.16);
+}
+
+.gth-security-provider {
+  min-height: 215px;
+  padding: 26px;
+  display: grid;
+  grid-template-columns: 58px 1fr;
+  gap: 18px;
+  border-radius: 16px;
+}
+
+.gth-security-provider-icon,
+.gth-security-report-icon {
+  width: 58px;
+  height: 58px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(79, 145, 255, .35);
+  border-radius: 16px;
+  color: #5d9bff;
+  background: rgba(25, 67, 145, .26);
+  box-shadow: 0 0 28px rgba(70, 135, 255, .14);
+}
+
+.gth-security-provider-icon svg,
+.gth-security-report-icon svg {
+  width: 29px;
+  height: 29px;
+}
+
+.gth-security-provider span,
+.gth-security-state header span,
+.gth-security-report > div:nth-child(2) > span {
+  color: #63a3ff;
+  font-size: 11px;
+  line-height: 1.2;
+  font-weight: 850;
+  letter-spacing: .075em;
+}
+
+.gth-security-provider h3,
+.gth-security-state h3,
+.gth-security-report h2 {
+  margin: 7px 0 10px;
+  color: #fff;
+  font-weight: 850;
+}
+
+.gth-security-provider h3 {
+  font-size: 23px;
+}
+
+.gth-security-provider p,
+.gth-security-report p {
+  margin: 0;
+  color: #bdc8da;
+  font-size: 14px;
+  line-height: 1.62;
+}
+
+.gth-security-provider strong {
+  color: #eef5ff;
+}
+
+.gth-security-state {
+  padding: 26px;
+  border-radius: 16px;
+}
+
+.gth-security-state-verified {
+  border-color: rgba(72, 223, 208, .25);
+  background:
+    radial-gradient(circle at 88% 0%, rgba(56, 209, 191, .13), transparent 38%),
+    linear-gradient(180deg, rgba(20, 53, 70, .76), rgba(9, 31, 48, .68));
+}
+
+.gth-security-state-roadmap {
+  border-color: rgba(251, 191, 36, .21);
+  background:
+    radial-gradient(circle at 88% 0%, rgba(251, 191, 36, .10), transparent 38%),
+    linear-gradient(180deg, rgba(55, 47, 36, .58), rgba(26, 29, 43, .70));
+}
+
+.gth-security-state header {
+  display: flex;
+  align-items: flex-start;
+  gap: 13px;
+  margin-bottom: 19px;
+}
+
+.gth-security-state header > svg {
+  width: 25px;
+  height: 25px;
+  flex: 0 0 25px;
+  color: #55dccd;
+}
+
+.gth-security-state-roadmap header > svg {
+  color: #f5c75c;
+}
+
+.gth-security-state h3 {
+  font-size: 20px;
+}
+
+.gth-security-state ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 12px;
+}
+
+.gth-security-state li {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  color: #c8d2e3;
+  font-size: 13px;
+  line-height: 1.52;
+}
+
+.gth-security-state li svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  margin-top: 2px;
+  color: #55dccd;
+}
+
+.gth-security-state-roadmap li svg {
+  color: #e5b94e;
+}
+
+.gth-security-report {
+  margin-top: 28px;
+  padding: 28px;
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr) auto;
+  gap: 22px;
+  align-items: center;
+  border-radius: 18px;
+  border-color: rgba(91, 167, 255, .28);
+}
+
+.gth-security-report h2 {
+  font-size: 26px;
+}
+
+.gth-security-report .gth-primary {
+  min-width: 230px;
+  white-space: nowrap;
+}
+
+.gth-security-disclaimer {
+  margin-bottom: 8px;
+}
+
+@media (max-width: 1280px) {
+  .gth-security-infrastructure,
+  .gth-security-transparency {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 920px) {
+  .gth-security-infrastructure-grid,
+  .gth-security-transparency-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .gth-security-report {
+    grid-template-columns: 58px 1fr;
+  }
+
+  .gth-security-report .gth-primary {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+}
+
+@media (max-width: 620px) {
+  .gth-security-meta {
+    display: grid;
+  }
+
+  .gth-security-meta span {
+    width: 100%;
+    border-radius: 12px;
+  }
+
+  .gth-security-provider {
+    grid-template-columns: 1fr;
+  }
+
+  .gth-security-report {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gth-security-provider,
+  .gth-security-state,
+  .gth-security-report {
+    scroll-behavior: auto;
+  }
+}

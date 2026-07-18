@@ -1186,95 +1186,218 @@ function TermsPage() {
 }
 
 function SecurityPage() {
+  const verifiedMeasures = [
+    "Authentification gérée par Supabase Auth avec confirmation de l’adresse e-mail",
+    "Politique applicative de mot de passe : 12 caractères minimum, complexité et données personnelles interdites",
+    "Double authentification TOTP prise en charge pour les comptes qui l’activent",
+    "Accès aux données filtré par des politiques Row Level Security (RLS)",
+    "Rôles administrateur, auditeur, contributeur et lecteur",
+    "Stockage privé des preuves et ouverture par lien signé valable 60 secondes",
+    "En-têtes HTTP de protection appliqués sur l’hébergement Vercel",
+  ];
+
+  const currentLimits = [
+    "Aucune certification ISO 27001, SOC 2 ou qualification équivalente n’est revendiquée à ce jour",
+    "Aucun rapport de test d’intrusion indépendant n’est actuellement publié",
+    "Les objectifs contractuels de disponibilité, de sauvegarde, de RPO et de RTO ne sont pas encore publiés",
+    "La page décrit les contrôles observables dans la version actuelle, pas une garantie absolue contre tout incident",
+  ];
+
   return (
     <section className="gth-security" id="top">
       <div className="gth-security-hero gth-reveal">
         <div className="gth-security-copy">
           <div className="gth-kicker gth-security-kicker">
             <ShieldCheck aria-hidden="true" />
-            SÉCURITÉ GAPTRACK
+            SÉCURITÉ & TRANSPARENCE
           </div>
 
           <h1>
-            Une plateforme pensée <br />
-            pour protéger vos audits, <br />
-            <span>preuves et accès</span>
+            Des mesures concrètes, <br />
+            expliquées sans promesse vague, <br />
+            <span>pour protéger vos audits</span>
           </h1>
 
           <p className="gth-lead gth-security-lead">
-            GapTrack manipule des informations sensibles liées à la conformité SSI. La sécurité repose donc sur une authentification fiable, des accès maîtrisés, une traçabilité claire et une gestion prudente des preuves.
+            Cette page décrit les protections actuellement intégrées à GapTrack, leurs limites et les responsabilités partagées avec les utilisateurs. Elle est mise à jour lorsque l’architecture ou les garanties du service évoluent.
           </p>
+
+          <div className="gth-security-meta" aria-label="État de la documentation sécurité">
+            <span><CheckCircle2 aria-hidden="true" /> Dernière vérification technique : 18 juillet 2026</span>
+            <span><Shield aria-hidden="true" /> Périmètre : application web, authentification, données et preuves</span>
+          </div>
         </div>
 
-        <div className="gth-security-summary" aria-label="Résumé sécurité GapTrack">
+        <div className="gth-security-summary" aria-label="Résumé des mesures de sécurité GapTrack">
           <div className="gth-security-score">
+            <span className="gth-security-status"><CheckCircle2 aria-hidden="true" /> Mesures actuellement en place</span>
             <ShieldCheck aria-hidden="true" />
-            <strong>Sécurité par conception</strong>
-            <span>Authentification, rôles, preuves, traçabilité et confidentialité structurés dès le produit.</span>
+            <strong>Protection en plusieurs couches</strong>
+            <span>
+              Supabase sécurise l’authentification, la base et le stockage. GapTrack ajoute des règles applicatives, des rôles, des contrôles de chemin et une traçabilité métier. Vercel distribue l’interface via HTTPS avec des en-têtes de protection.
+            </span>
           </div>
           <ul>
-            <li><CheckCircle2 aria-hidden="true" /> Accès par compte utilisateur sécurisé</li>
-            <li><CheckCircle2 aria-hidden="true" /> Rôles applicatifs pour limiter les droits</li>
-            <li><CheckCircle2 aria-hidden="true" /> Preuves stockées et consultées de manière contrôlée</li>
-            <li><CheckCircle2 aria-hidden="true" /> Journal d’audit pour suivre les actions sensibles</li>
+            <li><CheckCircle2 aria-hidden="true" /> Données isolées par utilisateur ou groupe grâce aux politiques RLS</li>
+            <li><CheckCircle2 aria-hidden="true" /> Preuves conservées dans un bucket non public</li>
+            <li><CheckCircle2 aria-hidden="true" /> Liens de consultation temporaires, générés à la demande</li>
+            <li><CheckCircle2 aria-hidden="true" /> MFA TOTP disponible pour renforcer les comptes sensibles</li>
           </ul>
         </div>
       </div>
 
       <div className="gth-security-section gth-reveal">
-        <h2>Mesures de sécurité principales</h2>
+        <div>
+          <h2>Architecture et contrôles</h2>
+          <p className="gth-security-section-intro">
+            Les affirmations ci-dessous correspondent au fonctionnement actuellement présent dans l’application.
+          </p>
+        </div>
+
         <div className="gth-security-grid">
           <SecurityCard
             icon={<Lock />}
-            title="Authentification sécurisée"
-            text="Les comptes GapTrack utilisent une authentification dédiée. Les mots de passe doivent respecter une longueur minimale et une complexité renforcée."
+            title="Authentification et sessions"
+            text="Les comptes utilisent Supabase Auth. L’inscription impose une confirmation de l’e-mail. Les jetons sont renouvelés automatiquement et la persistance de session dépend du choix « Se souvenir de moi »."
+          />
+          <SecurityCard
+            icon={<ShieldCheck />}
+            title="Mots de passe et MFA"
+            text="GapTrack applique 12 caractères minimum, une complexité renforcée et refuse les fragments issus du nom, de l’organisation ou de l’e-mail. Un second facteur TOTP est vérifié lorsqu’il est activé sur le compte."
           />
           <SecurityCard
             icon={<Users />}
-            title="Gestion des rôles"
-            text="Les droits sont séparés selon les profils : administrateur, auditeur, contributeur ou lecteur, afin d’éviter les accès inutiles."
+            title="Rôles et autorisations"
+            text="Les profils administrateur, auditeur, contributeur et lecteur limitent les actions disponibles. Les politiques RLS vérifient également l’utilisateur, le groupe et le rôle côté base de données."
           />
           <SecurityCard
             icon={<FileText />}
-            title="Protection des preuves"
-            text="Les preuves sont rattachées aux audits et contrôles concernés. L’accès aux fichiers peut être limité et généré temporairement lorsque nécessaire."
+            title="Preuves privées"
+            text="Les fichiers Premium sont enregistrés dans un bucket Supabase non public. Les formats sont limités, la taille maximale est de 50 Mo et la consultation utilise un lien signé valable 60 secondes."
           />
           <SecurityCard
             icon={<Eye />}
-            title="Traçabilité"
-            text="Les actions importantes liées aux audits, preuves, statuts et utilisateurs peuvent être historisées pour mieux comprendre ce qui a été fait."
-          />
-          <SecurityCard
-            icon={<Shield />}
-            title="Réduction des risques"
-            text="Les fichiers et entrées sensibles doivent être contrôlés afin de limiter les abus, les erreurs de manipulation et les accès non autorisés."
+            title="Traçabilité métier"
+            text="GapTrack journalise les opérations importantes sur les audits, contrôles, preuves, plans d’action et utilisateurs. Ce journal facilite le suivi, mais n’est pas présenté comme un dispositif d’archivage probatoire certifié."
           />
           <SecurityCard
             icon={<Settings />}
-            title="Amélioration continue"
-            text="GapTrack est conçu pour évoluer progressivement : sécurité applicative, confidentialité, permissions et conformité seront renforcées avec le produit."
+            title="Protection HTTP"
+            text="L’hébergement Vercel applique notamment HSTS, X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Permissions-Policy et une règle CSP interdisant l’intégration du site dans une frame."
           />
+        </div>
+      </div>
+
+      <div className="gth-security-section gth-security-infrastructure gth-reveal">
+        <div>
+          <h2>Hébergement et localisation</h2>
+          <p className="gth-security-section-intro">
+            Les responsabilités sont réparties entre GapTrack et ses prestataires techniques.
+          </p>
+        </div>
+
+        <div className="gth-security-infrastructure-grid">
+          <article className="gth-security-provider">
+            <div className="gth-security-provider-icon"><Shield aria-hidden="true" /></div>
+            <div>
+              <span>DONNÉES & AUTHENTIFICATION</span>
+              <h3>Supabase</h3>
+              <p>Projet GapTrack hébergé dans la région européenne <strong>eu-west-2</strong>. Supabase fournit l’authentification, PostgreSQL, les politiques RLS et le stockage privé des preuves.</p>
+            </div>
+          </article>
+
+          <article className="gth-security-provider">
+            <div className="gth-security-provider-icon"><Settings aria-hidden="true" /></div>
+            <div>
+              <span>INTERFACE WEB</span>
+              <h3>Vercel</h3>
+              <p>L’interface Astro est déployée sur Vercel et servie sous le domaine <strong>gaptrack.fr</strong>. Les routes privées sont configurées sans mise en cache et sans indexation par les moteurs de recherche.</p>
+            </div>
+          </article>
+        </div>
+      </div>
+
+      <div className="gth-security-section gth-security-transparency gth-reveal">
+        <div>
+          <h2>Niveau de garantie publié</h2>
+          <p className="gth-security-section-intro">
+            GapTrack distingue ce qui est vérifiable aujourd’hui de ce qui reste à formaliser.
+          </p>
+        </div>
+
+        <div className="gth-security-transparency-grid">
+          <article className="gth-security-state gth-security-state-verified">
+            <header>
+              <CheckCircle2 aria-hidden="true" />
+              <div>
+                <span>VÉRIFIÉ DANS LA VERSION ACTUELLE</span>
+                <h3>Contrôles techniques actifs</h3>
+              </div>
+            </header>
+            <ul>
+              {verifiedMeasures.map((measure) => (
+                <li key={measure}><CheckCircle2 aria-hidden="true" /> {measure}</li>
+              ))}
+            </ul>
+          </article>
+
+          <article className="gth-security-state gth-security-state-roadmap">
+            <header>
+              <Settings aria-hidden="true" />
+              <div>
+                <span>NON REVENDIQUÉ À CE JOUR</span>
+                <h3>Garanties encore à formaliser</h3>
+              </div>
+            </header>
+            <ul>
+              {currentLimits.map((limit) => (
+                <li key={limit}><Settings aria-hidden="true" /> {limit}</li>
+              ))}
+            </ul>
+          </article>
         </div>
       </div>
 
       <div className="gth-security-section gth-security-commitment gth-reveal">
         <div>
-          <h2>Engagement de confidentialité</h2>
+          <h2>Responsabilités partagées</h2>
           <p>
-            Les données saisies dans GapTrack peuvent contenir des informations sensibles sur l’organisation, les écarts de conformité, les preuves et les plans d’action. L’objectif est de limiter l’accès à ces informations aux seules personnes autorisées et de conserver une traçabilité claire des actions réalisées.
+            La sécurité de GapTrack dépend aussi de la gestion des comptes et des contenus déposés. Les organisations doivent attribuer le rôle minimal nécessaire, activer le MFA sur les comptes sensibles, retirer rapidement les accès obsolètes et éviter de téléverser des informations sans rapport avec l’audit.
           </p>
         </div>
         <div className="gth-security-checklist">
-          <span><CheckCircle2 aria-hidden="true" /> Pas de mot de passe stocké en clair</span>
-          <span><CheckCircle2 aria-hidden="true" /> Accès différenciés selon les rôles</span>
-          <span><CheckCircle2 aria-hidden="true" /> Données d’audit structurées par utilisateur ou organisation</span>
-          <span><CheckCircle2 aria-hidden="true" /> Preuves associées à des contrôles précis</span>
+          <span><CheckCircle2 aria-hidden="true" /> Utiliser un compte nominatif par personne</span>
+          <span><CheckCircle2 aria-hidden="true" /> Activer le MFA TOTP sur les comptes exposés ou privilégiés</span>
+          <span><CheckCircle2 aria-hidden="true" /> Vérifier les rôles et membres du groupe régulièrement</span>
+          <span><CheckCircle2 aria-hidden="true" /> Supprimer les preuves devenues inutiles</span>
         </div>
       </div>
 
+      <div className="gth-security-report gth-reveal">
+        <div className="gth-security-report-icon"><Mail aria-hidden="true" /></div>
+        <div>
+          <span>SIGNALEMENT RESPONSABLE</span>
+          <h2>Vous avez identifié une vulnérabilité ?</h2>
+          <p>
+            Décrivez le comportement observé, la route concernée, les étapes de reproduction et l’impact potentiel. N’incluez pas de données personnelles, de secrets ni de preuves appartenant à un tiers. Aucun délai de traitement contractuel n’est actuellement publié.
+          </p>
+        </div>
+        <a className="gth-primary" href={buildContactFormUrl({ type: "support", source: "Page Sécurité" })}>
+          Signaler un problème
+          <Mail aria-hidden="true" />
+        </a>
+      </div>
+
+      <div className="gth-security-disclaimer gth-reveal">
+        <Shield aria-hidden="true" />
+        <p>
+          Cette page est informative. Elle décrit les mesures visibles dans la version actuellement déployée de GapTrack et ne constitue ni une certification, ni un rapport d’audit indépendant, ni un engagement contractuel de niveau de service.
+        </p>
+      </div>
     </section>
   );
 }
+
 
 function SecurityCard({ icon, title, text }: { icon: React.ReactNode; title: string; text: string }) {
   return (
