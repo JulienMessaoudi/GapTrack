@@ -1,10 +1,9 @@
-﻿import { StrictMode } from "react";
-import { createRoot } from "react-dom/client";
-import App from "./App.tsx";
-import "./index.css";
-import "./styles/theme.css";
+﻿import { StrictMode } from 'react'
+import { createRoot } from 'react-dom/client'
+import App from './App.tsx'
+import './index.css'
 
-import { Toaster } from "sonner";
+import { Toaster } from 'sonner'   // ðŸ‘ˆ ajout
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
