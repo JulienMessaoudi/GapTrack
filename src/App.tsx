@@ -4017,7 +4017,7 @@ html,body{background:var(--background);color:var(--foreground);width:100%;max-wi
 .border-b{border-bottom-color:color-mix(in srgb, var(--border) 72%, transparent)!important;}
 .border-r{border-right-color:color-mix(in srgb, var(--border) 72%, transparent)!important;}
 .border-l{border-left-color:color-mix(in srgb, var(--border) 72%, transparent)!important;}
-.bg-muted\/50{background-color:rgba(148,163,184,.1);background-color:color-mix(in srgb, var(--muted) 50%, transparent);} 
+.bg-muted\\/50{background-color:rgba(148,163,184,.1);background-color:color-mix(in srgb, var(--muted) 50%, transparent);} 
 /* Premium shell separators */
 .toolbar-shell,.page-header-shell,.mobile-nav-shell,.sidebar-shell{position:relative;}
 .toolbar-shell::after,.page-header-shell::after,.mobile-nav-shell::before{content:"";position:absolute;left:0;right:0;height:1px;pointer-events:none;background:linear-gradient(90deg, transparent 0%, color-mix(in srgb, var(--border) 18%, transparent) 8%, color-mix(in srgb, var(--border) 90%, transparent) 50%, color-mix(in srgb, var(--border) 18%, transparent) 92%, transparent 100%);}
@@ -4097,7 +4097,7 @@ html,body{background:var(--background);color:var(--foreground);width:100%;max-wi
 .main-surface .rounded-2xl.border:not(button):hover{
   border-color:color-mix(in srgb, var(--primary) 26%, var(--border))!important;
 }
-.hover\:bg-muted\/20:hover{background-color:rgba(148,163,184,.08);background-color:color-mix(in srgb, var(--muted) 20%, transparent);} 
+.hover\\:bg-muted\\/20:hover{background-color:rgba(148,163,184,.08);background-color:color-mix(in srgb, var(--muted) 20%, transparent);} 
 /* Card helpers */
 .bg-card{background-color:var(--card)!important;}
 .text-card-foreground{color:var(--card-foreground)!important;}

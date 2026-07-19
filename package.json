@@ -10,6 +10,7 @@
     "dev:back": "npm run dev --prefix backend",
     "build": "astro build",
     "lint": "eslint src --ext .ts,.tsx",
+    "check": "astro check",
     "format": "prettier -w .",
     "preview": "astro preview"
   },
