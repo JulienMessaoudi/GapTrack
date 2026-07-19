@@ -14,7 +14,7 @@ import { LandingHomePage } from "./components/LandingHomePage";
 import { supabase } from "./lib/supabase";
 import { authErrorMessage } from "./lib/authErrorMessages";
 import { useInactivityLogout } from "./hooks/useInactivityLogout";
-import "./styles/theme.css";
+
 
 
 // ==================
@@ -4690,6 +4690,7 @@ function ServiceOwnerAdminConsole({
 
   return (
     <div className="min-h-screen bg-background text-foreground app-shell">
+      <ThemeStyles />
       <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 px-5 py-6 lg:px-8">
         <header className="rounded-3xl border bg-muted/10 p-5 shadow-sm">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
