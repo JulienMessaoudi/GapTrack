@@ -62,3 +62,4 @@ coverage/
 *.njsproj
 *.sln
 *.sw?
+supabase/.temp/
