@@ -37,7 +37,7 @@ export default defineConfig({
             kind: "element",
           },
           {
-            resource: "'none'",
+            resource: "'unsafe-inline'",
             kind: "attribute",
           },
         ],
