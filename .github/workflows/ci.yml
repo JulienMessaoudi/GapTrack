@@ -21,6 +21,10 @@ jobs:
     name: Quality
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    
+    env:
+      PUBLIC_SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}
+      PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
 
     steps:
       - name: Checkout repository
