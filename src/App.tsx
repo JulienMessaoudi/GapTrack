@@ -4603,7 +4603,6 @@ function UserManagementDialog({
   useEffect(()=>{ document.body.style.overflow = open ? 'hidden' : ''; return () => { document.body.style.overflow = ''; }; }, [open]);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [organization, setOrganization] = useState("");
   const [role, setRole] = useState<UserRole>("contributor");
   const [newUserPlan, setNewUserPlan] = useState<SubscriptionPlan>("free");
   const [password, setPassword] = useState("");
@@ -4613,13 +4612,12 @@ function UserManagementDialog({
     if (open) {
       setName("");
       setEmail("");
-      setOrganization("");
       setRole("contributor");
       setNewUserPlan("free");
       setPassword("");
       setPremiumEmail("");
     }
-  }, [open, activeUser?.organization]);
+  }, [open]);
 
   if (!open) return null;
 
@@ -4650,12 +4648,16 @@ function UserManagementDialog({
   async function addUser() {
     if (!canCreate) return;
     const managedGroup = activeUser ? resolveManagedGroupForCreator(activeUser, users, lang) : undefined;
+    const inheritedOrganization =
+      activeUser?.organization?.trim() ||
+      managedGroup?.groupName?.trim() ||
+      undefined;
     const ok = await onAddUser({
       name,
       email,
       password,
       role,
-      organization,
+      organization: inheritedOrganization,
       subscriptionPlan: canManageSubscriptions ? newUserPlan : "free",
       createdByUserId: activeUser?.id,
       createdByEmail: activeUser?.email,
@@ -4665,7 +4667,6 @@ function UserManagementDialog({
     if (ok) {
       setName("");
       setEmail("");
-      setOrganization("");
       setPassword("");
       setRole("contributor");
       setNewUserPlan("free");
@@ -4727,8 +4728,8 @@ function UserManagementDialog({
                   </div>
                   <p className="mb-4 text-sm text-muted-foreground">
                     {lang === "fr"
-                      ? "Un e-mail de vérification sera envoyé. L’utilisateur pourra se connecter avec le mot de passe temporaire après confirmation de son adresse e-mail."
-                      : "A verification email will be sent. The user can sign in with the temporary password after confirming their email address."}
+                      ? "Un e-mail de vérification sera envoyé. L’utilisateur héritera automatiquement de votre organisation et pourra se connecter avec le mot de passe temporaire après confirmation de son adresse e-mail."
+                      : "A verification email will be sent. The user will automatically inherit your organization and can sign in with the temporary password after confirming their email address."}
                   </p>
                   <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
                     <div>
@@ -4738,10 +4739,6 @@ function UserManagementDialog({
                     <div>
                       <label className="text-sm text-muted-foreground">Email</label>
                       <Input value={email} onChange={(e) => setEmail(e.target.value)} type="email" />
-                    </div>
-                    <div>
-                      <label className="text-sm text-muted-foreground">{lang === "fr" ? "Organisation" : "Organization"}</label>
-                      <Input value={organization} onChange={(e) => setOrganization(e.target.value)} />
                     </div>
                     <div>
                       <label className="text-sm text-muted-foreground">{lang === "fr" ? "Rôle" : "Role"}</label>
@@ -6689,10 +6686,15 @@ function SettingsProfileView({
     );
   }
 
+  const organizationIsManaged = Boolean(
+    activeUser.createdByUserId || normalizeEmail(activeUser.createdByEmail || "")
+  );
   const trimmedName = name.trim();
   const trimmedOrganization = organization.trim();
   const originalOrganization = activeUser.organization || "";
-  const hasChanges = trimmedName !== activeUser.name || trimmedOrganization !== originalOrganization;
+  const hasChanges =
+    trimmedName !== activeUser.name ||
+    (!organizationIsManaged && trimmedOrganization !== originalOrganization);
   const canSave = Boolean(trimmedName) && hasChanges && !saving;
 
   async function saveProfile() {
@@ -6703,13 +6705,17 @@ function SettingsProfileView({
 
     setSaving(true);
     try {
-      const ok = await onSaveProfile({
-        name: trimmedName,
-        organization: trimmedOrganization || undefined,
-      });
+      const ok = await onSaveProfile(
+        organizationIsManaged
+          ? { name: trimmedName }
+          : {
+              name: trimmedName,
+              organization: trimmedOrganization || undefined,
+            }
+      );
       if (ok) {
         setName(trimmedName);
-        setOrganization(trimmedOrganization);
+        setOrganization(organizationIsManaged ? originalOrganization : trimmedOrganization);
       }
     } finally {
       setSaving(false);
@@ -7093,12 +7099,23 @@ function SettingsProfileView({
               <Input
                 id="settings-profile-organization"
                 value={organization}
-                onChange={(event) => setOrganization(event.target.value)}
+                onChange={(event) => {
+                  if (!organizationIsManaged) setOrganization(event.target.value);
+                }}
                 maxLength={120}
+                disabled={organizationIsManaged}
+                readOnly={organizationIsManaged}
+                aria-readonly={organizationIsManaged}
                 placeholder={lang === "fr" ? "PME / Client / Cabinet" : "Company / Client / Firm"}
               />
               <p className="text-xs text-muted-foreground">
-                {lang === "fr" ? "Préremplira progressivement vos fiches d’audit." : "Can be reused to prefill audit profiles."}
+                {organizationIsManaged
+                  ? (lang === "fr"
+                    ? "Organisation attribuée par votre administrateur. Elle ne peut pas être modifiée depuis ce compte."
+                    : "Organization assigned by your administrator. It cannot be changed from this account.")
+                  : (lang === "fr"
+                    ? "Préremplira progressivement vos fiches d’audit."
+                    : "Can be reused to prefill audit profiles.")}
               </p>
             </div>
           </div>
@@ -7143,9 +7160,13 @@ function SettingsProfileView({
 
           <div className="flex flex-col gap-3 border-t pt-5 sm:flex-row sm:items-center sm:justify-between">
             <div className="text-sm text-muted-foreground">
-              {lang === "fr"
-                ? "Le rôle, l’e-mail et l’offre sont affichés en lecture seule pour éviter les changements non autorisés."
-                : "Role, email, and plan are read-only to prevent unauthorized changes."}
+              {organizationIsManaged
+                ? (lang === "fr"
+                  ? "Le rôle, l’e-mail, l’offre et l’organisation sont en lecture seule. Seul votre administrateur peut gérer votre organisation."
+                  : "Role, email, plan, and organization are read-only. Only your administrator can manage your organization.")
+                : (lang === "fr"
+                  ? "Le rôle, l’e-mail et l’offre sont affichés en lecture seule pour éviter les changements non autorisés."
+                  : "Role, email, and plan are read-only to prevent unauthorized changes.")}
             </div>
             <Button type="button" onClick={saveProfile} disabled={!canSave}>
               {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Pencil className="mr-2 h-4 w-4" />}
@@ -12807,7 +12828,28 @@ function GapTrackApp({
     }
 
     const name = patch.name.trim();
-    const organization = patch.organization?.trim() || undefined;
+    const organizationIsManaged = Boolean(
+      activeUser.createdByUserId || normalizeEmail(activeUser.createdByEmail || "")
+    );
+    const requestedOrganization = patch.organization?.trim() || undefined;
+    const currentOrganization = activeUser.organization?.trim() || undefined;
+
+    if (
+      organizationIsManaged &&
+      patch.organization !== undefined &&
+      requestedOrganization !== currentOrganization
+    ) {
+      toast.error(
+        lang === "fr"
+          ? "Votre organisation est gérée par votre administrateur."
+          : "Your organization is managed by your administrator."
+      );
+      return false;
+    }
+
+    const organization = organizationIsManaged
+      ? currentOrganization
+      : requestedOrganization;
 
     if (!name) {
       toast.error(lang === "fr" ? "Le nom est obligatoire." : "Name is required.");
@@ -12823,20 +12865,32 @@ function GapTrackApp({
       const { data: authData, error: authError } = await supabase.auth.getUser();
       if (authError || !authData.user?.id) throw authError || new Error("Utilisateur non connecté.");
 
+      const profilePatch: { name: string; organization?: string | null } = { name };
+      const authMetadataPatch: { name: string; organization?: string | null } = { name };
+
+      if (!organizationIsManaged) {
+        profilePatch.organization = organization || null;
+        authMetadataPatch.organization = organization || null;
+      }
+
       const { error } = await supabase
         .from("gaptrack_profiles")
-        .update({ name, organization: organization || null })
+        .update(profilePatch)
         .eq("id", authData.user.id);
 
       if (error) throw error;
 
       await supabase.auth.updateUser({
-        data: { name, organization: organization || null },
+        data: authMetadataPatch,
       }).catch((error) => {
         console.warn("Unable to mirror profile in Supabase Auth metadata.", error);
       });
 
-      const updatedUser: AppUser = { ...activeUser, name, organization };
+      const updatedUser: AppUser = {
+        ...activeUser,
+        name,
+        organization: organizationIsManaged ? activeUser.organization : organization,
+      };
       setUsers((prev) => {
         const next = prev.map((user) => user.id === activeUser.id ? updatedUser : user);
         saveUsers(next);
