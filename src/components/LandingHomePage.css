@@ -4656,8 +4656,6 @@
   grid-column: 2;
   grid-row: 2;
   padding: 13px;
-  display: flex;
-  flex-direction: column;
   overflow: hidden;
   background:
     linear-gradient(rgba(255,255,255,.012), rgba(255,255,255,0)),
@@ -4891,11 +4889,8 @@
 }
 
 .gth-preview-content-grid {
-  flex: 1 1 auto;
-  min-height: 0;
   display: grid;
   grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr);
-  align-items: stretch;
   gap: 8px;
 }
 
@@ -4903,10 +4898,7 @@
 .gth-preview-priority-card {
   min-width: 0;
   min-height: 164px;
-  height: 100%;
   padding: 11px;
-  display: flex;
-  flex-direction: column;
   border-radius: 11px;
 }
 
@@ -4948,7 +4940,7 @@
 
 .gth-preview-main-progress {
   height: 10px;
-  margin-top: auto;
+  margin-top: 27px;
   overflow: hidden;
   border: 1px solid rgba(148, 163, 184, .16);
   border-radius: 999px;
@@ -4993,10 +4985,8 @@
 }
 
 .gth-preview-domain-list {
-  flex: 1 1 auto;
-  margin-top: 12px;
+  margin-top: 15px;
   display: grid;
-  align-content: space-evenly;
   gap: 10px;
 }
 
@@ -5081,5 +5071,86 @@
 
   .gth-preview-toolbar {
     grid-template-columns: 150px minmax(0, 1fr) auto;
+  }
+}
+
+/* =========================================================
+   Ajustement équilibré de l'aperçu produit du hero
+   - évite les cartes inférieures excessivement étirées
+   - réduit la hauteur totale sans recréer de zone vide
+   - répartit proprement les indicateurs dans les deux cartes
+   ========================================================= */
+@media (min-width: 821px) {
+  .gth-dashboard.gth-product-preview.gth-dashboard-hero {
+    min-height: 590px;
+    height: clamp(590px, 40vw, 625px);
+  }
+
+  .gth-dashboard-hero .gth-preview-main {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .gth-dashboard-hero .gth-preview-content-grid {
+    flex: 0 0 clamp(205px, 15.5vw, 230px);
+    min-height: 205px;
+    max-height: 230px;
+    align-items: stretch;
+  }
+
+  .gth-dashboard-hero .gth-preview-maturity-card,
+  .gth-dashboard-hero .gth-preview-priority-card {
+    min-height: 0;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  .gth-dashboard-hero .gth-preview-maturity-card {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .gth-dashboard-hero .gth-preview-main-progress {
+    margin-top: 30px;
+  }
+
+  .gth-dashboard-hero .gth-preview-coverage-row {
+    margin-top: 24px;
+  }
+
+  .gth-dashboard-hero .gth-preview-priority-card {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .gth-dashboard-hero .gth-preview-domain-list {
+    flex: 1 1 auto;
+    margin-top: 18px;
+    display: grid;
+    grid-template-rows: repeat(3, minmax(0, 1fr));
+    align-items: center;
+    gap: 8px;
+  }
+}
+
+@media (min-width: 1281px) and (max-width: 1440px) {
+  .gth-dashboard.gth-product-preview.gth-dashboard-hero {
+    min-height: 575px;
+    height: 590px;
+  }
+
+  .gth-dashboard-hero .gth-preview-content-grid {
+    flex-basis: 205px;
+    min-height: 200px;
+    max-height: 210px;
+  }
+
+  .gth-dashboard-hero .gth-preview-main-progress {
+    margin-top: 24px;
+  }
+
+  .gth-dashboard-hero .gth-preview-coverage-row {
+    margin-top: 18px;
   }
 }
