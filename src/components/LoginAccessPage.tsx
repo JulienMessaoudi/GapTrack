@@ -1,16 +1,23 @@
 import React, { useEffect, useState } from "react";
 import {
   ArrowRight,
+  BarChart3,
   CheckCircle2,
+  ClipboardCheck,
   Eye,
   EyeOff,
+  FileText,
   Layers,
+  Lightbulb,
+  ListTodo,
+  Loader2,
   Lock,
   Mail,
+  Settings,
+  Shield,
   ShieldCheck,
   Target,
   Users,
-  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase, setRememberMe as persistRememberMe } from "../lib/supabase";
@@ -959,70 +966,175 @@ function FeatureCard({ icon, title, text }: { icon: React.ReactNode; title: stri
 }
 
 function DashboardPreview() {
+  const navigation = [
+    { label: "Listing", icon: <ClipboardCheck /> },
+    { label: "Cette semaine", icon: <Lightbulb /> },
+    { label: "Plan d’action", icon: <ListTodo /> },
+    { label: "Risques", icon: <Shield /> },
+    { label: "Tableau de bord", icon: <BarChart3 />, active: true },
+    { label: "Journal d’audit", icon: <FileText /> },
+    { label: "Paramètres", icon: <Settings /> },
+  ];
+
+  const domains = [
+    { label: "Organisation", maturity: 58, evidence: 44 },
+    { label: "Personnes", maturity: 66, evidence: 61 },
+    { label: "Technologie", maturity: 72, evidence: 68 },
+  ];
+
   return (
-    <div className="gt-dashboard" aria-hidden="true">
-      <aside>
-        <div className="gt-mini-logo">
-          <img src="/gaptrack-logo-transparent.png" alt="" className="gt-mini-logo-icon" aria-hidden="true" loading="lazy" decoding="async" />
-          GapTrack
+    <section
+      className="gt-dashboard gt-product-preview"
+      aria-label="Aperçu de l’interface GapTrack avec des données d’exemple"
+    >
+      <header className="gt-preview-toolbar">
+        <div className="gt-preview-brand">
+          <img
+            src="/icon-192.png"
+            alt=""
+            className="gt-preview-brand-icon"
+            aria-hidden="true"
+            loading="lazy"
+            decoding="async"
+          />
+          <span>
+            <strong>GapTrack</strong>
+            <small>Audit SSI</small>
+          </span>
         </div>
+
+        <div className="gt-preview-session">
+          <span>Audit actif</span>
+          <strong>Audit ISO/IEC 27001</strong>
+          <small>Référentiel versionné</small>
+        </div>
+
+        <div className="gt-preview-sync">
+          <CheckCircle2 aria-hidden="true" /> Synchronisé
+        </div>
+      </header>
+
+      <aside className="gt-preview-sidebar" aria-label="Navigation de l’application">
         <nav>
-          <span className="active">Vue d’ensemble</span>
-          <span>Audits</span>
-          <span>Écarts</span>
-          <span>Plans d’action</span>
-          <span>Preuves</span>
-          <span>Rapports</span>
-          <span>Paramètres</span>
+          {navigation.map((item) => (
+            <span key={item.label} className={item.active ? "active" : undefined}>
+              {item.icon}
+              {item.label}
+            </span>
+          ))}
         </nav>
+        <div className="gt-preview-plan">
+          <small>Offre</small>
+          <strong>Premium</strong>
+        </div>
       </aside>
 
-      <div className="gt-dashboard-main">
-        <header>
+      <div className="gt-preview-main">
+        <div className="gt-preview-page-heading">
           <div>
-            <h3>Vue d’ensemble</h3>
-            <p>Tableau de bord</p>
+            <span>Tableau de bord</span>
+            <h3>Synthèse de maturité et priorités</h3>
           </div>
-          <span>Gap · ISO création</span>
-        </header>
-
-        <div className="gt-stats">
-          <MiniStat title="Audits en cours" value="12" info="+2 ce mois" />
-          <MiniStat title="Écarts ouverts" value="27" info="-5 ce mois" />
-          <MiniStat title="Plans d’action" value="58" info="+8 ce mois" />
-          <MiniStat title="Taux de conformité" value="92%" info="+3%" />
+          <div className="gt-preview-demo-badge">Aperçu produit · données d’exemple</div>
         </div>
 
-        <div className="gt-charts">
-          <div className="gt-chart-card gt-line-card">
-            <h4>Évolution de la conformité</h4>
-            <svg viewBox="0 0 360 130" preserveAspectRatio="none">
-              <path d="M0 112 L35 98 L70 72 L105 66 L140 45 L175 39 L210 27 L245 34 L280 31 L315 14 L360 8 L360 130 L0 130 Z" />
-              <polyline points="0,112 35,98 70,72 105,66 140,45 175,39 210,27 245,34 280,31 315,14 360,8" />
-            </svg>
+        <section className="gt-preview-audit-card">
+          <div className="gt-preview-audit-badges">
+            <span className="is-complete">Fiche audit complète</span>
+            <span>ISO/IEC 27001</span>
+            <span>Audit initial</span>
+            <span>Criticité élevée</span>
           </div>
+          <div className="gt-preview-audit-summary">
+            <div>
+              <strong>Audit de démonstration</strong>
+              <small>Périmètre et objectifs renseignés</small>
+            </div>
+            <button type="button" tabIndex={-1}>
+              <Settings aria-hidden="true" /> Modifier la fiche
+            </button>
+          </div>
+        </section>
 
-          <div className="gt-chart-card gt-donut-card">
-            <h4>Répartition par statut</h4>
-            <div className="gt-donut" />
-            <ul>
-              <li><i />Résolus</li>
-              <li><i />En cours</li>
-              <li><i />En retard</li>
-            </ul>
+        <section className="gt-preview-understand">
+          <div>
+            <strong>Comprendre le niveau de maturité</strong>
+            <span>Niveau géré · maturité 68% · évaluation 74%</span>
           </div>
+          <span className="gt-preview-domain-link">
+            <BarChart3 aria-hidden="true" /> Voir les domaines
+          </span>
+        </section>
+
+        <div className="gt-preview-kpis">
+          <LoginPreviewKpi label="Maturité des contrôles évalués" value="68%" detail="Contrôles évalués et applicables" tone="primary" />
+          <LoginPreviewKpi label="Contrôles évalués" value="74 / 100" detail="Couverture de l’audit : 74%" />
+          <LoginPreviewKpi label="Écarts critiques" value="6" detail="2 impacts 3 sans plan" tone="danger" />
+          <LoginPreviewKpi label="Preuves manquantes" value="9" detail="Sur contrôles conformes ou partiels" tone="warning" />
+        </div>
+
+        <div className="gt-preview-content-grid">
+          <section className="gt-preview-maturity-card">
+            <div className="gt-preview-card-heading">
+              <div>
+                <strong>Maturité des contrôles évalués</strong>
+                <small>Le taux d’évaluation reste un indicateur distinct.</small>
+              </div>
+              <b>68%</b>
+            </div>
+            <div className="gt-preview-main-progress"><span style={{ width: "68%" }} /></div>
+            <div className="gt-preview-coverage-row">
+              <span>Évaluation</span>
+              <div><i style={{ width: "74%" }} /></div>
+              <strong>74%</strong>
+            </div>
+          </section>
+
+          <section className="gt-preview-priority-card">
+            <div className="gt-preview-card-heading">
+              <div>
+                <strong>Domaines les plus critiques</strong>
+                <small>Maturité et preuves suivies séparément</small>
+              </div>
+              <Target aria-hidden="true" />
+            </div>
+
+            <div className="gt-preview-domain-list">
+              {domains.map((domain) => (
+                <div className="gt-preview-domain-row" key={domain.label}>
+                  <span>{domain.label}</span>
+                  <div className="gt-preview-domain-bars">
+                    <i style={{ width: `${domain.maturity}%` }} />
+                    <i className="evidence" style={{ width: `${domain.evidence}%` }} />
+                  </div>
+                  <strong>{domain.maturity}%</strong>
+                </div>
+              ))}
+            </div>
+          </section>
         </div>
       </div>
-    </div>
+    </section>
   );
 }
 
-function MiniStat({ title, value, info }: { title: string; value: string; info: string }) {
+function LoginPreviewKpi({
+  label,
+  value,
+  detail,
+  tone = "neutral",
+}: {
+  label: string;
+  value: string;
+  detail: string;
+  tone?: "neutral" | "primary" | "danger" | "warning";
+}) {
   return (
-    <div className="gt-stat">
-      <p>{title}</p>
+    <article className={`gt-preview-kpi gt-preview-kpi-${tone}`}>
+      <span>{label}</span>
       <strong>{value}</strong>
-      <span>{info}</span>
-    </div>
+      <small>{detail}</small>
+    </article>
   );
 }
+
