@@ -1796,3 +1796,18 @@
     animation: none !important;
   }
 }
+
+/* =========================================================
+   Aperçu produit — suppression ciblée du vide inférieur
+   ========================================================= */
+@media (min-width: 781px) {
+  .gt-dashboard.gt-product-preview {
+    height: auto;
+    min-height: 0;
+    grid-template-rows: 50px auto;
+  }
+
+  .gt-product-preview .gt-preview-main {
+    padding-bottom: 10px;
+  }
+}
