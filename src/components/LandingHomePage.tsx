@@ -1,33 +1,23 @@
 import React, { useEffect, useState } from "react";
 import {
   ArrowRight,
-  AlertTriangle,
   BarChart3,
   CheckCircle2,
-  Copy,
   ClipboardCheck,
   Ear,
   Eye,
   FileText,
-  Filter,
-  History,
   Lock,
   Grid2X2,
   Layers,
   Lightbulb,
-  ListChecks,
   ListTodo,
   Mail,
-  Paperclip,
-  Pencil,
-  Plus,
-  Search,
   Settings,
   Shield,
   ShieldCheck,
   Star,
   Target,
-  Trash2,
   Users,
 } from "lucide-react";
 import "./LandingHomePage.css";
@@ -1726,140 +1716,129 @@ function Feature({ icon, title, text }: { icon: React.ReactNode; title: string; 
 
 function DashboardMock({
   variant = "hero",
-  gradientId: _gradientId = "gthLineFill",
+  gradientId = "gthLineFill",
 }: {
   variant?: "hero" | "story";
   gradientId?: string;
 }) {
-  const controls = [
-    { ref: "1.1", impact: 3, description: "Une politique de sécurité est définie", status: "Conforme", tone: "conform" },
-    { ref: "1.2", impact: 2, description: "Une démarche SSI est formalisée", status: "Conforme", tone: "conform" },
-    { ref: "1.3", impact: 3, description: "La direction pilote la sécurité", status: "Non conforme", tone: "nonconform" },
-    { ref: "1.4", impact: 2, description: "Les exigences sont documentées", status: "Non conforme", tone: "nonconform" },
-  ] as const;
-
   return (
-    <section
-      className={`gth-dashboard gth-app-preview gth-dashboard-${variant} gth-reveal`}
-      aria-label="Aperçu fidèle de l’interface d’audit GapTrack"
-    >
-      <div className="gth-preview-topbar">
-        <div className="gth-preview-topbrand">
-          <img src="/icon-192.png" alt="" aria-hidden="true" />
-          <strong>GapTrack</strong>
-          <small>Audit SSI</small>
-        </div>
-        <div className="gth-preview-topactions" aria-hidden="true">
-          <span>↶ Annuler</span>
-          <span>↷ Rétablir</span>
-          <span className="gth-preview-user"><Users /> Alizé</span>
-          <b>Contributeur</b>
-          <em>Premium</em>
-        </div>
-      </div>
-
-      <div className="gth-preview-sessionbar" aria-hidden="true">
-        <div className="gth-preview-select">Audit 1 <span>⌄</span></div>
-        <span className="gth-preview-more">Plus</span>
-        <div className="gth-preview-session-actions">
-          <span><Plus /> Nouvelle</span>
-          <span><Copy /> Dupliquer</span>
-          <span><Pencil /> Renommer</span>
-          <span className="danger"><Trash2 /> Supprimer</span>
-          <span><Users /> Utilisateurs</span>
-        </div>
-        <span className="gth-preview-sync"><CheckCircle2 /> Synchronisé</span>
-      </div>
-
+    <section className={`gth-dashboard gth-dashboard-${variant} gth-reveal`} aria-label="Aperçu du tableau de bord GapTrack">
       <aside className="gth-dash-sidebar">
-        <div className="gth-dash-brand">
-          <img src="/icon-192.png" alt="" aria-hidden="true" />
-          <span><strong>GapTrack</strong><small>Audit SSI</small></span>
-        </div>
-        <div className="gth-dash-divider" />
-        <nav aria-label="Navigation de l’aperçu">
-          <span className="active"><ListChecks /> Listing</span>
-          <span><Lightbulb /> Cette semaine</span>
-          <span><ListTodo /> Plan d’action</span>
-          <span><AlertTriangle /> Risques</span>
-          <span><BarChart3 /> Tableau de bord</span>
-          <span><History /> Journal d’audit</span>
+        <div className="gth-dash-logo"><ShieldCheck /> GapTrack</div>
+        <nav>
+          <span className="active"><BarChart3 /> Vue d’ensemble</span>
+          <span><FileText /> Audits</span>
+          <span><Target /> Écarts</span>
+          <span><ListTodo /> Plans d’action</span>
+          <span><ClipboardCheck /> Preuves</span>
+          <span><FileText /> Rapports</span>
           <span><Settings /> Paramètres</span>
         </nav>
       </aside>
 
-      <div className="gth-preview-main">
-        <header className="gth-preview-pagehead">
+      <div className="gth-dash-main">
+        <header className="gth-dash-header">
           <div>
-            <h3>Listing</h3>
-            <p>Évaluer les contrôles et saisir les preuves</p>
+            <h3>Vue d’ensemble</h3>
+            <p>Tableau de bord</p>
           </div>
-          <div className="gth-preview-progress">
-            <span>Évalué <b>152 sur 152 (100%)</b></span>
-            <i><u /></i>
+          <div className="gth-user-mini">
+            <span>Bonjour, Martin Dupont<br /><small>Auditeur</small></span>
+            <b>MD</b>
           </div>
         </header>
 
-        <section className="gth-preview-auditcard">
-          <div className="gth-preview-auditrow">
-            <div className="gth-preview-auditcopy">
-              <div className="gth-preview-badges">
-                <span>Fiche audit 1/6</span>
-                <span>Référentiel non renseigné</span>
-                <span>Version non renseignée</span>
-                <span>Audit initial</span>
-                <span>Criticité Moyenne</span>
-              </div>
-              <h4>Organisation non renseignée</h4>
-              <p>Audit 1 • 20/07/2026 • Auditeur non renseigné</p>
-            </div>
-            <span className="gth-preview-complete"><Pencil /> Compléter la fiche</span>
+        <div className="gth-stats">
+          <Stat title="Audits en cours" value="12" trend="+2 ce mois" />
+          <Stat title="Écarts ouverts" value="27" trend="-5 ce mois" />
+          <Stat title="Plans d’action" value="58" trend="+8 ce mois" />
+          <div className="gth-stat gth-compliance">
+            <p>Taux de conformité</p>
+            <strong>92%</strong>
+            <span>+3%</span>
+            <div className="gth-ring" />
           </div>
-          <div className="gth-preview-auditmeta">
-            <div><small>Périmètre</small><strong>Périmètre non renseigné</strong></div>
-            <div><small>Objectifs</small><strong>Objectifs non renseignés</strong></div>
-            <div><small>Commanditaire / contexte</small><strong>Non renseigné</strong></div>
-          </div>
-        </section>
-
-        <div className="gth-preview-filterbar">
-          <div><Search /> <span>Rechercher...</span></div>
-          <small>152 / 152 lignes</small>
-          <span className="gth-preview-filter"><Filter /> Plus</span>
         </div>
 
-        <div className="gth-preview-workarea">
-          <div className="gth-preview-table">
-            <div className="gth-preview-tablehead">
-              <span>Référence</span><span>Domaine</span><span>Impact</span><span>Point de contrôle</span><span>État du contrôle</span>
+        <div className="gth-dash-grid">
+          <div className="gth-panel gth-chart-panel">
+            <h4>Évolution de la conformité</h4>
+            <div className="gth-chart-area">
+              <svg viewBox="0 0 420 190" preserveAspectRatio="none">
+                <defs>
+                  <linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1">
+                    <stop offset="0%" stopColor="rgba(51, 118, 255, .42)" />
+                    <stop offset="100%" stopColor="rgba(51, 118, 255, 0)" />
+                  </linearGradient>
+                </defs>
+                {[25, 50, 75, 100].map((v) => <line key={v} x1="0" x2="420" y1={190 - v * 1.7} y2={190 - v * 1.7} />)}
+                <path d="M0 170 L45 145 L90 118 L135 98 L180 70 L225 58 L270 78 L315 49 L360 35 L420 20 L420 190 L0 190 Z" fill={`url(#${gradientId})`} />
+                <polyline points="0,170 45,145 90,118 135,98 180,70 225,58 270,78 315,49 360,35 420,20" />
+              </svg>
+              <div className="gth-months"><span>Janv.</span><span>Févr.</span><span>Mars</span><span>Avr.</span><span>Mai</span><span>Juin</span><span>Juil.</span></div>
             </div>
-            {controls.map((control, index) => (
-              <div className={`gth-preview-tablerow ${index === 0 ? "selected" : ""}`} key={control.ref}>
-                <span>{control.ref}</span>
-                <span>Facteurs clés de succès</span>
-                <span><i className={`impact impact-${control.impact}`}>{control.impact}</i></span>
-                <span>{control.description}</span>
-                <span className="gth-preview-statuscell">
-                  <b className={control.tone}>{control.status}</b>
-                  <i className="gth-preview-paperclip"><Paperclip /></i>
-                  <em>Aucune preuve</em>
-                </span>
-              </div>
-            ))}
           </div>
 
-          <aside className="gth-preview-detail">
-            <h4>1.1</h4>
-            <strong>Facteurs clés de succès</strong>
-            <div className="gth-preview-detail-line"><span>Impact</span><i className="impact impact-3">3</i></div>
-            <div className="gth-preview-detail-line"><span>État du contrôle</span><b>Conforme</b></div>
-            <div className="gth-preview-detail-select">Conforme <span>⌄</span></div>
-            <small>Point de contrôle</small>
-            <p>Une politique de sécurité est définie et correspond à l’activité de l’Organisation.</p>
-          </aside>
+          <div className="gth-panel gth-donut-panel">
+            <h4>Répartition des écarts</h4>
+            <div className="gth-donut-content">
+              <div className="gth-big-donut" />
+              <ul>
+                <li><i /> Résolus <strong>42</strong></li>
+                <li><i /> En cours <strong>10</strong></li>
+                <li><i /> En retard <strong>5</strong></li>
+                <li className="total">Total <strong>57</strong></li>
+              </ul>
+            </div>
+          </div>
+
+          <div className="gth-panel gth-activity-panel">
+            <h4>Activités récentes</h4>
+            <Activity icon={<ClipboardCheck />} title="Audit ISO 27001 - Q2 2024" by="Mis à jour par Sarah Martin" status="En cours" />
+            <Activity icon={<ListTodo />} title="Plan d’action - Sécurité des accès" by="Mis à jour par Thomas Bernard" status="En cours" />
+            <Activity icon={<CheckCircle2 />} title="Preuve ajoutée - Politique de sauvegarde" by="Mis à jour par Julie Leroy" status="Conforme" />
+          </div>
+
+          <div className="gth-panel gth-framework-panel">
+            <h4>Cadres & référentiels</h4>
+            <Meter label="ISO 27001" value="85%" />
+            <Meter label="NIS2" value="78%" />
+            <Meter label="RGPD" value="90%" />
+          </div>
         </div>
       </div>
     </section>
   );
 }
 
+function Stat({ title, value, trend }: { title: string; value: string; trend: string }) {
+  return (
+    <div className="gth-stat">
+      <p>{title}</p>
+      <strong>{value}</strong>
+      <span>{trend}</span>
+    </div>
+  );
+}
+
+function Activity({ icon, title, by, status }: { icon: React.ReactNode; title: string; by: string; status: string }) {
+  return (
+    <div className="gth-activity">
+      <span>{icon}</span>
+      <div>
+        <strong>{title}</strong>
+        <small>{by}</small>
+      </div>
+      <em>{status}</em>
+    </div>
+  );
+}
+
+function Meter({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="gth-meter">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
