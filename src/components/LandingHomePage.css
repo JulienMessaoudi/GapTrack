@@ -5154,3 +5154,19 @@
     margin-top: 18px;
   }
 }
+
+/* =========================================================
+   Ajustement ciblé : suppression de la zone vide sous
+   les deux cartes du tableau de bord dans le hero.
+   La hauteur est maintenant dictée par le contenu réel.
+   ========================================================= */
+@media (min-width: 821px) {
+  .gth-dashboard.gth-product-preview.gth-dashboard-hero {
+    min-height: 0;
+    height: auto;
+  }
+
+  .gth-dashboard-hero .gth-preview-main {
+    padding-bottom: 11px;
+  }
+}
