@@ -451,7 +451,7 @@ function HomePage({
           </div>
         </div>
 
-        {!isCompactViewport ? <DashboardMock variant="hero" gradientId="gthLineFillHero" /> : null}
+        {!isCompactViewport ? <DashboardMock variant="hero" /> : null}
         <div className="gth-scroll-cue" aria-hidden="true"><span /></div>
       </section>
 
@@ -1714,131 +1714,159 @@ function Feature({ icon, title, text }: { icon: React.ReactNode; title: string; 
   );
 }
 
-function DashboardMock({
-  variant = "hero",
-  gradientId = "gthLineFill",
-}: {
-  variant?: "hero" | "story";
-  gradientId?: string;
-}) {
+function DashboardMock({ variant = "hero" }: { variant?: "hero" | "story" }) {
+  const navigation = [
+    { label: "Listing", icon: <ClipboardCheck /> },
+    { label: "Cette semaine", icon: <Lightbulb /> },
+    { label: "Plan d’action", icon: <ListTodo /> },
+    { label: "Risques", icon: <Shield /> },
+    { label: "Tableau de bord", icon: <BarChart3 />, active: true },
+    { label: "Journal d’audit", icon: <FileText /> },
+    { label: "Paramètres", icon: <Settings /> },
+  ];
+
+  const domains = [
+    { label: "Organisation", maturity: 58, evidence: 44 },
+    { label: "Personnes", maturity: 66, evidence: 61 },
+    { label: "Technologie", maturity: 72, evidence: 68 },
+  ];
+
   return (
-    <section className={`gth-dashboard gth-dashboard-${variant} gth-reveal`} aria-label="Aperçu du tableau de bord GapTrack">
-      <aside className="gth-dash-sidebar">
-        <div className="gth-dash-logo"><ShieldCheck /> GapTrack</div>
-        <nav>
-          <span className="active"><BarChart3 /> Vue d’ensemble</span>
-          <span><FileText /> Audits</span>
-          <span><Target /> Écarts</span>
-          <span><ListTodo /> Plans d’action</span>
-          <span><ClipboardCheck /> Preuves</span>
-          <span><FileText /> Rapports</span>
-          <span><Settings /> Paramètres</span>
-        </nav>
-      </aside>
-
-      <div className="gth-dash-main">
-        <header className="gth-dash-header">
-          <div>
-            <h3>Vue d’ensemble</h3>
-            <p>Tableau de bord</p>
-          </div>
-          <div className="gth-user-mini">
-            <span>Bonjour, Martin Dupont<br /><small>Auditeur</small></span>
-            <b>MD</b>
-          </div>
-        </header>
-
-        <div className="gth-stats">
-          <Stat title="Audits en cours" value="12" trend="+2 ce mois" />
-          <Stat title="Écarts ouverts" value="27" trend="-5 ce mois" />
-          <Stat title="Plans d’action" value="58" trend="+8 ce mois" />
-          <div className="gth-stat gth-compliance">
-            <p>Taux de conformité</p>
-            <strong>92%</strong>
-            <span>+3%</span>
-            <div className="gth-ring" />
-          </div>
+    <section
+      className={`gth-dashboard gth-product-preview gth-dashboard-${variant} gth-reveal`}
+      aria-label="Aperçu fidèle de l’interface GapTrack avec des données d’exemple"
+    >
+      <header className="gth-preview-toolbar">
+        <div className="gth-preview-brand">
+          <span className="gth-preview-brand-icon"><ShieldCheck aria-hidden="true" /></span>
+          <span><strong>GapTrack</strong><small>Audit SSI</small></span>
         </div>
 
-        <div className="gth-dash-grid">
-          <div className="gth-panel gth-chart-panel">
-            <h4>Évolution de la conformité</h4>
-            <div className="gth-chart-area">
-              <svg viewBox="0 0 420 190" preserveAspectRatio="none">
-                <defs>
-                  <linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1">
-                    <stop offset="0%" stopColor="rgba(51, 118, 255, .42)" />
-                    <stop offset="100%" stopColor="rgba(51, 118, 255, 0)" />
-                  </linearGradient>
-                </defs>
-                {[25, 50, 75, 100].map((v) => <line key={v} x1="0" x2="420" y1={190 - v * 1.7} y2={190 - v * 1.7} />)}
-                <path d="M0 170 L45 145 L90 118 L135 98 L180 70 L225 58 L270 78 L315 49 L360 35 L420 20 L420 190 L0 190 Z" fill={`url(#${gradientId})`} />
-                <polyline points="0,170 45,145 90,118 135,98 180,70 225,58 270,78 315,49 360,35 420,20" />
-              </svg>
-              <div className="gth-months"><span>Janv.</span><span>Févr.</span><span>Mars</span><span>Avr.</span><span>Mai</span><span>Juin</span><span>Juil.</span></div>
+        <div className="gth-preview-session">
+          <span>Audit actif</span>
+          <strong>Audit ISO/IEC 27001</strong>
+          <small>Référentiel versionné</small>
+        </div>
+
+        <div className="gth-preview-sync"><CheckCircle2 aria-hidden="true" /> Synchronisé</div>
+      </header>
+
+      <aside className="gth-preview-sidebar" aria-label="Navigation de l’application">
+        <nav>
+          {navigation.map((item) => (
+            <span key={item.label} className={item.active ? "active" : undefined}>
+              {item.icon}
+              {item.label}
+            </span>
+          ))}
+        </nav>
+        <div className="gth-preview-plan">
+          <small>Offre</small>
+          <strong>Premium</strong>
+        </div>
+      </aside>
+
+      <div className="gth-preview-main">
+        <div className="gth-preview-page-heading">
+          <div>
+            <span>Tableau de bord</span>
+            <h3>Synthèse de maturité et priorités</h3>
+          </div>
+          <div className="gth-preview-demo-badge">Aperçu produit · données d’exemple</div>
+        </div>
+
+        <section className="gth-preview-audit-card">
+          <div className="gth-preview-audit-badges">
+            <span className="is-complete">Fiche audit complète</span>
+            <span>ISO/IEC 27001</span>
+            <span>Audit initial</span>
+            <span>Criticité élevée</span>
+          </div>
+          <div className="gth-preview-audit-summary">
+            <div>
+              <strong>Audit de démonstration</strong>
+              <small>Périmètre et objectifs renseignés</small>
             </div>
+            <button type="button" tabIndex={-1}><Settings aria-hidden="true" /> Modifier la fiche</button>
           </div>
+        </section>
 
-          <div className="gth-panel gth-donut-panel">
-            <h4>Répartition des écarts</h4>
-            <div className="gth-donut-content">
-              <div className="gth-big-donut" />
-              <ul>
-                <li><i /> Résolus <strong>42</strong></li>
-                <li><i /> En cours <strong>10</strong></li>
-                <li><i /> En retard <strong>5</strong></li>
-                <li className="total">Total <strong>57</strong></li>
-              </ul>
+        <section className="gth-preview-understand">
+          <div>
+            <strong>Comprendre le niveau de maturité</strong>
+            <span>Niveau géré · maturité 68% · évaluation 74%</span>
+          </div>
+          <span className="gth-preview-domain-link"><BarChart3 aria-hidden="true" /> Voir les domaines</span>
+        </section>
+
+        <div className="gth-preview-kpis">
+          <PreviewKpi label="Maturité des contrôles évalués" value="68%" detail="Contrôles évalués et applicables" tone="primary" />
+          <PreviewKpi label="Contrôles évalués" value="74 / 100" detail="Couverture de l’audit : 74%" />
+          <PreviewKpi label="Écarts critiques" value="6" detail="2 impacts 3 sans plan" tone="danger" />
+          <PreviewKpi label="Preuves manquantes" value="9" detail="Sur contrôles conformes ou partiels" tone="warning" />
+        </div>
+
+        <div className="gth-preview-content-grid">
+          <section className="gth-preview-maturity-card">
+            <div className="gth-preview-card-heading">
+              <div>
+                <strong>Maturité des contrôles évalués</strong>
+                <small>Le taux d’évaluation reste un indicateur distinct.</small>
+              </div>
+              <b>68%</b>
             </div>
-          </div>
+            <div className="gth-preview-main-progress"><span style={{ width: "68%" }} /></div>
+            <div className="gth-preview-coverage-row">
+              <span>Évaluation</span>
+              <div><i style={{ width: "74%" }} /></div>
+              <strong>74%</strong>
+            </div>
+          </section>
 
-          <div className="gth-panel gth-activity-panel">
-            <h4>Activités récentes</h4>
-            <Activity icon={<ClipboardCheck />} title="Audit ISO 27001 - Q2 2024" by="Mis à jour par Sarah Martin" status="En cours" />
-            <Activity icon={<ListTodo />} title="Plan d’action - Sécurité des accès" by="Mis à jour par Thomas Bernard" status="En cours" />
-            <Activity icon={<CheckCircle2 />} title="Preuve ajoutée - Politique de sauvegarde" by="Mis à jour par Julie Leroy" status="Conforme" />
-          </div>
+          <section className="gth-preview-priority-card">
+            <div className="gth-preview-card-heading">
+              <div>
+                <strong>Domaines les plus critiques</strong>
+                <small>Maturité et preuves suivies séparément</small>
+              </div>
+              <Target aria-hidden="true" />
+            </div>
 
-          <div className="gth-panel gth-framework-panel">
-            <h4>Cadres & référentiels</h4>
-            <Meter label="ISO 27001" value="85%" />
-            <Meter label="NIS2" value="78%" />
-            <Meter label="RGPD" value="90%" />
-          </div>
+            <div className="gth-preview-domain-list">
+              {domains.map((domain) => (
+                <div className="gth-preview-domain-row" key={domain.label}>
+                  <span>{domain.label}</span>
+                  <div className="gth-preview-domain-bars">
+                    <i style={{ width: `${domain.maturity}%` }} />
+                    <i className="evidence" style={{ width: `${domain.evidence}%` }} />
+                  </div>
+                  <strong>{domain.maturity}%</strong>
+                </div>
+              ))}
+            </div>
+          </section>
         </div>
       </div>
     </section>
   );
 }
 
-function Stat({ title, value, trend }: { title: string; value: string; trend: string }) {
+function PreviewKpi({
+  label,
+  value,
+  detail,
+  tone = "neutral",
+}: {
+  label: string;
+  value: string;
+  detail: string;
+  tone?: "neutral" | "primary" | "danger" | "warning";
+}) {
   return (
-    <div className="gth-stat">
-      <p>{title}</p>
-      <strong>{value}</strong>
-      <span>{trend}</span>
-    </div>
-  );
-}
-
-function Activity({ icon, title, by, status }: { icon: React.ReactNode; title: string; by: string; status: string }) {
-  return (
-    <div className="gth-activity">
-      <span>{icon}</span>
-      <div>
-        <strong>{title}</strong>
-        <small>{by}</small>
-      </div>
-      <em>{status}</em>
-    </div>
-  );
-}
-
-function Meter({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="gth-meter">
+    <article className={`gth-preview-kpi gth-preview-kpi-${tone}`}>
       <span>{label}</span>
       <strong>{value}</strong>
-    </div>
+      <small>{detail}</small>
+    </article>
   );
 }
