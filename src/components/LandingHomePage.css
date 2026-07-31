@@ -4509,17 +4509,11 @@
 .gth-preview-brand-icon {
   width: 29px;
   height: 29px;
-  display: grid;
-  place-items: center;
+  display: block;
+  flex: 0 0 auto;
+  object-fit: contain;
   border-radius: 9px;
-  color: #fff;
-  background: linear-gradient(145deg, #3478ff, #164bc7);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.26), 0 8px 20px rgba(30, 91, 220, .28);
-}
-
-.gth-preview-brand-icon svg {
-  width: 17px;
-  height: 17px;
+  filter: drop-shadow(0 6px 14px rgba(30, 91, 220, .32));
 }
 
 .gth-preview-brand strong,

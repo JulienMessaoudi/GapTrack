@@ -1738,7 +1738,14 @@ function DashboardMock({ variant = "hero" }: { variant?: "hero" | "story" }) {
     >
       <header className="gth-preview-toolbar">
         <div className="gth-preview-brand">
-          <span className="gth-preview-brand-icon"><ShieldCheck aria-hidden="true" /></span>
+          <img
+            src="/icon-192.png"
+            alt=""
+            className="gth-preview-brand-icon"
+            aria-hidden="true"
+            loading="eager"
+            decoding="async"
+          />
           <span><strong>GapTrack</strong><small>Audit SSI</small></span>
         </div>
 
