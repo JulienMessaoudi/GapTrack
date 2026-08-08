@@ -27,7 +27,8 @@ import "./LoginAccessPage.css";
 type LangKey = "fr" | "en";
 type ThemeMode = "light" | "dark";
 type UserRole = "admin" | "auditor" | "contributor" | "viewer";
-type SubscriptionPlan = "free" | "premium";
+type SubscriptionPlan = "free" | "premium_solo" | "premium_team";
+type PremiumPlan = "premium_solo" | "premium_team";
 
 interface AppUser {
   id: string;
@@ -57,6 +58,7 @@ interface SupabaseAuthProfile {
   organization?: string;
   role?: UserRole;
   subscriptionPlan?: SubscriptionPlan;
+  freeExpiresAt?: string;
   createdByUserId?: string;
   createdByEmail?: string;
   groupId?: string;
@@ -105,6 +107,7 @@ function buildContactFormUrl(params: {
   name?: string;
   organization?: string;
   source?: string;
+  plan?: PremiumPlan;
 } = {}): string {
   const search = new URLSearchParams();
   search.set("type", params.type || "premium");
@@ -113,12 +116,15 @@ function buildContactFormUrl(params: {
   if (params.name?.trim()) search.set("name", params.name.trim());
   if (params.organization?.trim()) search.set("organization", params.organization.trim());
   if (params.source?.trim()) search.set("source", params.source.trim());
+  if (params.plan) search.set("plan", params.plan);
 
   return `/contact?${search.toString()}`;
 }
 
 function normalizeSubscriptionPlan(value: unknown): SubscriptionPlan {
-  return value === "premium" ? "premium" : "free";
+  if (value === "premium_solo") return "premium_solo";
+  if (value === "premium_team" || value === "premium") return "premium_team";
+  return "free";
 }
 
 function normalizeUserRole(value: unknown): UserRole | undefined {
@@ -158,8 +164,8 @@ function validatePasswordStrength(
 
 async function fetchGapTrackProfile(userId: string, fallbackEmail: string): Promise<SupabaseAuthProfile> {
   const profileColumnAttempts = [
-    "email, name, organization, role, subscription_plan, created_by_user_id, created_by_email, group_id, group_name",
-    "email, name, organization, role, subscription_plan, created_by_user_id, created_by_email",
+    "email, name, organization, role, subscription_plan, free_expires_at, created_by_user_id, created_by_email, group_id, group_name",
+    "email, name, organization, role, subscription_plan, free_expires_at, created_by_user_id, created_by_email",
     "email, name, organization, role, subscription_plan",
   ];
 
@@ -179,7 +185,7 @@ async function fetchGapTrackProfile(userId: string, fallbackEmail: string): Prom
     if (!error) break;
 
     const message = String(error.message || "").toLowerCase();
-    if (!message.includes("created_by") && !message.includes("group_")) break;
+    if (!message.includes("free_expires_at") && !message.includes("created_by") && !message.includes("group_")) break;
   }
 
   if (error) {
@@ -192,6 +198,7 @@ async function fetchGapTrackProfile(userId: string, fallbackEmail: string): Prom
     organization: typeof data?.organization === "string" ? data.organization : undefined,
     role: normalizeUserRole(data?.role),
     subscriptionPlan: normalizeSubscriptionPlan(data?.subscription_plan),
+    freeExpiresAt: typeof data?.free_expires_at === "string" && data.free_expires_at.trim() ? data.free_expires_at : undefined,
     createdByUserId: typeof data?.created_by_user_id === "string" && data.created_by_user_id.trim()
       ? data.created_by_user_id
       : undefined,
@@ -252,13 +259,13 @@ async function verifyFirstTotpFactor(code: string) {
 }
 
 function planDescription(plan: SubscriptionPlan): string {
-  return plan === "premium"
-    ? "Audits illimités, exports PDF/CSV, preuves cloud, validation des preuves, rôles avancés et modèles personnalisés. Vos données Free sont conservées après activation."
-    : "1 audit actif, 1 utilisateur, preuves locales et passage Premium possible ensuite, sans recréer de compte.";
+  if (plan === "premium_team") return "Durée illimitée, audits illimités, exports PDF/CSV, preuves cloud, validation, rôles avancés et modèles personnalisés.";
+  if (plan === "premium_solo") return "Même usage individuel que Free — 1 audit actif, 1 utilisateur et preuves locales — sans limite de durée.";
+  return "Essai de 7 jours : 1 audit actif, 1 utilisateur et preuves locales. Vous pourrez ensuite passer à Premium Solo ou Premium Team sans recréer de compte.";
 }
 
 function readSelectedPlan(): SubscriptionPlan {
-  // Le Premium ne peut plus être auto-sélectionné par un visiteur :
+  // Les offres Premium ne peuvent pas être auto-sélectionnées par un visiteur :
   // il se demande via le formulaire GapTrack puis s’active manuellement par le propriétaire.
   return "free";
 }
@@ -380,14 +387,10 @@ export function LoginAccessPage({
     }
   }
 
-  function requestPremiumViaForm() {
-    window.location.href = buildContactFormUrl({
-      email: cleanEmail(email),
-      name: name.trim(),
-      organization: organization.trim(),
-      source: "Page d’inscription GapTrack",
-    });
-    toast.info(lang === "fr" ? "Le formulaire Premium est ouvert : votre compte Free reste utilisable en attendant l’activation." : "The Premium form is open: the Free account remains usable while activation is pending.");
+  function requestPremiumViaForm(plan: PremiumPlan) {
+    const label = plan === "premium_solo" ? "Premium Solo" : "Premium Team";
+    window.location.href = buildContactFormUrl({ email: cleanEmail(email), name: name.trim(), organization: organization.trim(), source: `Page d’inscription GapTrack - ${label}`, plan });
+    toast.info(lang === "fr" ? `Le formulaire ${label} est ouvert : vous pouvez créer votre Free 7 jours en attendant l’activation.` : `The ${label} form is open: you can create your 7-day Free account while activation is pending.`);
   }
 
   function completeSupabaseAuthentication(profile: SupabaseAuthProfile, metadata: Record<string, unknown>) {
@@ -404,6 +407,7 @@ export function LoginAccessPage({
       organization: profile.organization,
       role: profile.role,
       subscriptionPlan: profile.subscriptionPlan,
+      freeExpiresAt: profile.freeExpiresAt,
       createdByUserId,
       createdByEmail: createdByEmail ? cleanEmail(createdByEmail) : undefined,
     });
@@ -669,7 +673,7 @@ export function LoginAccessPage({
               {pendingMfaSession
                 ? "Saisissez le code de votre application d’authentification pour finaliser l’accès."
                 : isSetup
-                  ? `Créez votre accès GapTrack Free maintenant. Vous pourrez demander Premium en parallèle, sans perdre vos données.`
+                  ? `Créez votre accès GapTrack Free pendant 7 jours. Vous pourrez demander Premium Solo ou Premium Team en parallèle, sans perdre vos données.`
                   : confirmationEmail
                     ? "Confirmez votre e-mail, puis connectez-vous à votre espace GapTrack"
                     : "Accédez à votre espace GapTrack"}
@@ -756,25 +760,14 @@ export function LoginAccessPage({
 
             {isSetup ? (
               <div className="gt-plan-selection" aria-label="Choix de l’offre GapTrack">
-                <button
-                  type="button"
-                  className={selectedPlan === "free" ? "gt-plan-option active" : "gt-plan-option"}
-                  onClick={() => setSelectedPlan("free")}
-                  aria-pressed={selectedPlan === "free"}
-                >
-                  <span>Free</span>
-                  <strong>0€</strong>
-                  <small>Solo : 1 audit actif</small>
+                <button type="button" className={selectedPlan === "free" ? "gt-plan-option active" : "gt-plan-option"} onClick={() => setSelectedPlan("free")} aria-pressed={selectedPlan === "free"}>
+                  <span>Free</span><strong>0€</strong><small>7 jours · 1 audit actif</small>
                 </button>
-                <button
-                  type="button"
-                  className="gt-plan-option gt-plan-option-premium"
-                  onClick={requestPremiumViaForm}
-                  aria-pressed={false}
-                >
-                  <span>Premium</span>
-                  <strong>Sur devis</strong>
-                  <small>Équipe, exports, preuves cloud</small>
+                <button type="button" className="gt-plan-option gt-plan-option-solo" onClick={() => requestPremiumViaForm("premium_solo")} aria-pressed={false}>
+                  <span>Premium Solo</span><strong>Illimité</strong><small>Même usage individuel, sans expiration</small>
+                </button>
+                <button type="button" className="gt-plan-option gt-plan-option-premium" onClick={() => requestPremiumViaForm("premium_team")} aria-pressed={false}>
+                  <span>Premium Team</span><strong>Sur devis</strong><small>Équipe, exports, preuves cloud</small>
                 </button>
               </div>
             ) : null}
@@ -783,8 +776,8 @@ export function LoginAccessPage({
               <div className="gt-premium-helper">
                 <Mail aria-hidden="true" />
                 <div>
-                  <strong>Pas besoin d’attendre Premium</strong>
-                  <span>Créez votre compte Free maintenant : Premium débloquera ensuite les audits illimités, exports, rôles, preuves cloud et validations sur le même compte.</span>
+                  <strong>Commencez avec Free pendant 7 jours</strong>
+                  <span>Premium Solo conserve ensuite le même usage individuel sans limite de durée ; Premium Team débloque les fonctions avancées et la collaboration.</span>
                 </div>
               </div>
             ) : null}
@@ -795,7 +788,7 @@ export function LoginAccessPage({
                   <CheckCircle2 aria-hidden="true" />
                   <div>
                     <span>Offre activée immédiatement</span>
-                    <strong>Free</strong>
+                    <strong>Free · 7 jours</strong>
                   </div>
                   <p>{planDescription("free")}</p>
                 </div>
@@ -857,7 +850,7 @@ export function LoginAccessPage({
 
             <button type="submit" className="gt-primary" disabled={busy}>
               {busy ? <Loader2 className="gt-spin" aria-hidden="true" /> : null}
-              <span>{isSetup ? "Créer le compte Free" : "Se connecter"}</span>
+              <span>{isSetup ? "Créer le compte Free · 7 jours" : "Se connecter"}</span>
               {!busy ? <ArrowRight aria-hidden="true" /> : null}
             </button>
 
@@ -868,7 +861,7 @@ export function LoginAccessPage({
             <div className="gt-protection-icon"><ShieldCheck aria-hidden="true" /></div>
             <div>
               <h3>{pendingMfaSession ? "Connexion renforcée" : "Vos données sont protégées"}</h3>
-              <p>{pendingMfaSession ? "Le code 2FA vérifie que vous possédez bien l’application d’authentification liée à ce compte." : "Compte Free utilisable immédiatement : 1 utilisateur, 1 audit actif et preuves locales. Premium est activé côté serveur après validation."}</p>
+              <p>{pendingMfaSession ? "Le code 2FA vérifie que vous possédez bien l’application d’authentification liée à ce compte." : "Compte Free utilisable pendant 7 jours : 1 utilisateur, 1 audit actif et preuves locales. Premium Solo ou Premium Team peut ensuite être activé côté serveur."}</p>
             </div>
           </div>
         </section>
@@ -887,7 +880,7 @@ export function LoginAccessPage({
             <p>
               Cliquez sur le lien envoyé à <strong>{confirmationEmail}</strong>, puis revenez vous connecter.
             </p>
-            <p className="gt-confirm-plan">Offre activée : <strong>Free</strong>. Vous pouvez demander Premium ensuite sans recréer votre compte.</p>
+            <p className="gt-confirm-plan">Offre activée : <strong>Free · 7 jours</strong>. Vous pourrez demander Premium Solo ou Premium Team ensuite sans recréer votre compte.</p>
             <button
               type="button"
               className="gt-primary"
@@ -1025,7 +1018,7 @@ function DashboardPreview() {
         </nav>
         <div className="gt-preview-plan">
           <small>Offre</small>
-          <strong>Premium</strong>
+          <strong>Premium Team</strong>
         </div>
       </aside>
 

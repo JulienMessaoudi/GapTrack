@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { LandingHomePage } from "./LandingHomePage";
 
 type LandingPageView = "plateforme" | "apropos" | "securite" | "confidentialite" | "mentions-legales" | "cgu";
-type SubscriptionPlan = "free" | "premium";
+type SubscriptionPlan = "free" | "premium_solo" | "premium_team";
 
 function pageFromPathname(pathname: string): LandingPageView {
   const path = String(pathname || "/").replace(/\/+$/, "") || "/";

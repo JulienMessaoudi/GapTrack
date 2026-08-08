@@ -30,13 +30,15 @@ type FormState = {
 };
 
 const REQUEST_TYPES: Array<{ value: RequestType; label: string; description: string }> = [
-  { value: "premium", label: "Demande Premium", description: "Devis, activation et besoins avancés" },
+  { value: "premium", label: "Demande Premium Solo / Team", description: "Activation individuelle illimitée ou offre équipe avancée" },
   { value: "contact", label: "Question générale", description: "Échanger au sujet de GapTrack" },
   { value: "support", label: "Assistance", description: "Signaler un problème ou demander de l’aide" },
   { value: "privacy", label: "Données personnelles", description: "Accès, correction ou suppression" },
 ];
 
 const PREMIUM_NEEDS = [
+  "Premium Solo — usage individuel illimité",
+  "Premium Team — collaboration et fonctions avancées",
   "Audits illimités",
   "Exports PDF / CSV",
   "Stockage cloud des preuves",
@@ -48,6 +50,12 @@ const PREMIUM_NEEDS = [
 
 function safeRequestType(value: string | null): RequestType {
   return REQUEST_TYPES.some((item) => item.value === value) ? value as RequestType : "contact";
+}
+
+function premiumPlanNeed(value: string | null): string | null {
+  if (value === "premium_solo") return "Premium Solo — usage individuel illimité";
+  if (value === "premium_team") return "Premium Team — collaboration et fonctions avancées";
+  return null;
 }
 
 function initialState(): FormState {
@@ -67,12 +75,14 @@ function initialState(): FormState {
   }
 
   const search = new URLSearchParams(window.location.search);
+  const requestType = safeRequestType(search.get("type"));
+  const requestedPlanNeed = requestType === "premium" ? premiumPlanNeed(search.get("plan")) : null;
   return {
-    requestType: safeRequestType(search.get("type")),
+    requestType,
     name: search.get("name")?.slice(0, 120) || "",
     email: search.get("email")?.slice(0, 254) || "",
     organization: search.get("organization")?.slice(0, 160) || "",
-    needs: [],
+    needs: requestedPlanNeed ? [requestedPlanNeed] : [],
     context: "",
     deadline: "",
     source: search.get("source")?.slice(0, 200) || "Site GapTrack",
@@ -297,7 +307,7 @@ export default function ContactRequestPage() {
 
           {form.requestType === "premium" ? (
             <fieldset className="gt-contact-needs">
-              <legend>Fonctionnalités recherchées</legend>
+              <legend>Offre et fonctionnalités recherchées</legend>
               <div>
                 {PREMIUM_NEEDS.map((need) => (
                   <label key={need} className={form.needs.includes(need) ? "selected" : ""}>
@@ -322,7 +332,7 @@ export default function ContactRequestPage() {
               maxLength={4000}
               rows={7}
               placeholder={form.requestType === "premium"
-                ? "Présentez votre contexte, le nombre d’utilisateurs envisagé et vos priorités…"
+                ? "Présentez votre contexte, l’offre visée (Premium Solo ou Premium Team), le nombre d’utilisateurs envisagé et vos priorités…"
                 : "Décrivez précisément votre question ou votre problème…"}
               required
             />

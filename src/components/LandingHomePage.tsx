@@ -23,7 +23,8 @@ import {
 import "./LandingHomePage.css";
 
 type LandingPageView = "plateforme" | "apropos" | "securite" | "confidentialite" | "mentions-legales" | "cgu";
-type SubscriptionPlan = "free" | "premium";
+type SubscriptionPlan = "free" | "premium_solo" | "premium_team";
+type PremiumPlan = "premium_solo" | "premium_team";
 
 const CONTACT_EMAIL = "contact@gaptrack.fr";
 const SITE_URL = "https://gaptrack.fr";
@@ -37,6 +38,7 @@ function buildContactFormUrl(params: {
   name?: string;
   organization?: string;
   source?: string;
+  plan?: PremiumPlan;
 } = {}): string {
   const search = new URLSearchParams();
   search.set("type", params.type || "contact");
@@ -45,6 +47,7 @@ function buildContactFormUrl(params: {
   if (params.name?.trim()) search.set("name", params.name.trim());
   if (params.organization?.trim()) search.set("organization", params.organization.trim());
   if (params.source?.trim()) search.set("source", params.source.trim());
+  if (params.plan) search.set("plan", params.plan);
 
   return `/contact?${search.toString()}`;
 }
@@ -141,8 +144,8 @@ const GAPTRACK_FAQS = [
     answer: "Oui. GapTrack permet de structurer le suivi de conformité autour de référentiels comme ISO 27001, NIS2, DORA, RGPD ou PGSSI-S, avec des preuves, statuts, responsables et actions correctives associés à chaque contrôle.",
   },
   {
-    question: "Quelle est la différence entre GapTrack Free et GapTrack Premium ?",
-    answer: "Free permet de démarrer avec un audit et un utilisateur. Premium ajoute les audits illimités, les exports PDF et CSV, les utilisateurs et rôles avancés, le stockage cloud sécurisé, la validation des preuves et les modèles personnalisés.",
+    question: "Quelle est la différence entre Free, Premium Solo et Premium Team ?",
+    answer: "Free permet de démarrer pendant 7 jours avec un audit et un utilisateur. Premium Solo conserve ce même usage individuel sans limite de durée. Premium Team ajoute les audits illimités, exports PDF/CSV, utilisateurs et rôles avancés, stockage cloud, validation des preuves et modèles personnalisés.",
   },
   {
     question: "Comment GapTrack aide-t-il à suivre les écarts de conformité ?",
@@ -467,8 +470,8 @@ function HomePage({
 
       <PricingSection
         onSelectPlan={onAccess}
-        onRequestPremium={() => {
-          window.location.href = buildContactFormUrl({ type: "premium", source: "Landing page GapTrack" });
+        onRequestPremium={(plan) => {
+          window.location.href = buildContactFormUrl({ type: "premium", plan, source: `Landing page GapTrack - ${plan === "premium_solo" ? "Premium Solo" : "Premium Team"}` });
         }}
       />
 
@@ -478,7 +481,7 @@ function HomePage({
 }
 
 
-function PricingSection({ onSelectPlan, onRequestPremium }: { onSelectPlan: (plan: SubscriptionPlan) => void; onRequestPremium: () => void }) {
+function PricingSection({ onSelectPlan, onRequestPremium }: { onSelectPlan: (plan: SubscriptionPlan) => void; onRequestPremium: (plan: PremiumPlan) => void }) {
   const plans: Array<{
     key: SubscriptionPlan;
     label: string;
@@ -493,87 +496,74 @@ function PricingSection({ onSelectPlan, onRequestPremium }: { onSelectPlan: (pla
     highlighted?: boolean;
   }> = [
     {
-      key: "free" as const,
+      key: "free",
       label: "Free",
       badge: "Pour démarrer",
       price: "0€",
-      period: "/ mois",
-      description: "Idéal pour tester GapTrack seul, préparer un premier audit et structurer vos preuves localement, sans engagement.",
-      features: ["1 audit actif", "1 utilisateur", "Tableau de bord de base", "Preuves et notes locales", "Sans export PDF / CSV"],
-      note: "Free sert à découvrir la valeur du produit ; Premium prend le relais dès qu’il faut collaborer, exporter ou tracer finement.",
+      period: "· 7 jours",
+      description: "Le point d’entrée pour tester GapTrack seul, préparer un premier audit et structurer vos preuves localement.",
+      features: ["Essai de 7 jours", "1 audit actif", "1 utilisateur", "Tableau de bord de base", "Preuves et notes locales", "Sans export PDF / CSV"],
+      note: "À la fin des 7 jours, vous pouvez conserver le même usage individuel avec Premium Solo ou passer aux fonctions avancées avec Premium Team.",
       cta: "Commencer gratuitement",
     },
     {
-      key: "premium" as const,
-      label: "Premium",
+      key: "premium_solo",
+      label: "Premium Solo",
+      badge: "Individuel illimité",
+      price: "Sur devis",
+      period: "· illimité",
+      description: "La même expérience individuelle que Free, mais sans date d’expiration : votre accès reste actif dans le temps.",
+      features: ["Durée illimitée", "1 audit actif", "1 utilisateur", "Tableau de bord de base", "Preuves et notes locales", "Sans export PDF / CSV"],
+      note: "Idéal si vous souhaitez continuer à utiliser GapTrack seul après les 7 jours, sans fonctions d’équipe supplémentaires.",
+      reassurance: ["Même compte et mêmes données", "Aucune limite de durée", "Passage à Premium Team possible ensuite"],
+      cta: "Demander Premium Solo",
+    },
+    {
+      key: "premium_team",
+      label: "Premium Team",
       badge: "Le plus complet",
       price: "Sur devis",
       period: "",
-      description: "Pensé pour les équipes, cabinets et organisations qui veulent collaborer, exporter, valider les preuves et industrialiser leurs audits.",
+      description: "L’offre Premium historique, pensée pour les équipes, cabinets et organisations qui veulent collaborer et industrialiser leurs audits.",
       features: ["Audits illimités", "Exports PDF / CSV", "Utilisateurs et rôles avancés", "Stockage cloud sécurisé des preuves", "Validation / refus des preuves", "Modèles personnalisés et journal d’audit"],
       note: "Demande préremplie : indiquez simplement l’adresse à activer, votre organisation et votre besoin.",
-      reassurance: ["Compte Free utilisable immédiatement", "Activation Premium sans perte des données saisies", "Collaboration, exports et traçabilité débloqués après validation"],
-      cta: "Être recontacté pour Premium",
+      reassurance: ["Durée illimitée", "Activation sans perte des données saisies", "Collaboration, exports et traçabilité débloqués après validation"],
+      cta: "Demander Premium Team",
       highlighted: true,
     },
   ];
 
   return (
-    <section className="gth-pricing-section gth-reveal" id="gth-pricing" aria-label="Offres GapTrack Free et Premium">
+    <section className="gth-pricing-section gth-reveal" id="gth-pricing" aria-label="Offres GapTrack Free, Premium Solo et Premium Team">
       <div className="gth-pricing-heading">
-        <div className="gth-kicker">
-          <Star aria-hidden="true" />
-          OFFRES GAPTRACK
-        </div>
+        <div className="gth-kicker"><Star aria-hidden="true" />OFFRES GAPTRACK</div>
         <h2>Choisissez la version adaptée à votre usage</h2>
-        <p>Commencez en Free pour tester seul sur un audit, puis demandez Premium quand vous avez besoin d’audits illimités, d’exports, de preuves cloud, de validation et de collaboration équipe.</p>
+        <p>Commencez en Free pendant 7 jours, continuez seul sans limite avec Premium Solo, ou passez à Premium Team pour les audits illimités, exports, preuves cloud, validations et fonctions d’équipe.</p>
       </div>
-
       <div className="gth-pricing-grid">
-        {plans.map((plan) => (
-          <article key={plan.key} className={`gth-price-card gth-reveal${plan.highlighted ? " gth-price-card-premium" : ""}`}>
-            <div className="gth-price-topline">
-              <span>{plan.badge}</span>
-              {plan.highlighted ? <strong>Recommandé</strong> : null}
-            </div>
-            <h3>{plan.label}</h3>
-            <p>{plan.description}</p>
-            <div className="gth-price">
-              <strong>{plan.price}</strong>
-              {plan.period ? <small>{plan.period}</small> : null}
-            </div>
-            <ul>
-              {plan.features.map((feature) => (
-                <li key={feature}><CheckCircle2 aria-hidden="true" />{feature}</li>
-              ))}
-            </ul>
-            {plan.note ? <p className="gth-price-note">{plan.note}</p> : null}
-            {plan.reassurance ? (
-              <div className="gth-premium-reassurance" aria-label="Réassurances Premium">
-                {plan.reassurance.map((item) => (
-                  <span key={item}><ShieldCheck aria-hidden="true" />{item}</span>
-                ))}
-              </div>
-            ) : null}
-            <a
-              className={plan.highlighted ? "gth-primary" : "gth-secondary"}
-              href={plan.key === "premium" ? buildContactFormUrl({ type: "premium", source: "Landing page GapTrack" }) : "/login"}
-              onClick={(event) => handleSeoLinkClick(event, () => plan.key === "premium" ? onRequestPremium() : onSelectPlan(plan.key))}
-            >
-              {plan.cta}
-              {plan.key === "premium" ? <Mail aria-hidden="true" /> : <ArrowRight aria-hidden="true" />}
-            </a>
-          </article>
-        ))}
+        {plans.map((plan) => {
+          const requestedPlan = plan.key === "free" ? null : plan.key as PremiumPlan;
+          return (
+            <article key={plan.key} className={`gth-price-card gth-reveal${plan.highlighted ? " gth-price-card-premium" : ""}`}>
+              <div className="gth-price-topline"><span>{plan.badge}</span>{plan.highlighted ? <strong>Recommandé</strong> : null}</div>
+              <h3>{plan.label}</h3>
+              <p>{plan.description}</p>
+              <div className="gth-price"><strong>{plan.price}</strong>{plan.period ? <small>{plan.period}</small> : null}</div>
+              <ul>{plan.features.map((feature) => <li key={feature}><CheckCircle2 aria-hidden="true" />{feature}</li>)}</ul>
+              {plan.note ? <p className="gth-price-note">{plan.note}</p> : null}
+              {plan.reassurance ? <div className="gth-premium-reassurance" aria-label={`Réassurances ${plan.label}`}>{plan.reassurance.map((item) => <span key={item}><ShieldCheck aria-hidden="true" />{item}</span>)}</div> : null}
+              <a
+                className={plan.highlighted ? "gth-primary" : "gth-secondary"}
+                href={requestedPlan ? buildContactFormUrl({ type: "premium", plan: requestedPlan, source: `Landing page GapTrack - ${plan.label}` }) : "/login"}
+                onClick={(event) => handleSeoLinkClick(event, () => requestedPlan ? onRequestPremium(requestedPlan) : onSelectPlan("free"))}
+              >
+                {plan.cta}{requestedPlan ? <Mail aria-hidden="true" /> : <ArrowRight aria-hidden="true" />}
+              </a>
+            </article>
+          );
+        })}
       </div>
-
-      <div className="gth-pricing-reassurance">
-        <ShieldCheck aria-hidden="true" />
-        <div>
-          <strong>Pas besoin d’attendre Premium pour démarrer.</strong>
-          <span>Free reste le point d’entrée immédiat ; Premium s’active ensuite proprement côté serveur sur le même compte, avec vos données conservées.</span>
-        </div>
-      </div>
+      <div className="gth-pricing-reassurance"><ShieldCheck aria-hidden="true" /><div><strong>Un seul compte, trois niveaux d’accès.</strong><span>Vos données restent sur le même compte lorsque vous passez de Free à Premium Solo ou Premium Team.</span></div></div>
     </section>
   );
 }
@@ -611,7 +601,7 @@ function PrivacyPage() {
     {
       icon: <Users />,
       title: "Compte et organisation",
-      text: "Nom, adresse e-mail, organisation, rôle, groupe de travail, état du compte et formule Free ou Premium sont utilisés pour créer le profil, authentifier l’utilisateur et appliquer les droits associés.",
+      text: "Nom, adresse e-mail, organisation, rôle, groupe de travail, état du compte et formule Free, Premium Solo ou Premium Team sont utilisés pour créer le profil, authentifier l’utilisateur et appliquer les droits associés.",
     },
     {
       icon: <FileText />,
@@ -626,7 +616,7 @@ function PrivacyPage() {
     {
       icon: <Eye />,
       title: "Données techniques et demandes",
-      text: "Informations de session, journaux applicatifs, adresse IP ou empreinte anti-abus, navigateur, demandes de contact, support, Premium ou confidentialité peuvent être traités pour exploiter et protéger le service.",
+      text: "Informations de session, journaux applicatifs, adresse IP ou empreinte anti-abus, navigateur, demandes de contact, support, Premium Solo, Premium Team ou confidentialité peuvent être traités pour exploiter et protéger le service.",
     },
   ];
 
@@ -639,7 +629,7 @@ function PrivacyPage() {
     {
       title: "Répondre aux demandes",
       basis: "Mesures précontractuelles ou intérêt légitime",
-      text: "Traiter une question générale, une demande Premium, une demande d’assistance ou un échange nécessaire au fonctionnement du service.",
+      text: "Traiter une question générale, une demande Premium Solo ou Premium Team, une demande d’assistance ou un échange nécessaire au fonctionnement du service.",
     },
     {
       title: "Sécuriser GapTrack",
@@ -665,7 +655,7 @@ function PrivacyPage() {
       end: "Suppression de la base active visée sous 30 jours après la demande validée. Des copies résiduelles peuvent subsister jusqu’à la rotation des sauvegardes du prestataire.",
     },
     {
-      category: "Demandes de contact, support ou Premium",
+      category: "Demandes de contact, support, Premium Solo ou Premium Team",
       active: "Pendant le traitement de la demande et les échanges associés.",
       end: "12 mois après le dernier échange, sauf nécessité précontractuelle, contractuelle ou contentieuse plus longue.",
     },
@@ -1147,8 +1137,8 @@ function TermsPage() {
       title: "Accès au service",
       text: (
         <>
-          L’accès à certaines fonctionnalités nécessite un compte utilisateur. GapTrack peut proposer une offre Free et une
-          offre Premium, dont les limites fonctionnelles peuvent évoluer : nombre d’audits, exports, stockage cloud des preuves,
+          L’accès à certaines fonctionnalités nécessite un compte utilisateur. GapTrack peut proposer une offre Free, une offre Premium Solo et une
+          offre Premium Team, dont les limites fonctionnelles peuvent évoluer : nombre d’audits, exports, stockage cloud des preuves,
           gestion des utilisateurs, rôles, validations ou modèles personnalisés.
         </>
       ),
@@ -1432,7 +1422,7 @@ function SecurityPage() {
           <SecurityCard
             icon={<FileText />}
             title="Preuves privées"
-            text="Les fichiers Premium sont enregistrés dans un bucket Supabase non public. Les formats sont limités, la taille maximale est de 50 Mo et la consultation utilise un lien signé valable 60 secondes."
+            text="Les fichiers Premium Team sont enregistrés dans un bucket Supabase non public. Les formats sont limités, la taille maximale est de 50 Mo et la consultation utilise un lien signé valable 60 secondes."
           />
           <SecurityCard
             icon={<Eye />}
@@ -1769,7 +1759,7 @@ function DashboardMock({ variant = "hero" }: { variant?: "hero" | "story" }) {
         </nav>
         <div className="gth-preview-plan">
           <small>Offre</small>
-          <strong>Premium</strong>
+          <strong>Premium Team</strong>
         </div>
       </aside>
 

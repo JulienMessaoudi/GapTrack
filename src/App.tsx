@@ -175,7 +175,8 @@ type AuditCriticality = "low" | "medium" | "high";
 type AuditType = "initial" | "follow_up" | "internal" | "external";
 
 type UserRole = "admin" | "auditor" | "contributor" | "viewer";
-type SubscriptionPlan = "free" | "premium";
+type SubscriptionPlan = "free" | "premium_solo" | "premium_team";
+type PremiumPlan = "premium_solo" | "premium_team";
 
 interface AppUser {
   id: string;
@@ -188,6 +189,7 @@ interface AppUser {
   active: boolean;
   passwordHash?: string;
   subscriptionPlan?: SubscriptionPlan;
+  freeExpiresAt?: string;
   createdByUserId?: string;
   createdByEmail?: string;
   groupId?: string;
@@ -208,7 +210,10 @@ interface NewUserPayload {
 }
 
 function normalizeSubscriptionPlan(value: unknown): SubscriptionPlan {
-  return value === "premium" ? "premium" : "free";
+  if (value === "premium_solo") return "premium_solo";
+  // Compatibilité avec les anciens profils encore enregistrés avec `premium`.
+  if (value === "premium_team" || value === "premium") return "premium_team";
+  return "free";
 }
 
 const SERVICE_OWNER_EMAIL = "julien.messaoudi@edu.esiee.fr";
@@ -318,6 +323,7 @@ async function fetchGapTrackProfileOnServer(
     organization?: string;
     role?: UserRole;
     subscriptionPlan?: SubscriptionPlan;
+    freeExpiresAt?: string;
     active?: boolean;
     createdByUserId?: string;
     createdByEmail?: string;
@@ -330,6 +336,7 @@ async function fetchGapTrackProfileOnServer(
   organization?: string;
   role?: UserRole;
   subscriptionPlan?: SubscriptionPlan;
+  freeExpiresAt?: string;
   active?: boolean;
   createdByUserId?: string;
   createdByEmail?: string;
@@ -338,8 +345,8 @@ async function fetchGapTrackProfileOnServer(
 }> {
   try {
     const profileColumnAttempts = [
-      "email, name, organization, role, subscription_plan, active, created_by_user_id, created_by_email, group_id, group_name, deleted_at",
-      "email, name, organization, role, subscription_plan, created_by_user_id, created_by_email, group_id, group_name, deleted_at",
+      "email, name, organization, role, subscription_plan, free_expires_at, active, created_by_user_id, created_by_email, group_id, group_name, deleted_at",
+      "email, name, organization, role, subscription_plan, free_expires_at, created_by_user_id, created_by_email, group_id, group_name, deleted_at",
       "email, name, organization, role, subscription_plan, active, created_by_user_id, created_by_email",
       "email, name, organization, role, subscription_plan, created_by_user_id, created_by_email",
       "email, name, organization, role, subscription_plan, active",
@@ -364,7 +371,7 @@ async function fetchGapTrackProfileOnServer(
       // Compatibilité progressive : l'application reste utilisable même si les
       // nouvelles colonnes Supabase n'ont pas encore été migrées.
       const message = String(error.message || "").toLowerCase();
-      if (!message.includes("active") && !message.includes("created_by") && !message.includes("group_")) break;
+      if (!message.includes("active") && !message.includes("free_expires_at") && !message.includes("created_by") && !message.includes("group_")) break;
     }
 
     if (error) {
@@ -384,6 +391,7 @@ async function fetchGapTrackProfileOnServer(
         ? data.role
         : fallback.role,
       subscriptionPlan: normalizeSubscriptionPlan(data.subscription_plan),
+      freeExpiresAt: typeof data.free_expires_at === "string" && data.free_expires_at.trim() ? data.free_expires_at : fallback.freeExpiresAt,
       active: typeof data.active === "boolean" ? data.active : fallback.active,
       createdByUserId: typeof data.created_by_user_id === "string" && data.created_by_user_id.trim()
         ? data.created_by_user_id
@@ -404,9 +412,10 @@ async function fetchGapTrackProfileOnServer(
   }
 }
 
-function isPremiumPlan(plan: SubscriptionPlan | undefined): boolean {
-  return normalizeSubscriptionPlan(plan) === "premium";
+function isPremiumTeamPlan(plan: SubscriptionPlan | undefined): boolean {
+  return normalizeSubscriptionPlan(plan) === "premium_team";
 }
+
 
 type ContactRequestKind = "contact" | "premium" | "support" | "privacy";
 
@@ -416,6 +425,7 @@ function buildContactFormUrl(params: {
   name?: string;
   organization?: string;
   source?: string;
+  plan?: PremiumPlan;
 } = {}): string {
   const search = new URLSearchParams();
   search.set("type", params.type || "premium");
@@ -424,6 +434,7 @@ function buildContactFormUrl(params: {
   if (params.name?.trim()) search.set("name", params.name.trim());
   if (params.organization?.trim()) search.set("organization", params.organization.trim());
   if (params.source?.trim()) search.set("source", params.source.trim());
+  if (params.plan) search.set("plan", params.plan);
 
   return `/contact?${search.toString()}`;
 }
@@ -435,13 +446,28 @@ function saveSelectedSubscriptionPlan(plan: SubscriptionPlan) {
 }
 
 function subscriptionPlanLabel(plan: SubscriptionPlan | undefined): string {
-  return normalizeSubscriptionPlan(plan) === "premium" ? "Premium" : "Free";
+  const normalized = normalizeSubscriptionPlan(plan);
+  if (normalized === "premium_team") return "Premium Team";
+  if (normalized === "premium_solo") return "Premium Solo";
+  return "Free";
 }
 
 function subscriptionPlanBadgeClass(plan: SubscriptionPlan | undefined): string {
-  return normalizeSubscriptionPlan(plan) === "premium"
-    ? "border-cyan-500/50 text-cyan-700 dark:text-cyan-300 bg-cyan-500/10"
-    : "border-sky-500/40 text-sky-700 dark:text-sky-300 bg-sky-500/10";
+  const normalized = normalizeSubscriptionPlan(plan);
+  if (normalized === "premium_team") return "border-cyan-500/50 text-cyan-700 dark:text-cyan-300 bg-cyan-500/10";
+  if (normalized === "premium_solo") return "border-violet-500/50 text-violet-700 dark:text-violet-300 bg-violet-500/10";
+  return "border-sky-500/40 text-sky-700 dark:text-sky-300 bg-sky-500/10";
+}
+
+function subscriptionDurationLabel(user: Pick<AppUser, "subscriptionPlan" | "freeExpiresAt"> | null | undefined, lang: LangKey): string {
+  const plan = normalizeSubscriptionPlan(user?.subscriptionPlan);
+  if (plan !== "free") return lang === "fr" ? "Durée illimitée" : "Unlimited duration";
+  const expiration = user?.freeExpiresAt ? new Date(user.freeExpiresAt) : null;
+  if (!expiration || Number.isNaN(expiration.getTime())) return lang === "fr" ? "Essai Free · 7 jours" : "Free trial · 7 days";
+  const formatted = expiration.toLocaleDateString(lang === "fr" ? "fr-FR" : "en-US", { day: "2-digit", month: "2-digit", year: "numeric" });
+  return expiration.getTime() <= Date.now()
+    ? (lang === "fr" ? `Essai expiré le ${formatted}` : `Trial expired on ${formatted}`)
+    : (lang === "fr" ? `Essai jusqu’au ${formatted}` : `Trial until ${formatted}`);
 }
 
 interface Session {
@@ -3111,6 +3137,7 @@ function userRecordFromProfileRow(row: any): AppUser | null {
     createdAt: typeof row?.created_at === "string" ? row.created_at : new Date().toISOString(),
     active: typeof row?.active === "boolean" ? row.active : true,
     subscriptionPlan: normalizeSubscriptionPlan(row?.subscription_plan),
+    freeExpiresAt: typeof row?.free_expires_at === "string" && row.free_expires_at.trim() ? row.free_expires_at : undefined,
     createdByUserId: typeof row?.created_by_user_id === "string" && row.created_by_user_id.trim() ? row.created_by_user_id : undefined,
     createdByEmail: typeof row?.created_by_email === "string" && row.created_by_email.trim() ? normalizeEmail(row.created_by_email) : undefined,
     groupId: typeof row?.group_id === "string" && row.group_id.trim() ? row.group_id.trim() : undefined,
@@ -3160,7 +3187,7 @@ function mergeUsersByEmail(localUsers: AppUser[], incomingUsers: AppUser[]): App
 }
 
 async function fetchManageableUserProfilesOnServer(activeUser: AppUser): Promise<AppUser[]> {
-  const profileColumns = "id, email, name, organization, role, subscription_plan, active, created_at, created_by_user_id, created_by_email, group_id, group_name, deleted_at";
+  const profileColumns = "id, email, name, organization, role, subscription_plan, free_expires_at, active, created_at, created_by_user_id, created_by_email, group_id, group_name, deleted_at";
 
   const parseRows = (rows: any[] | null | undefined) => (rows || [])
     .map(userRecordFromProfileRow)
@@ -3182,7 +3209,7 @@ async function fetchManageableUserProfilesOnServer(activeUser: AppUser): Promise
 
   const selectAttempts = [
     profileColumns,
-    "id, email, name, organization, role, subscription_plan, active, created_at, created_by_user_id, created_by_email, deleted_at",
+    "id, email, name, organization, role, subscription_plan, free_expires_at, active, created_at, created_by_user_id, created_by_email, deleted_at",
     "id, email, name, organization, role, subscription_plan, created_at",
   ];
 
@@ -3195,7 +3222,7 @@ async function fetchManageableUserProfilesOnServer(activeUser: AppUser): Promise
     if (!result.error) return parseRows(result.data as any[]);
 
     const message = String(result.error.message || "").toLowerCase();
-    if (!message.includes("active") && !message.includes("created_by") && !message.includes("group_")) {
+    if (!message.includes("active") && !message.includes("free_expires_at") && !message.includes("created_by") && !message.includes("group_")) {
       console.warn("Unable to load manageable GapTrack profiles.", result.error);
       break;
     }
@@ -3232,7 +3259,7 @@ function isExistingSupabaseAccountError(error: { message?: string; status?: numb
 }
 
 function userCanCreateUsers(user: AppUser | null | undefined): boolean {
-  return userCanManageUsers(user) && (isPremiumPlan(user?.subscriptionPlan) || userCanManageSubscriptions(user));
+  return userCanManageUsers(user) && (isPremiumTeamPlan(user?.subscriptionPlan) || userCanManageSubscriptions(user));
 }
 
 function userCanEditAudit(user: AppUser | null | undefined): boolean {
@@ -4567,7 +4594,7 @@ function UserAccessScreen(props: {
   users: AppUser[];
   onCreateAdmin: (payload: NewUserPayload) => Promise<void>;
   onLogin: (userId: string, password: string) => Promise<boolean>;
-  onSupabaseAuthenticated: (profile: { email: string; name?: string; organization?: string; role?: UserRole; subscriptionPlan?: SubscriptionPlan; createdByUserId?: string; createdByEmail?: string; groupId?: string; groupName?: string }) => void;
+  onSupabaseAuthenticated: (profile: { email: string; name?: string; organization?: string; role?: UserRole; subscriptionPlan?: SubscriptionPlan; freeExpiresAt?: string; createdByUserId?: string; createdByEmail?: string; groupId?: string; groupName?: string }) => void;
   onBackHome?: () => void;
 }) {
   return <LoginAccessPage {...props} />;
@@ -4715,8 +4742,8 @@ function UserManagementDialog({
               {canManage && !canCreate && (
                 <div className="rounded-2xl border border-cyan-500/30 bg-cyan-500/10 p-4 text-sm text-cyan-900 dark:text-cyan-100">
                   {lang === "fr"
-                    ? "La création d’utilisateurs est réservée aux comptes administrateurs Premium."
-                    : "User creation is reserved for Premium administrator accounts."}
+                    ? "La création d’utilisateurs est réservée aux comptes administrateurs Premium Team."
+                    : "User creation is reserved for Premium Team administrator accounts."}
                 </div>
               )}
 
@@ -4758,7 +4785,8 @@ function UserManagementDialog({
                           <SelectTrigger>{subscriptionPlanLabel(newUserPlan)}</SelectTrigger>
                           <SelectContent>
                             <SelectItem value="free">Free</SelectItem>
-                            <SelectItem value="premium">Premium</SelectItem>
+                            <SelectItem value="premium_solo">Premium Solo</SelectItem>
+                            <SelectItem value="premium_team">Premium Team</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
@@ -4779,12 +4807,12 @@ function UserManagementDialog({
                 <div className="rounded-2xl border border-cyan-500/30 bg-cyan-500/10 p-4">
                   <div className="mb-2 flex items-center gap-2 font-medium text-cyan-900 dark:text-cyan-100">
                     <ShieldCheck className="h-4 w-4" />
-                    {lang === "fr" ? "Activation Premium par adresse e-mail" : "Premium activation by email"}
+                    {lang === "fr" ? "Activation Premium Team par adresse e-mail" : "Premium Team activation by email"}
                   </div>
                   <p className="mb-3 text-sm text-cyan-900/80 dark:text-cyan-100/80">
                     {lang === "fr"
-                      ? "Saisissez l’adresse reçue par e-mail : l’offre Premium sera activée côté serveur pour tous ses navigateurs et appareils."
-                      : "Enter the address received by email: Premium will be enabled server-side across all browsers and devices."}
+                      ? "Saisissez l’adresse reçue par e-mail : l’offre Premium Team sera activée côté serveur pour tous ses navigateurs et appareils."
+                      : "Enter the address received by email: Premium Team will be enabled server-side across all browsers and devices."}
                   </p>
                   <div className="flex flex-col gap-2 sm:flex-row">
                     <Input
@@ -4800,7 +4828,7 @@ function UserManagementDialog({
                         setPremiumEmail("");
                       }}
                     >
-                      {lang === "fr" ? "Activer Premium" : "Activate Premium"}
+                      {lang === "fr" ? "Activer Premium Team" : "Activate Premium Team"}
                     </Button>
                   </div>
                 </div>
@@ -4873,7 +4901,8 @@ function UserManagementDialog({
                                     <SelectTrigger className="w-full">{subscriptionPlanLabel(u.subscriptionPlan)}</SelectTrigger>
                                     <SelectContent>
                                       <SelectItem value="free">Free</SelectItem>
-                                      <SelectItem value="premium">Premium</SelectItem>
+                                      <SelectItem value="premium_solo">Premium Solo</SelectItem>
+                                      <SelectItem value="premium_team">Premium Team</SelectItem>
                                     </SelectContent>
                                   </Select>
                                 ) : (
@@ -4984,7 +5013,7 @@ function ServiceOwnerAdminConsole({
   const [newUserPlan, setNewUserPlan] = useState<SubscriptionPlan>("free");
   const [password, setPassword] = useState("");
   const [planEmail, setPlanEmail] = useState("");
-  const [directPlan, setDirectPlan] = useState<SubscriptionPlan>("premium");
+  const [directPlan, setDirectPlan] = useState<SubscriptionPlan>("premium_team");
 
   // Le compte propriétaire sert uniquement à administrer GapTrack :
   // il ne doit ni compter, ni apparaître dans la liste des comptes clients.
@@ -5001,8 +5030,9 @@ function ServiceOwnerAdminConsole({
   );
   const countedUsers = visibleUsers;
   const activeAdmins = countedUsers.filter((u) => u.active !== false && u.role === "admin");
-  const premiumCount = countedUsers.filter((u) => normalizeSubscriptionPlan(u.subscriptionPlan) === "premium").length;
-  const freeCount = countedUsers.length - premiumCount;
+  const premiumTeamCount = countedUsers.filter((u) => normalizeSubscriptionPlan(u.subscriptionPlan) === "premium_team").length;
+  const premiumSoloCount = countedUsers.filter((u) => normalizeSubscriptionPlan(u.subscriptionPlan) === "premium_solo").length;
+  const freeCount = countedUsers.filter((u) => normalizeSubscriptionPlan(u.subscriptionPlan) === "free").length;
 
   async function addUser() {
     const managedGroup = resolveManagedGroupForCreator(activeUser, users, lang);
@@ -5045,8 +5075,8 @@ function ServiceOwnerAdminConsole({
               </h1>
               <p className="mt-2 text-sm text-muted-foreground">
                 {lang === "fr"
-                  ? "Ce compte ne donne pas accès aux audits : il sert uniquement à gérer les utilisateurs, les rôles et les offres Free/Premium."
-                  : "This account does not access audits: it is only used to manage users, roles and Free/Premium plans."}
+                  ? "Ce compte ne donne pas accès aux audits : il sert uniquement à gérer les utilisateurs, les rôles et les offres Free / Premium Solo / Premium Team."
+                  : "This account does not access audits: it is only used to manage users, roles and Free / Premium Solo / Premium Team plans."}
               </p>
               <p className="mt-1 truncate text-xs text-muted-foreground">
                 {activeUser.name} · {activeUser.email}
@@ -5065,19 +5095,11 @@ function ServiceOwnerAdminConsole({
           </div>
         </header>
 
-        <section className="grid gap-4 md:grid-cols-3">
-          <div className="rounded-2xl border bg-muted/10 p-4">
-            <div className="text-sm text-muted-foreground">{lang === "fr" ? "Utilisateurs" : "Users"}</div>
-            <div className="mt-2 text-3xl font-semibold">{countedUsers.length}</div>
-          </div>
-          <div className="rounded-2xl border border-cyan-500/30 bg-cyan-500/10 p-4">
-            <div className="text-sm text-cyan-900/80 dark:text-cyan-100/80">Premium</div>
-            <div className="mt-2 text-3xl font-semibold text-cyan-900 dark:text-cyan-100">{premiumCount}</div>
-          </div>
-          <div className="rounded-2xl border border-sky-500/30 bg-sky-500/10 p-4">
-            <div className="text-sm text-sky-900/80 dark:text-sky-100/80">Free</div>
-            <div className="mt-2 text-3xl font-semibold text-sky-900 dark:text-sky-100">{freeCount}</div>
-          </div>
+        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-2xl border bg-muted/10 p-4"><div className="text-sm text-muted-foreground">{lang === "fr" ? "Utilisateurs" : "Users"}</div><div className="mt-2 text-3xl font-semibold">{countedUsers.length}</div></div>
+          <div className="rounded-2xl border border-sky-500/30 bg-sky-500/10 p-4"><div className="text-sm text-sky-900/80 dark:text-sky-100/80">Free · 7 jours</div><div className="mt-2 text-3xl font-semibold text-sky-900 dark:text-sky-100">{freeCount}</div></div>
+          <div className="rounded-2xl border border-violet-500/30 bg-violet-500/10 p-4"><div className="text-sm text-violet-900/80 dark:text-violet-100/80">Premium Solo</div><div className="mt-2 text-3xl font-semibold text-violet-900 dark:text-violet-100">{premiumSoloCount}</div></div>
+          <div className="rounded-2xl border border-cyan-500/30 bg-cyan-500/10 p-4"><div className="text-sm text-cyan-900/80 dark:text-cyan-100/80">Premium Team</div><div className="mt-2 text-3xl font-semibold text-cyan-900 dark:text-cyan-100">{premiumTeamCount}</div></div>
         </section>
 
         <div className="grid min-w-0 gap-5 xl:grid-cols-[420px_minmax(0,1fr)]">
@@ -5123,7 +5145,8 @@ function ServiceOwnerAdminConsole({
                       <SelectTrigger>{subscriptionPlanLabel(newUserPlan)}</SelectTrigger>
                       <SelectContent>
                         <SelectItem value="free">Free</SelectItem>
-                        <SelectItem value="premium">Premium</SelectItem>
+                        <SelectItem value="premium_solo">Premium Solo</SelectItem>
+                        <SelectItem value="premium_team">Premium Team</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -5156,7 +5179,8 @@ function ServiceOwnerAdminConsole({
                     <SelectTrigger>{subscriptionPlanLabel(directPlan)}</SelectTrigger>
                     <SelectContent>
                       <SelectItem value="free">Free</SelectItem>
-                      <SelectItem value="premium">Premium</SelectItem>
+                      <SelectItem value="premium_solo">Premium Solo</SelectItem>
+                            <SelectItem value="premium_team">Premium Team</SelectItem>
                     </SelectContent>
                   </Select>
                   <Button
@@ -5245,7 +5269,8 @@ function ServiceOwnerAdminConsole({
                             <SelectTrigger className="w-full">{subscriptionPlanLabel(u.subscriptionPlan)}</SelectTrigger>
                             <SelectContent>
                               <SelectItem value="free">Free</SelectItem>
-                              <SelectItem value="premium">Premium</SelectItem>
+                              <SelectItem value="premium_solo">Premium Solo</SelectItem>
+                            <SelectItem value="premium_team">Premium Team</SelectItem>
                             </SelectContent>
                           </Select>
                         )}
@@ -5650,8 +5675,8 @@ function CreateAuditWizard({
                     <div className="font-medium">{lang==='fr' ? "Source de la checklist" : "Checklist source"}</div>
                     <p className="text-sm text-muted-foreground">
                       {lang === "fr"
-                        ? "Utilisez la checklist déjà chargée. L’import de modèles CSV/JSON est réservé à Premium."
-                        : "Use the existing checklist. CSV/JSON template import is reserved for Premium."}
+                        ? "Utilisez la checklist déjà chargée. L’import de modèles CSV/JSON est réservé à Premium Team."
+                        : "Use the existing checklist. CSV/JSON template import is reserved for Premium Team."}
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -5765,8 +5790,8 @@ function CreateAuditWizard({
                     {!canImportTemplates ? (
                       <div className="mt-3 rounded-lg border border-cyan-500/30 bg-cyan-500/10 p-3 text-sm text-cyan-900 dark:text-cyan-100">
                         {lang === "fr"
-                          ? "Free permet de travailler sur l’audit en cours. Les imports de modèles personnalisés sont inclus dans Premium."
-                          : "Free lets you work on the current audit. Custom template imports are included in Premium."}
+                          ? "Free et Premium Solo permettent de travailler sur l’audit en cours. Les imports de modèles personnalisés sont inclus dans Premium Team."
+                          : "Free and Premium Solo let you work on the current audit. Custom template imports are included in Premium Team."}
                       </div>
                     ) : null}
 
@@ -6301,6 +6326,76 @@ function Sidebar({ current, onNavigate, lang }: { current: string; onNavigate: (
 }
 
 
+function FreeTrialNotice({
+  user,
+  lang,
+  onOpenSettings,
+  onRequestSolo,
+  onRequestTeam,
+}: {
+  user: AppUser;
+  lang: LangKey;
+  onOpenSettings: () => void;
+  onRequestSolo: () => void;
+  onRequestTeam: () => void;
+}) {
+  if (normalizeSubscriptionPlan(user.subscriptionPlan) !== "free") return null;
+
+  const expiration = user.freeExpiresAt ? new Date(user.freeExpiresAt) : null;
+  const hasExpiration = Boolean(expiration && !Number.isNaN(expiration.getTime()));
+  const expired = Boolean(hasExpiration && (expiration as Date).getTime() <= Date.now());
+  const duration = subscriptionDurationLabel(user, lang);
+
+  return (
+    <div className="px-4 pt-4 no-print">
+      <div className={expired
+        ? "rounded-2xl border border-rose-500/30 bg-rose-500/10 p-4"
+        : "rounded-2xl border border-sky-500/30 bg-sky-500/10 p-4"}
+      >
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex min-w-0 items-start gap-3">
+            {expired
+              ? <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-rose-700 dark:text-rose-300" />
+              : <Clock3 className="mt-0.5 h-5 w-5 shrink-0 text-sky-700 dark:text-sky-300" />}
+            <div className="min-w-0">
+              <div className="font-semibold">
+                {expired
+                  ? (lang === "fr" ? "Votre essai Free de 7 jours est terminé" : "Your 7-day Free trial has ended")
+                  : (lang === "fr" ? "Offre Free · essai de 7 jours" : "Free plan · 7-day trial")}
+              </div>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {expired
+                  ? (lang === "fr"
+                    ? "Votre compte reste accessible pour gérer votre profil et choisir une offre. Premium Solo conserve l’usage individuel sans limite ; Premium Team ajoute les fonctions avancées et la collaboration."
+                    : "Your account remains accessible to manage your profile and choose a plan. Premium Solo keeps individual use without a time limit; Premium Team adds advanced features and collaboration.")
+                  : `${duration}. ${lang === "fr" ? "Vous pourrez ensuite continuer avec Premium Solo ou Premium Team sans recréer de compte." : "You can then continue with Premium Solo or Premium Team without creating a new account."}`}
+              </p>
+            </div>
+          </div>
+          <div className="flex shrink-0 flex-wrap gap-2">
+            <Button type="button" variant="outline" onClick={onOpenSettings}>
+              <Settings className="mr-2 h-4 w-4" />
+              {lang === "fr" ? "Voir mon offre" : "View my plan"}
+            </Button>
+            {expired ? (
+              <>
+                <Button type="button" variant="outline" onClick={onRequestSolo}>
+                  <Mail className="mr-2 h-4 w-4" />
+                  Premium Solo
+                </Button>
+                <Button type="button" onClick={onRequestTeam}>
+                  <Mail className="mr-2 h-4 w-4" />
+                  Premium Team
+                </Button>
+              </>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PremiumFeatureNotice({ lang, title, description, bullets, onRequestPremium }: { lang: LangKey; title: string; description: string; bullets?: string[]; onRequestPremium: () => void }) {
   return (
     <div className="p-4">
@@ -6310,7 +6405,7 @@ function PremiumFeatureNotice({ lang, title, description, bullets, onRequestPrem
             <div className="min-w-0">
               <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-3 py-1 text-xs font-semibold text-cyan-800 dark:text-cyan-100">
                 <ShieldCheck className="h-4 w-4" />
-                {lang === "fr" ? "Premium" : "Premium"}
+                {lang === "fr" ? "Premium Team" : "Premium Team"}
               </div>
               <h2 className="text-xl font-semibold">{title}</h2>
               <p className="mt-2 max-w-2xl text-sm text-muted-foreground">{description}</p>
@@ -6327,7 +6422,7 @@ function PremiumFeatureNotice({ lang, title, description, bullets, onRequestPrem
             </div>
             <Button type="button" onClick={onRequestPremium} className="shrink-0">
               <Mail className="mr-2 h-4 w-4" />
-              {lang === "fr" ? "Demander Premium" : "Request Premium"}
+              {lang === "fr" ? "Demander Premium Team" : "Request Premium Team"}
             </Button>
           </div>
         </CardContent>
@@ -6485,16 +6580,16 @@ function Toolbar({
               </div>
             )}
 
-            {activeUser && !isPremiumPlan(activeUser.subscriptionPlan) && onRequestPremium && (
+            {activeUser && !isPremiumTeamPlan(activeUser.subscriptionPlan) && onRequestPremium && (
               <Button
                 size="sm"
                 variant="outline"
                 className="hidden lg:flex"
                 onClick={onRequestPremium}
-                title={lang === "fr" ? "Demander l’activation Premium" : "Request Premium activation"}
+                title={lang === "fr" ? "Demander l’activation Premium Team" : "Request Premium Team activation"}
               >
                 <Mail className="h-4 w-4 mr-1" />
-                {lang === "fr" ? "Demander Premium" : "Request Premium"}
+                {lang === "fr" ? "Demander Premium Team" : "Request Premium Team"}
               </Button>
             )}
 
@@ -6631,7 +6726,7 @@ function SettingsProfileView({
   onSaveProfile: (patch: { name: string; organization?: string }) => Promise<boolean>;
   onRequestPasswordReset: () => Promise<void>;
   onLogout: () => void;
-  onRequestPremium?: () => void;
+  onRequestPremium?: (plan?: PremiumPlan) => void;
 }) {
   const [name, setName] = useState(activeUser?.name || "");
   const [organization, setOrganization] = useState(activeUser?.organization || "");
@@ -6897,8 +6992,9 @@ function SettingsProfileView({
   const pendingMfaFactors = mfaStatus.factors.filter((factor) => factor?.status && factor.status !== "verified");
   const hasMfaEnabled = verifiedMfaFactors.length > 0;
   const mfaNeedsVerification = mfaStatus.nextLevel === "aal2" && mfaStatus.currentLevel !== "aal2";
-  const hasPremiumSubscription = currentSubscriptionPlan === "premium";
-  const subscriptionIncludedFeatures = hasPremiumSubscription
+  const hasPremiumTeamSubscription = currentSubscriptionPlan === "premium_team";
+  const hasPremiumSoloSubscription = currentSubscriptionPlan === "premium_solo";
+  const subscriptionIncludedFeatures = hasPremiumTeamSubscription
     ? [
         lang === "fr" ? "Audits illimités" : "Unlimited audits",
         lang === "fr" ? "Exports PDF / CSV et journal exportable" : "PDF / CSV exports and exportable audit log",
@@ -6906,36 +7002,30 @@ function SettingsProfileView({
         lang === "fr" ? "Stockage cloud sécurisé des preuves" : "Secure cloud evidence storage",
         lang === "fr" ? "Validation / refus des preuves" : "Evidence validation / rejection workflow",
         lang === "fr" ? "Import de modèles personnalisés" : "Custom template imports",
+        lang === "fr" ? "Durée illimitée" : "Unlimited duration",
       ]
     : [
-        lang === "fr" ? "1 audit actif pour tester GapTrack" : "1 active audit to try GapTrack",
+        lang === "fr" ? "1 audit actif" : "1 active audit",
         lang === "fr" ? "1 utilisateur, usage individuel" : "1 user, individual use",
         lang === "fr" ? "Saisie des contrôles et suivi des écarts" : "Control assessment and gap tracking",
         lang === "fr" ? "Preuves et notes stockées localement" : "Locally stored evidence and notes",
+        ...(hasPremiumSoloSubscription ? [lang === "fr" ? "Accès sans limite de durée" : "No time limit"] : [lang === "fr" ? "Essai limité à 7 jours" : "7-day trial"]),
       ];
-  const subscriptionLockedFeatures = hasPremiumSubscription
-    ? []
-    : [
-        lang === "fr" ? "Audits illimités" : "Unlimited audits",
-        lang === "fr" ? "Exports PDF / CSV" : "PDF / CSV exports",
-        lang === "fr" ? "Utilisateurs, rôles et collaboration" : "Users, roles, and collaboration",
-        lang === "fr" ? "Stockage cloud sécurisé des preuves" : "Secure cloud evidence storage",
-        lang === "fr" ? "Validation / refus des preuves" : "Evidence validation / rejection",
-        lang === "fr" ? "Modèles personnalisés" : "Custom templates",
-        lang === "fr" ? "Journal d’audit avancé" : "Advanced audit log",
-      ];
+  const subscriptionLockedFeatures = hasPremiumTeamSubscription ? [] : [
+    lang === "fr" ? "Audits illimités" : "Unlimited audits",
+    lang === "fr" ? "Exports PDF / CSV" : "PDF / CSV exports",
+    lang === "fr" ? "Utilisateurs, rôles et collaboration" : "Users, roles, and collaboration",
+    lang === "fr" ? "Stockage cloud sécurisé des preuves" : "Secure cloud evidence storage",
+    lang === "fr" ? "Validation / refus des preuves" : "Evidence validation / rejection",
+    lang === "fr" ? "Modèles personnalisés" : "Custom templates",
+    lang === "fr" ? "Journal d’audit avancé" : "Advanced audit log",
+  ];
 
-  function requestPremiumFromSettings() {
-    if (onRequestPremium) {
-      onRequestPremium();
-      return;
-    }
-
+  function requestPremiumFromSettings(plan: PremiumPlan = "premium_team") {
+    if (onRequestPremium) { onRequestPremium(plan); return; }
     window.location.href = buildContactFormUrl({
-      email: activeUser?.email || "",
-      name: activeUser?.name || "",
-      organization: activeUser?.organization || "",
-      source: lang === "fr" ? "Paramètres - Gestion de l’abonnement" : "Settings - Subscription management",
+      email: activeUser?.email || "", name: activeUser?.name || "", organization: activeUser?.organization || "",
+      source: lang === "fr" ? "Paramètres - Gestion de l’abonnement" : "Settings - Subscription management", plan,
     });
   }
 
@@ -7508,14 +7598,12 @@ function SettingsProfileView({
               </CardTitle>
               <p className="mt-1 text-sm text-muted-foreground">
                 {lang === "fr"
-                  ? "Consultez votre offre, vos limites et demandez l’activation Premium si nécessaire."
-                  : "Review your plan, limits, and request Premium activation when needed."}
+                  ? "Consultez votre offre, sa durée et les évolutions possibles vers Premium Solo ou Premium Team."
+                  : "Review your plan, duration, and available upgrades to Premium Solo or Premium Team."}
               </p>
             </div>
-            <Badge variant="outline" className={hasPremiumSubscription ? "border-cyan-500/50 text-cyan-700 dark:text-cyan-300 bg-cyan-500/10" : "border-sky-500/40 text-sky-700 dark:text-sky-300 bg-sky-500/10"}>
-              {hasPremiumSubscription
-                ? (lang === "fr" ? "Premium actif" : "Premium active")
-                : (lang === "fr" ? "Offre Free" : "Free plan")}
+            <Badge variant="outline" className={subscriptionPlanBadgeClass(currentSubscriptionPlan)}>
+              {lang === "fr" ? `${subscriptionPlanLabel(currentSubscriptionPlan)} actif` : `${subscriptionPlanLabel(currentSubscriptionPlan)} active`}
             </Badge>
           </div>
         </CardHeader>
@@ -7530,28 +7618,29 @@ function SettingsProfileView({
                   </div>
                   <div className="mt-1 text-2xl font-semibold">{subscriptionPlanLabel(currentSubscriptionPlan)}</div>
                 </div>
-                <div className={hasPremiumSubscription ? "flex h-12 w-12 items-center justify-center rounded-2xl border border-cyan-500/30 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300" : "flex h-12 w-12 items-center justify-center rounded-2xl border border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300"}>
-                  {hasPremiumSubscription ? <ShieldCheck className="h-6 w-6" /> : <Info className="h-6 w-6" />}
+                <div className={hasPremiumTeamSubscription ? "flex h-12 w-12 items-center justify-center rounded-2xl border border-cyan-500/30 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300" : "flex h-12 w-12 items-center justify-center rounded-2xl border border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300"}>
+                  {hasPremiumTeamSubscription ? <ShieldCheck className="h-6 w-6" /> : <Info className="h-6 w-6" />}
                 </div>
               </div>
               <p className="text-sm text-muted-foreground">
-                {hasPremiumSubscription
+                {hasPremiumTeamSubscription
                   ? (lang === "fr"
                     ? "Votre compte dispose des fonctionnalités avancées de GapTrack."
                     : "Your account has access to GapTrack advanced features.")
                   : (lang === "fr"
-                    ? "Votre compte est en Free et reste utilisable immédiatement. Premium pourra être activé côté serveur sur ce même compte."
-                    : "Your account is on Free and remains usable immediately. Premium can be enabled server-side on this same account.")}
+                    ? (hasPremiumSoloSubscription ? "Votre compte Premium Solo reprend les fonctionnalités individuelles de Free, sans limite de durée." : "Votre compte Free est un essai de 7 jours. Vous pourrez ensuite passer à Premium Solo ou Premium Team sur ce même compte.")
+                    : (hasPremiumSoloSubscription ? "Your Premium Solo account keeps the individual Free features with no time limit." : "Your Free account is a 7-day trial. You can then upgrade to Premium Solo or Premium Team on the same account."))}
               </p>
               <div className="mt-4 rounded-xl border bg-background/60 p-3 text-xs text-muted-foreground">
                 {lang === "fr" ? "Adresse associée" : "Linked address"}
                 <div className="mt-1 truncate text-sm font-semibold text-foreground">{activeUser.email}</div>
+                <div className="mt-2 text-xs font-medium text-foreground">{subscriptionDurationLabel(activeUser, lang)}</div>
               </div>
             </div>
 
             <div className="rounded-2xl border p-4 lg:col-span-2">
               <h3 className="text-sm font-semibold">
-                {hasPremiumSubscription
+                {hasPremiumTeamSubscription
                   ? (lang === "fr" ? "Fonctionnalités incluses" : "Included features")
                   : (lang === "fr" ? "Fonctionnalités disponibles avec votre offre" : "Features available with your plan")}
               </h3>
@@ -7564,13 +7653,13 @@ function SettingsProfileView({
                 ))}
               </div>
 
-              {!hasPremiumSubscription ? (
+              {!hasPremiumTeamSubscription ? (
                 <div className="mt-4 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4">
                   <div className="flex gap-3">
                     <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-700 dark:text-amber-300" />
                     <div>
                       <h4 className="text-sm font-semibold text-amber-900 dark:text-amber-100">
-                        {lang === "fr" ? "Fonctionnalités Premium verrouillées" : "Locked Premium features"}
+                        {lang === "fr" ? "Fonctionnalités Premium Team verrouillées" : "Locked Premium Team features"}
                       </h4>
                       <div className="mt-2 flex flex-wrap gap-2">
                         {subscriptionLockedFeatures.map((feature) => (
@@ -7592,20 +7681,16 @@ function SettingsProfileView({
                 {lang === "fr" ? "Demander une évolution d’offre" : "Request a plan change"}
               </h3>
               <p className="mt-1 text-sm text-muted-foreground">
-                {hasPremiumSubscription
-                  ? (lang === "fr"
-                    ? "Vous pouvez contacter le support pour toute question liée à votre offre Premium."
-                    : "You can contact support for any question about your Premium plan.")
-                  : (lang === "fr"
-                    ? "Un e-mail prérempli sera préparé avec votre adresse, nom, organisation et besoin. Vous pouvez continuer à travailler en Free pendant la validation."
-                    : "A prefilled email will be prepared with your address, name, organization, and need. You can keep working on Free while validation is pending.")}
+                {hasPremiumTeamSubscription
+                  ? (lang === "fr" ? "Vous pouvez contacter le support pour toute question liée à votre offre Premium Team." : "You can contact support for any question about your Premium Team plan.")
+                  : hasPremiumSoloSubscription
+                    ? (lang === "fr" ? "Premium Solo est illimité dans le temps. Passez à Premium Team si vous avez besoin des fonctions d’équipe et avancées." : "Premium Solo has no time limit. Upgrade to Premium Team if you need team and advanced features.")
+                    : (lang === "fr" ? "Votre Free dure 7 jours. Premium Solo conserve l’usage individuel sans limite ; Premium Team ajoute les fonctions avancées." : "Your Free plan lasts 7 days. Premium Solo keeps individual use unlimited; Premium Team adds advanced features.")}
               </p>
-              <Button type="button" className="mt-4" onClick={requestPremiumFromSettings}>
-                <Mail className="mr-2 h-4 w-4" />
-                {hasPremiumSubscription
-                  ? (lang === "fr" ? "Contacter le support Premium" : "Contact Premium support")
-                  : (lang === "fr" ? "Demander l’activation Premium" : "Request Premium activation")}
-              </Button>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {!hasPremiumSoloSubscription && !hasPremiumTeamSubscription ? <Button type="button" variant="outline" onClick={() => requestPremiumFromSettings("premium_solo")}><Mail className="mr-2 h-4 w-4" />{lang === "fr" ? "Demander Premium Solo" : "Request Premium Solo"}</Button> : null}
+                {!hasPremiumTeamSubscription ? <Button type="button" onClick={() => requestPremiumFromSettings("premium_team")}><Mail className="mr-2 h-4 w-4" />{lang === "fr" ? "Demander Premium Team" : "Request Premium Team"}</Button> : <Button type="button" onClick={() => requestPremiumFromSettings("premium_team")}><Mail className="mr-2 h-4 w-4" />{lang === "fr" ? "Contacter le support Premium Team" : "Contact Premium Team support"}</Button>}
+              </div>
             </div>
 
             <div className="rounded-2xl border bg-muted/10 p-4">
@@ -7624,11 +7709,11 @@ function SettingsProfileView({
                 </div>
                 <div className="flex items-start gap-2">
                   <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-300" />
-                  <span>{lang === "fr" ? "Activation Premium réservée à la fonction Supabase sécurisée, sur le même compte." : "Premium activation reserved to the secured Supabase function, on the same account."}</span>
+                  <span>{lang === "fr" ? "Les changements vers Premium Solo ou Premium Team sont appliqués côté serveur sur le même compte." : "Upgrades to Premium Solo or Premium Team are applied server-side on the same account."}</span>
                 </div>
                 <div className="flex items-start gap-2">
                   <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-300" />
-                  <span>{lang === "fr" ? "Les exports, la collaboration, les preuves cloud, la validation et les modèles personnalisés restent bloqués tant que l’offre n’est pas Premium." : "Exports, collaboration, cloud evidence, validation, and custom templates stay locked until the plan is Premium."}</span>
+                  <span>{lang === "fr" ? "Les exports, la collaboration, les preuves cloud, la validation et les modèles personnalisés restent réservés à Premium Team." : "Exports, collaboration, cloud evidence, validation, and custom templates remain reserved for Premium Team."}</span>
                 </div>
               </div>
             </div>
@@ -8473,9 +8558,9 @@ function ListingView({ rows, setRows, lang, onOpenEvidence, evidenceCountFor, ev
                 variant="outline"
                 size="sm"
                 onClick={() => exportCSV(sorted, lang)}
-                title={!canExport ? (lang === "fr" ? "Premium requis" : "Premium required") : undefined}
+                title={!canExport ? (lang === "fr" ? "Premium Team requis" : "Premium Team required") : undefined}
               >
-                {lang === "fr" ? "Exporter CSV" : "Export CSV"}{!canExport ? " · Premium" : ""}
+                {lang === "fr" ? "Exporter CSV" : "Export CSV"}{!canExport ? " · Premium Team" : ""}
               </Button>
               <Button
                 onClick={() => bulkSet(1)}
@@ -9801,17 +9886,17 @@ function PlanView({
                 variant="outline"
                 size="sm"
                 onClick={exportPlanCSV}
-                title={!canExport ? (lang === "fr" ? "Premium requis" : "Premium required") : undefined}
+                title={!canExport ? (lang === "fr" ? "Premium Team requis" : "Premium Team required") : undefined}
               >
-                {lang === "fr" ? "Exporter CSV (Plan)" : "Export CSV (Plan)"}{!canExport ? " · Premium" : ""}
+                {lang === "fr" ? "Exporter CSV (Plan)" : "Export CSV (Plan)"}{!canExport ? " · Premium Team" : ""}
               </Button>
               <Button
                 variant="outline"
                 size="sm"
                 onClick={exportPlanPDF}
-                title={!canExport ? (lang === "fr" ? "Premium requis" : "Premium required") : undefined}
+                title={!canExport ? (lang === "fr" ? "Premium Team requis" : "Premium Team required") : undefined}
               >
-                {lang === "fr" ? "Exporter PDF (Plan)" : "Export PDF (Plan)"}{!canExport ? " · Premium" : ""}
+                {lang === "fr" ? "Exporter PDF (Plan)" : "Export PDF (Plan)"}{!canExport ? " · Premium Team" : ""}
               </Button>
             </div>
           </div>
@@ -10018,7 +10103,7 @@ function PlanView({
                           <div className="text-xs text-muted-foreground">{lang === "fr" ? "Responsable" : "Owner"}</div>
                           <Input
                             value={plan.owner || ""}
-                            placeholder={canAssignOwners ? (lang === "fr" ? "Ex: DSI / RSSI / Prestataire..." : "e.g., CIO / CISO / Vendor...") : (lang === "fr" ? "Assignation réservée à Premium" : "Assignment reserved for Premium")}
+                            placeholder={canAssignOwners ? (lang === "fr" ? "Ex: DSI / RSSI / Prestataire..." : "e.g., CIO / CISO / Vendor...") : (lang === "fr" ? "Assignation réservée à Premium Team" : "Assignment reserved for Premium Team")}
                             readOnly={!canAssignOwners}
                             onFocus={() => {
                               if (!canAssignOwners) onPremiumRequired?.(lang === "fr" ? "L’assignation des responsables" : "Owner assignment");
@@ -10027,7 +10112,7 @@ function PlanView({
                           />
                           {!canAssignOwners ? (
                             <div className="text-[11px] text-muted-foreground">
-                              {lang === "fr" ? "Free garde un plan simple ; l’assignation nominative est Premium." : "Free keeps a simple plan; named assignment is Premium."}
+                              {lang === "fr" ? "Free et Premium Solo gardent un plan simple ; l’assignation nominative est Premium Team." : "Free and Premium Solo keep a simple plan; named assignment is Premium Team."}
                             </div>
                           ) : null}
                         </div>
@@ -10400,10 +10485,10 @@ return (
               variant="outline"
               size="sm"
               onClick={onExport}
-              title={!canExport ? (lang === "fr" ? "Premium requis" : "Premium required") : undefined}
+              title={!canExport ? (lang === "fr" ? "Premium Team requis" : "Premium Team required") : undefined}
             >
               <Download className="h-4 w-4 mr-1" />
-              {t.export}{!canExport ? " · Premium" : ""}
+              {t.export}{!canExport ? " · Premium Team" : ""}
             </Button>
           </div>
         </div>
@@ -11355,10 +11440,10 @@ function AuditLogView({ entries, lang, onExport, onClear, canClear, canExport = 
                 size="sm"
                 onClick={onExport}
                 disabled={entries.length === 0}
-                title={!canExport ? (lang === "fr" ? "Premium requis" : "Premium required") : undefined}
+                title={!canExport ? (lang === "fr" ? "Premium Team requis" : "Premium Team required") : undefined}
               >
                 <Download className="h-4 w-4 mr-1" />
-                {lang === "fr" ? "Exporter CSV" : "Export CSV"}{!canExport ? " · Premium" : ""}
+                {lang === "fr" ? "Exporter CSV" : "Export CSV"}{!canExport ? " · Premium Team" : ""}
               </Button>
               {canClear && <Button variant="ghost" size="sm" onClick={onClear} disabled={entries.length === 0}><Trash2 className="h-4 w-4 mr-1" />{lang === "fr" ? "Vider" : "Clear"}</Button>}
             </div>
@@ -11470,7 +11555,7 @@ function EvidenceDrawer({ open, onClose, control, auditSessionId, evidenceMap, p
     if (busy) return;
     const coerced = coerceEvidenceStatusForCount(status, list.length);
     if (["to_validate", "validated", "refused"].includes(coerced) && !canReviewEvidence) {
-      toast.error(lang === "fr" ? "Le workflow de validation des preuves est réservé à Premium." : "The evidence validation workflow is reserved for Premium.");
+      toast.error(lang === "fr" ? "Le workflow de validation des preuves est réservé à Premium Team." : "The evidence validation workflow is reserved for Premium Team.");
       return;
     }
     if (coerced === proofStatus) return;
@@ -11578,8 +11663,8 @@ function EvidenceDrawer({ open, onClose, control, auditSessionId, evidenceMap, p
         };
         toast.success(
           lang === "fr"
-            ? "Preuve enregistrée localement. Le stockage cloud sécurisé est inclus dans Premium."
-            : "Evidence saved locally. Secure cloud storage is included in Premium."
+            ? "Preuve enregistrée localement. Le stockage cloud sécurisé est inclus dans Premium Team."
+            : "Evidence saved locally. Secure cloud storage is included in Premium Team."
         );
       }
     } catch (error) {
@@ -11690,11 +11775,11 @@ function EvidenceDrawer({ open, onClose, control, auditSessionId, evidenceMap, p
             <div>
               {canUseCloudStorage
                 ? (lang === "fr"
-                  ? "Premium actif : les fichiers ajoutés ici sont envoyés dans un bucket privé Supabase Storage avec URL signée temporaire et policies RLS."
-                  : "Premium active: files added here are uploaded to a private Supabase Storage bucket with temporary signed URLs and RLS policies.")
+                  ? "Premium Team actif : les fichiers ajoutés ici sont envoyés dans un bucket privé Supabase Storage avec URL signée temporaire et policies RLS."
+                  : "Premium Team active: files added here are uploaded to a private Supabase Storage bucket with temporary signed URLs and RLS policies.")
                 : (lang === "fr"
-                  ? "Offre Free : les fichiers sont conservés localement dans ce navigateur. Passez en Premium pour le stockage cloud sécurisé et partagé."
-                  : "Free plan: files are stored locally in this browser. Upgrade to Premium for secure shared cloud storage.")}
+                  ? "Offres Free et Premium Solo : les fichiers sont conservés localement dans ce navigateur. Passez à Premium Team pour le stockage cloud sécurisé et partagé."
+                  : "Free and Premium Solo: files are stored locally in this browser. Upgrade to Premium Team for secure shared cloud storage.")}
             </div>
           </div>
 
@@ -11720,11 +11805,11 @@ function EvidenceDrawer({ open, onClose, control, auditSessionId, evidenceMap, p
             <div className="text-xs text-muted-foreground">
               {canReviewEvidence
                 ? (lang === "fr"
-                  ? "Premium : les preuves peuvent être envoyées en validation, validées ou refusées par un auditeur / administrateur."
-                  : "Premium: evidence can be submitted, validated, or rejected by an auditor / administrator.")
+                  ? "Premium Team : les preuves peuvent être envoyées en validation, validées ou refusées par un auditeur / administrateur."
+                  : "Premium Team: evidence can be submitted, validated, or rejected by an auditor / administrator.")
                 : (lang === "fr"
-                  ? "Free : le statut indique surtout la présence d’une preuve. Le workflow de validation / refus est réservé à Premium."
-                  : "Free: the status mainly indicates whether evidence exists. Validation / rejection workflow is reserved for Premium.")}
+                  ? "Free / Premium Solo : le statut indique surtout la présence d’une preuve. Le workflow de validation / refus est réservé à Premium Team."
+                  : "Free / Premium Solo: the status mainly indicates whether evidence exists. Validation / rejection workflow is reserved for Premium Team.")}
             </div>
           </div>
 
@@ -12699,7 +12784,7 @@ function GapTrackApp({
   const canReviewEvidenceFlag = userCanReviewEvidence(activeUser);
   const canManageAuditsFlag = userCanManageAudits(activeUser);
   const canDeleteAuditsFlag = userCanDeleteAudits(activeUser);
-  const isPremiumUser = isPremiumPlan(activeUser?.subscriptionPlan);
+  const isPremiumTeamUser = isPremiumTeamPlan(activeUser?.subscriptionPlan);
 
   useEffect(() => {
     if (!activeUser || !userCanManageUsers(activeUser)) return;
@@ -12794,31 +12879,32 @@ function GapTrackApp({
     return false;
   }, [canDeleteAuditsFlag, lang]);
 
-  const requestPremiumViaForm = React.useCallback((source?: string) => {
+  const requestPremiumViaForm = React.useCallback((source?: string, plan: PremiumPlan = "premium_team") => {
     const href = buildContactFormUrl({
       email: activeUser?.email,
       name: activeUser?.name,
       organization: activeUser?.organization,
       source: source || "Application GapTrack",
+      plan,
     });
     window.location.href = href;
   }, [activeUser?.email, activeUser?.name, activeUser?.organization]);
 
   const requirePremiumFeature = React.useCallback((featureLabel?: string) => {
-    if (isPremiumUser) return true;
+    if (isPremiumTeamUser) return true;
     toast.error(
       lang === "fr"
-        ? `${featureLabel || "Cette fonctionnalité"} est réservée à l’offre Premium.`
-        : `${featureLabel || "This feature"} is reserved for the Premium plan.`,
+        ? `${featureLabel || "Cette fonctionnalité"} est réservée à l’offre Premium Team.`
+        : `${featureLabel || "This feature"} is reserved for the Premium Team plan.`,
       {
         action: {
-          label: lang === "fr" ? "Demander Premium" : "Request Premium",
+          label: lang === "fr" ? "Demander Premium Team" : "Request Premium Team",
           onClick: () => requestPremiumViaForm(featureLabel),
         },
       }
     );
     return false;
-  }, [isPremiumUser, lang, requestPremiumViaForm]);
+  }, [isPremiumTeamUser, lang, requestPremiumViaForm]);
 
 
   const updateOwnProfile = React.useCallback(async (patch: { name: string; organization?: string }) => {
@@ -12931,7 +13017,7 @@ function GapTrackApp({
     );
   }, [activeUser?.email, lang]);
 
-  const syncSupabaseAuthenticatedUser = React.useCallback((profile: { email: string; name?: string; organization?: string; role?: UserRole; subscriptionPlan?: SubscriptionPlan; active?: boolean; createdByUserId?: string; createdByEmail?: string; groupId?: string; groupName?: string }) => {
+  const syncSupabaseAuthenticatedUser = React.useCallback((profile: { email: string; name?: string; organization?: string; role?: UserRole; subscriptionPlan?: SubscriptionPlan; freeExpiresAt?: string; active?: boolean; createdByUserId?: string; createdByEmail?: string; groupId?: string; groupName?: string }) => {
     const email = normalizeEmail(profile.email);
 
     if (!email) return;
@@ -12963,6 +13049,7 @@ function GapTrackApp({
           organization: profile.organization?.trim() || existing.organization,
           role: profile.role ? normalizeUserRole(profile.role) : (isServiceOwnerEmail(email) ? "admin" : "viewer"),
           subscriptionPlan,
+          freeExpiresAt: profile.freeExpiresAt || existing.freeExpiresAt,
           createdByUserId: profile.createdByUserId || existing.createdByUserId,
           createdByEmail: profile.createdByEmail ? normalizeEmail(profile.createdByEmail) : existing.createdByEmail,
           groupId: profile.groupId || existing.groupId,
@@ -12979,6 +13066,7 @@ function GapTrackApp({
           email,
           role: profile.role ? normalizeUserRole(profile.role) : (isServiceOwnerEmail(email) ? "admin" : "viewer"),
           subscriptionPlan,
+          freeExpiresAt: profile.freeExpiresAt,
           organization: profile.organization?.trim() || undefined,
           createdByUserId: profile.createdByUserId || undefined,
           createdByEmail: profile.createdByEmail ? normalizeEmail(profile.createdByEmail) : undefined,
@@ -13043,6 +13131,7 @@ function GapTrackApp({
         // only a legacy fallback; Supabase gaptrack_profiles remains the source.
         role: undefined,
         subscriptionPlan: "free" as SubscriptionPlan,
+        freeExpiresAt: undefined,
         active: undefined,
         createdByUserId: metaCreatedByUserId,
         createdByEmail: metaCreatedByEmail,
@@ -13102,7 +13191,7 @@ function GapTrackApp({
 
   const addUser = React.useCallback(async (payload: NewUserPayload) => {
     if (!canCreateUsersFlag) {
-      toast.error(lang === "fr" ? "Création d’utilisateurs réservée aux comptes administrateurs Premium." : "User creation is reserved for Premium administrator accounts.");
+      toast.error(lang === "fr" ? "Création d’utilisateurs réservée aux comptes administrateurs Premium Team." : "User creation is reserved for Premium Team administrator accounts.");
       return false;
     }
     const email = normalizeEmail(payload.email);
@@ -13125,7 +13214,9 @@ function GapTrackApp({
     }
 
     const organization = payload.organization?.trim() || undefined;
-    const requestedSubscriptionPlan = canManageSubscriptionsFlag ? normalizeSubscriptionPlan(payload.subscriptionPlan) : "free";
+    const requestedSubscriptionPlan = canManageSubscriptionsFlag
+      ? normalizeSubscriptionPlan(payload.subscriptionPlan)
+      : (isPremiumTeamPlan(activeUser?.subscriptionPlan) ? "premium_team" : "free");
     let subscriptionPlan = requestedSubscriptionPlan;
     const localCreatedByUserId = activeUser?.id;
     const createdByEmail = activeUser?.email ? normalizeEmail(activeUser.email) : undefined;
@@ -13221,17 +13312,15 @@ function GapTrackApp({
           });
       }
 
-      if (requestedSubscriptionPlan === "premium") {
+      if (canManageSubscriptionsFlag && requestedSubscriptionPlan !== "free") {
         try {
-          await updateManagedUserProfileOnServer(email, { subscriptionPlan: "premium" });
+          await updateManagedUserProfileOnServer(email, { subscriptionPlan: requestedSubscriptionPlan });
         } catch (error) {
           console.error(error);
           subscriptionPlan = "free";
-          toast.error(
-            lang === "fr"
-              ? "Utilisateur créé, mais Premium n’a pas pu être activé côté serveur."
-              : "User created, but Premium could not be enabled on the server."
-          );
+          toast.error(lang === "fr"
+            ? `Utilisateur créé, mais ${subscriptionPlanLabel(requestedSubscriptionPlan)} n’a pas pu être activé côté serveur.`
+            : `User created, but ${subscriptionPlanLabel(requestedSubscriptionPlan)} could not be enabled on the server.`);
         }
       }
     } catch (error) {
@@ -13298,7 +13387,7 @@ function GapTrackApp({
     }
 
     if (patch.subscriptionPlan && !canManageSubscriptionsFlag) {
-      toast.error(lang === "fr" ? "Seul le propriétaire du service peut activer Premium." : "Only the service owner can activate Premium.");
+      toast.error(lang === "fr" ? "Seul le propriétaire du service peut activer Premium Team." : "Only the service owner can activate Premium Team.");
       return;
     }
 
@@ -13413,7 +13502,7 @@ function GapTrackApp({
 
   const activatePremiumByEmail = React.useCallback(async (rawEmail: string) => {
     if (!canManageSubscriptionsFlag) {
-      toast.error(lang === "fr" ? "Seul le propriétaire du service peut activer Premium." : "Only the service owner can activate Premium.");
+      toast.error(lang === "fr" ? "Seul le propriétaire du service peut activer Premium Team." : "Only the service owner can activate Premium Team.");
       return;
     }
 
@@ -13429,24 +13518,24 @@ function GapTrackApp({
     }
 
     try {
-      await updateManagedUserProfileOnServer(email, { subscriptionPlan: "premium" });
+      await updateManagedUserProfileOnServer(email, { subscriptionPlan: "premium_team" });
     } catch (error) {
       console.error(error);
       toast.error(
         lang === "fr"
-          ? "Impossible d’activer Premium dans Supabase."
-          : "Unable to activate Premium in Supabase."
+          ? "Impossible d’activer Premium Team dans Supabase."
+          : "Unable to activate Premium Team in Supabase."
       );
       return;
     }
 
     setUsers((prev) => {
-      const next = prev.map((u) => normalizeEmail(u.email) === email ? { ...u, subscriptionPlan: "premium" as SubscriptionPlan } : u);
+      const next = prev.map((u) => normalizeEmail(u.email) === email ? { ...u, subscriptionPlan: "premium_team" as SubscriptionPlan } : u);
       saveUsers(next);
       return next;
     });
 
-    toast.success(lang === "fr" ? `Premium activé pour ${email}.` : `Premium activated for ${email}.`);
+    toast.success(lang === "fr" ? `Premium Team activé pour ${email}.` : `Premium Team activated for ${email}.`);
   }, [canManageSubscriptionsFlag, lang]);
 
   const deleteUser = React.useCallback(async (userId: string) => {
@@ -14242,7 +14331,7 @@ function GapTrackApp({
   const handleImportTemplate = React.useCallback(async (frameworkId: FrameworkId, file: File) => {
     if (!requireAuditManager()) throw new Error(lang === "fr" ? "Droits insuffisants" : "Insufficient rights");
     if (!requirePremiumFeature(lang === "fr" ? "L’import de modèles personnalisés" : "Custom template import")) {
-      throw new Error(lang === "fr" ? "Import réservé à Premium" : "Premium required for import");
+      throw new Error(lang === "fr" ? "Import réservé à Premium Team" : "Premium Team required for import");
     }
     const tpl = await importTemplateFile(frameworkId, file);
     setCustomTemplates((prev) => {
@@ -14259,17 +14348,17 @@ function GapTrackApp({
 
   const allowCreateAuditForPlan = React.useCallback(() => {
     const hasOnlyBootstrap = sessions.length === 1 && isBootstrapAuditSession(sessions[0]);
-    if (normalizeSubscriptionPlan(activeUser?.subscriptionPlan) === "premium" || sessions.length === 0 || hasOnlyBootstrap) {
+    if (normalizeSubscriptionPlan(activeUser?.subscriptionPlan) === "premium_team" || sessions.length === 0 || hasOnlyBootstrap) {
       return true;
     }
 
     toast.error(
       lang === "fr"
-        ? "Offre Free : 1 audit actif pour tester GapTrack. Premium débloque les audits illimités et la collaboration."
-        : "Free plan: 1 active audit to try GapTrack. Premium unlocks unlimited audits and collaboration.",
+        ? "Offres Free et Premium Solo : 1 audit actif. Premium Team débloque les audits illimités et la collaboration."
+        : "Free and Premium Solo plans: 1 active audit. Premium Team unlocks unlimited audits and collaboration.",
       {
         action: {
-          label: lang === "fr" ? "Demander Premium" : "Request Premium",
+          label: lang === "fr" ? "Demander Premium Team" : "Request Premium Team",
           onClick: () => requestPremiumViaForm("Création de plusieurs audits"),
         },
       }
@@ -14680,6 +14769,13 @@ function GapTrackApp({
         onRequestPremium={() => requestPremiumViaForm("Barre d’outils GapTrack")}
         onLogout={() => { void logoutAfterSaving(); }}
       />
+      <FreeTrialNotice
+        user={activeUser}
+        lang={lang}
+        onOpenSettings={() => setTab("settings")}
+        onRequestSolo={() => requestPremiumViaForm(lang === "fr" ? "Bannière essai Free - Premium Solo" : "Free trial banner - Premium Solo", "premium_solo")}
+        onRequestTeam={() => requestPremiumViaForm(lang === "fr" ? "Bannière essai Free - Premium Team" : "Free trial banner - Premium Team", "premium_team")}
+      />
       <div className="flex">
         <Sidebar current={tab} onNavigate={setTab} lang={lang} />
         <div className="main-surface flex-1">
@@ -14731,7 +14827,7 @@ function GapTrackApp({
 				plans={plans}
 				openRequest={listingOpenRequest}
 				onOpenRequestConsumed={() => setListingOpenRequest(null)}
-					canExport={isPremiumUser}
+					canExport={isPremiumTeamUser}
 					onPremiumRequired={requirePremiumFeature}
               />
                 </motion.div>
@@ -14801,7 +14897,7 @@ function GapTrackApp({
 				lang={lang}
 				compareWith={compareRows || undefined}
 				onExport={handleExport}
-					canExport={isPremiumUser}
+					canExport={isPremiumTeamUser}
 				onOpenDomain={(domain) => {
 					openListingFromDashboard(domain);
 				}}
@@ -14827,7 +14923,7 @@ function GapTrackApp({
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -8 }}
                 >
-                  {isPremiumUser ? (
+                  {isPremiumTeamUser ? (
                     <AuditLogView
                       entries={auditLog}
                       lang={lang}
@@ -14837,13 +14933,13 @@ function GapTrackApp({
                       }}
                       onClear={clearAuditLog}
                       canClear={canDeleteAuditsFlag}
-                      canExport={isPremiumUser}
+                      canExport={isPremiumTeamUser}
                     />
                   ) : (
                     <PremiumFeatureNotice
                       lang={lang}
                       title={lang === "fr" ? "Journal d’audit avancé" : "Advanced audit log"}
-                      description={lang === "fr" ? "Free enregistre l’essentiel pour votre audit en cours. Premium affiche et exporte le journal horodaté complet des preuves, validations, refus et modifications." : "Free keeps the essentials for your current audit. Premium displays and exports the full timestamped log of evidence, validation, rejection, and changes."}
+                      description={lang === "fr" ? "Free et Premium Solo enregistrent l’essentiel pour votre audit en cours. Premium Team affiche et exporte le journal horodaté complet des preuves, validations, refus et modifications." : "Free and Premium Solo keep the essentials for your current audit. Premium Team displays and exports the full timestamped log of evidence, validation, rejection, and changes."}
                       bullets={lang === "fr" ? ["Historique horodaté", "Export CSV du journal", "Traçabilité des validations", "Support des audits équipe"] : ["Timestamped history", "CSV audit log export", "Validation traceability", "Team audit support"]}
                       onRequestPremium={() => requestPremiumViaForm(lang === "fr" ? "Journal d’audit avancé" : "Advanced audit log")}
                     />
@@ -14865,7 +14961,7 @@ function GapTrackApp({
                     onSaveProfile={updateOwnProfile}
                     onRequestPasswordReset={requestOwnPasswordReset}
                     onLogout={() => { void logoutAfterSaving(); }}
-                    onRequestPremium={() => requestPremiumViaForm(lang === "fr" ? "Paramètres - Gestion de l’abonnement" : "Settings - Subscription management")}
+                    onRequestPremium={(plan) => requestPremiumViaForm(lang === "fr" ? "Paramètres - Gestion de l’abonnement" : "Settings - Subscription management", plan || "premium_team")}
                   />
                 </motion.div>
               )}
@@ -14886,8 +14982,8 @@ function GapTrackApp({
 				proofStatusFor={proofStatusForRow}
 				setProofStatusForRow={setProofStatusForRow}
 				onOpenEvidence={openEvidence}
-					canExport={isPremiumUser}
-                        canAssignOwners={isPremiumUser}
+					canExport={isPremiumTeamUser}
+                        canAssignOwners={isPremiumTeamUser}
 					onPremiumRequired={requirePremiumFeature}
 			  />
                 </motion.div>
@@ -14913,8 +15009,8 @@ function GapTrackApp({
         commitEvidenceChange={commitEvidenceChange}
         lang={lang}
         canAddEvidence={canEditAuditFlag}
-        canReviewEvidence={canReviewEvidenceFlag && isPremiumUser}
-        canUseCloudStorage={isPremiumUser}
+        canReviewEvidence={canReviewEvidenceFlag && isPremiumTeamUser}
+        canUseCloudStorage={isPremiumTeamUser}
         onAuditEvent={appendAuditLog}
         onBusyChange={setIsEvidenceBusy}
       />
@@ -14943,7 +15039,7 @@ function GapTrackApp({
         templates={templates}
         currentRowsCount={rows.length}
         onImportTemplate={handleImportTemplate}
-        canImportTemplates={isPremiumUser}
+        canImportTemplates={isPremiumTeamUser}
         onPremiumRequired={requirePremiumFeature}
         onCreateAudit={async ({ name, frameworkId, frameworkVersion, frameworkCatalogId, frameworkCatalogRevision, scope, criticality, templateId, rows: tplRows, organization, auditor, sponsor, auditDate, auditType, objectives, context }) => {
           const sessionBase: Omit<Session, "id" | "createdAt"> = {
