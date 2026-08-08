@@ -6564,17 +6564,17 @@ function Toolbar({
 
             {activeUser && (
               <div
-                className="hidden h-9 min-w-[360px] max-w-[440px] shrink-0 items-center gap-2 rounded-md border border-input bg-background px-3 text-sm md:flex"
+                className="hidden h-9 w-fit max-w-[400px] shrink-0 items-center gap-1.5 rounded-md border border-input bg-background px-2.5 text-sm md:flex"
                 title={userRoleDescription(activeUser.role, lang)}
                 role="status"
                 aria-label={lang === "fr" ? "Utilisateur connecté" : "Signed-in user"}
               >
                 <Users className="h-4 w-4 shrink-0" />
                 <span className="truncate">{activeUser.name}</span>
-                <Badge variant="outline" className={"ml-2 shrink-0 whitespace-nowrap " + userRoleBadgeClass(activeUser.role)}>
+                <Badge variant="outline" className={"ml-1 shrink-0 whitespace-nowrap " + userRoleBadgeClass(activeUser.role)}>
                   {userRoleLabel(activeUser.role, lang)}
                 </Badge>
-                <Badge variant="outline" className={"ml-1 shrink-0 whitespace-nowrap px-3 " + subscriptionPlanBadgeClass(activeUser.subscriptionPlan)}>
+                <Badge variant="outline" className={"shrink-0 whitespace-nowrap px-2.5 " + subscriptionPlanBadgeClass(activeUser.subscriptionPlan)}>
                   {subscriptionPlanLabel(activeUser.subscriptionPlan)}
                 </Badge>
               </div>
