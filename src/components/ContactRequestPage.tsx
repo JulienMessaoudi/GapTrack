@@ -30,18 +30,18 @@ type FormState = {
 };
 
 const REQUEST_TYPES: Array<{ value: RequestType; label: string; description: string }> = [
-  { value: "premium", label: "Demande Premium Solo / Team", description: "Activation individuelle illimitée ou offre équipe avancée" },
+  { value: "premium", label: "Demande Premium Solo / Team", description: "Usage professionnel individuel ou collaboration en équipe" },
   { value: "contact", label: "Question générale", description: "Échanger au sujet de GapTrack" },
   { value: "support", label: "Assistance", description: "Signaler un problème ou demander de l’aide" },
   { value: "privacy", label: "Données personnelles", description: "Accès, correction ou suppression" },
 ];
 
 const PREMIUM_NEEDS = [
-  "Premium Solo — usage individuel illimité",
-  "Premium Team — collaboration et fonctions avancées",
+  "Premium Solo — audits, exports et cloud privé",
+  "Premium Team — collaboration et fonctions d’équipe",
   "Audits illimités",
   "Exports PDF / CSV",
-  "Stockage cloud des preuves",
+  "Stockage cloud privé / partagé des preuves",
   "Validation des preuves",
   "Utilisateurs et rôles avancés",
   "Modèles personnalisés",
@@ -53,8 +53,8 @@ function safeRequestType(value: string | null): RequestType {
 }
 
 function premiumPlanNeed(value: string | null): string | null {
-  if (value === "premium_solo") return "Premium Solo — usage individuel illimité";
-  if (value === "premium_team") return "Premium Team — collaboration et fonctions avancées";
+  if (value === "premium_solo") return "Premium Solo — audits, exports et cloud privé";
+  if (value === "premium_team") return "Premium Team — collaboration et fonctions d’équipe";
   return null;
 }
 

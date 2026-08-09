@@ -145,7 +145,7 @@ const GAPTRACK_FAQS = [
   },
   {
     question: "Quelle est la différence entre Free, Premium Solo et Premium Team ?",
-    answer: "Free permet de démarrer pendant 7 jours avec un audit et un utilisateur. Premium Solo conserve ce même usage individuel sans limite de durée. Premium Team ajoute les audits illimités, exports PDF/CSV, utilisateurs et rôles avancés, stockage cloud, validation des preuves et modèles personnalisés.",
+    answer: "Free permet de découvrir GapTrack pendant 7 jours avec un audit, un utilisateur et des fichiers de preuve locaux. Premium Solo débloque l’usage professionnel individuel avec audits illimités, exports PDF/CSV et stockage cloud privé. Premium Team ajoute les utilisateurs multiples, rôles, affectations, stockage partagé, validation des preuves, journal avancé et modèles personnalisés.",
   },
   {
     question: "Comment GapTrack aide-t-il à suivre les écarts de conformité ?",
@@ -498,37 +498,60 @@ function PricingSection({ onSelectPlan, onRequestPremium }: { onSelectPlan: (pla
     {
       key: "free",
       label: "Free",
-      badge: "Pour démarrer",
+      badge: "Pour découvrir",
       price: "0€",
       period: "· 7 jours",
-      description: "Le point d’entrée pour tester GapTrack seul, préparer un premier audit et structurer vos preuves localement.",
-      features: ["Essai de 7 jours", "1 audit actif", "1 utilisateur", "Tableau de bord de base", "Preuves et notes locales", "Sans export PDF / CSV"],
-      note: "À la fin des 7 jours, vous pouvez conserver le même usage individuel avec Premium Solo ou passer aux fonctions avancées avec Premium Team.",
-      cta: "Commencer gratuitement",
+      description: "Découvrez GapTrack et réalisez votre premier audit dans un espace individuel synchronisé.",
+      features: [
+        "Essai de 7 jours",
+        "1 audit actif",
+        "1 utilisateur",
+        "Audit synchronisé avec votre compte",
+        "Tableau de bord",
+        "Fichiers de preuve stockés localement",
+        "Sans export PDF / CSV",
+      ],
+      note: "Après les 7 jours, vos données restent liées à votre compte. Passez à Premium Solo pour continuer à travailler seul ou à Premium Team pour collaborer.",
+      cta: "Essayer gratuitement",
     },
     {
       key: "premium_solo",
       label: "Premium Solo",
-      badge: "Individuel illimité",
+      badge: "Pour travailler seul",
       price: "Sur devis",
       period: "· illimité",
-      description: "La même expérience individuelle que Free, mais sans date d’expiration : votre accès reste actif dans le temps.",
-      features: ["Durée illimitée", "1 audit actif", "1 utilisateur", "Tableau de bord de base", "Preuves et notes locales", "Sans export PDF / CSV"],
-      note: "Idéal si vous souhaitez continuer à utiliser GapTrack seul après les 7 jours, sans fonctions d’équipe supplémentaires.",
-      reassurance: ["Même compte et mêmes données", "Aucune limite de durée", "Passage à Premium Team possible ensuite"],
-      cta: "Demander Premium Solo",
+      description: "Pilotez tous vos audits dans un espace professionnel individuel, avec exports et stockage cloud privé de vos preuves.",
+      features: [
+        "Audits illimités",
+        "1 utilisateur",
+        "Tableau de bord complet",
+        "Exports PDF / CSV",
+        "Plans d’action complets",
+        "Stockage cloud privé des preuves",
+        "Accès sans limite de durée",
+      ],
+      reassurance: ["Même compte et mêmes données", "Espace cloud personnel", "Passage à Premium Team à tout moment"],
+      cta: "Choisir Premium Solo",
     },
     {
       key: "premium_team",
       label: "Premium Team",
-      badge: "Le plus complet",
+      badge: "Pour collaborer",
       price: "Sur devis",
       period: "",
-      description: "L’offre Premium historique, pensée pour les équipes, cabinets et organisations qui veulent collaborer et industrialiser leurs audits.",
-      features: ["Audits illimités", "Exports PDF / CSV", "Utilisateurs et rôles avancés", "Stockage cloud sécurisé des preuves", "Validation / refus des preuves", "Modèles personnalisés et journal d’audit"],
-      note: "Demande préremplie : indiquez simplement l’adresse à activer, votre organisation et votre besoin.",
-      reassurance: ["Durée illimitée", "Activation sans perte des données saisies", "Collaboration, exports et traçabilité débloqués après validation"],
-      cta: "Demander Premium Team",
+      description: "Pour les équipes, cabinets et organisations qui veulent travailler à plusieurs avec des droits et workflows maîtrisés.",
+      features: [
+        "Tout Premium Solo",
+        "Utilisateurs multiples",
+        "Rôles et permissions",
+        "Affectation des actions",
+        "Stockage cloud partagé",
+        "Validation / refus des preuves",
+        "Journal d’audit avancé",
+        "Modèles personnalisés",
+      ],
+      reassurance: ["Activation sans perte des données", "Espace partagé sécurisé", "Accompagnement à l’activation"],
+      cta: "Demander un devis Team",
       highlighted: true,
     },
   ];
@@ -538,7 +561,7 @@ function PricingSection({ onSelectPlan, onRequestPremium }: { onSelectPlan: (pla
       <div className="gth-pricing-heading">
         <div className="gth-kicker"><Star aria-hidden="true" />OFFRES GAPTRACK</div>
         <h2>Choisissez la version adaptée à votre usage</h2>
-        <p>Commencez en Free pendant 7 jours, continuez seul sans limite avec Premium Solo, ou passez à Premium Team pour les audits illimités, exports, preuves cloud, validations et fonctions d’équipe.</p>
+        <p>Essayez GapTrack en Free, passez à Premium Solo pour travailler professionnellement seul, ou choisissez Premium Team pour collaborer à plusieurs.</p>
       </div>
       <div className="gth-pricing-grid">
         {plans.map((plan) => {
@@ -1422,7 +1445,7 @@ function SecurityPage() {
           <SecurityCard
             icon={<FileText />}
             title="Preuves privées"
-            text="Les fichiers Premium Team sont enregistrés dans un bucket Supabase non public. Les formats sont limités, la taille maximale est de 50 Mo et la consultation utilise un lien signé valable 60 secondes."
+            text="Les fichiers Premium Solo sont conservés dans un espace cloud privé personnel ; Premium Team utilise un espace cloud partagé par groupe. Le bucket Supabase reste non public et la consultation utilise un lien signé temporaire."
           />
           <SecurityCard
             icon={<Eye />}

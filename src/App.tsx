@@ -416,6 +416,11 @@ function isPremiumTeamPlan(plan: SubscriptionPlan | undefined): boolean {
   return normalizeSubscriptionPlan(plan) === "premium_team";
 }
 
+function isPremiumProfessionalPlan(plan: SubscriptionPlan | undefined): boolean {
+  const normalized = normalizeSubscriptionPlan(plan);
+  return normalized === "premium_solo" || normalized === "premium_team";
+}
+
 
 type ContactRequestKind = "contact" | "premium" | "support" | "privacy";
 
@@ -943,14 +948,17 @@ async function fetchBackendEvidenceMapForSession(auditSessionId: string): Promis
 
   try {
     const context = await getSupabaseUserContext();
-    const baseColumns = "id, owner_user_id, group_id, control_id, filename, mime_type, size_bytes, storage_path, created_at";
+    if (!isPremiumProfessionalPlan(context.subscriptionPlan)) return {};
 
-    const primaryResult = await supabase
+    const baseColumns = "id, owner_user_id, group_id, control_id, filename, mime_type, size_bytes, storage_path, created_at";
+    const primaryQuery = supabase
       .from("gaptrack_evidence_files")
       .select(baseColumns)
-      .eq("audit_session_id", auditSessionId)
-      .eq("group_id", context.groupId)
-      .order("created_at", { ascending: false });
+      .eq("audit_session_id", auditSessionId);
+
+    const primaryResult = context.subscriptionPlan === "premium_solo"
+      ? await primaryQuery.eq("owner_user_id", context.userId).order("created_at", { ascending: false })
+      : await primaryQuery.eq("group_id", context.groupId).order("created_at", { ascending: false });
 
     let rows: unknown[] = primaryResult.data || [];
     let queryError = primaryResult.error;
@@ -1032,17 +1040,18 @@ async function uploadEvidenceFileToBackend(params: {
   const context = await getSupabaseUserContext();
   const userId = context.userId;
   const groupId = context.groupId;
+  const storageScopeId = evidenceStorageScopeId(context);
   const validationError = validateEvidenceFile(params.file);
   if (validationError) throw new Error(validationError);
 
-  if (![groupId, params.auditSessionId, params.controlId, params.evidenceId].every(isSafePathSegment)) {
+  if (![storageScopeId, params.auditSessionId, params.controlId, params.evidenceId].every(isSafePathSegment)) {
     throw new Error("Identifiant de preuve invalide.");
   }
 
   const safeFilename = safeStorageFilename(params.file.name);
   const mimeType = resolveSafeMimeType(params.file);
   const storagePath = [
-    groupId,
+    storageScopeId,
     params.auditSessionId,
     params.controlId,
     `${params.evidenceId}-${safeFilename}`,
@@ -1061,7 +1070,7 @@ async function uploadEvidenceFileToBackend(params: {
   const insertPayload: Record<string, unknown> = {
     id: params.evidenceId,
     owner_user_id: userId,
-    group_id: groupId,
+    group_id: context.subscriptionPlan === "premium_team" ? groupId : null,
     audit_session_id: params.auditSessionId,
     control_id: params.controlId,
     filename: safeFilename,
@@ -1102,7 +1111,7 @@ async function uploadEvidenceFileToBackend(params: {
     storageKind: "backend",
     storageKey: String(data?.storage_path || storagePath),
     ownerUserId: typeof data?.owner_user_id === "string" ? data.owner_user_id : userId,
-    groupId: typeof data?.group_id === "string" ? data.group_id : groupId,
+    groupId: context.subscriptionPlan === "premium_team" && typeof data?.group_id === "string" ? data.group_id : undefined,
     sha256: params.sha256,
     contentAvailable: true,
   };
@@ -1134,11 +1143,14 @@ async function deleteBackendEvidenceItem(item: EvidenceItem): Promise<void> {
 
   if (fileError) throw fileError;
 
-  let result = await supabase
+  const deleteQuery = supabase
     .from("gaptrack_evidence_files")
     .delete()
-    .eq("id", item.id)
-    .eq("group_id", context.groupId);
+    .eq("id", item.id);
+
+  let result = context.subscriptionPlan === "premium_solo"
+    ? await deleteQuery.eq("owner_user_id", context.userId)
+    : await deleteQuery.eq("group_id", context.groupId);
 
   if (result.error && String(result.error.message || "").toLowerCase().includes("group_id")) {
     result = await supabase
@@ -1164,7 +1176,8 @@ async function copyBackendEvidenceItemToAudit(
   }
 
   const newId = createEvidenceUuid();
-  if (![context.groupId, targetAuditSessionId, controlId, newId].every(isSafePathSegment)) {
+  const storageScopeId = evidenceStorageScopeId(context);
+  if (![storageScopeId, targetAuditSessionId, controlId, newId].every(isSafePathSegment)) {
     throw new Error("Identifiant de preuve invalide.");
   }
 
@@ -1176,7 +1189,7 @@ async function copyBackendEvidenceItemToAudit(
   const filename = safeStorageFilename(item.filename || "evidence");
   const mimeType = item.mimeType || sourceBlob.type || "application/octet-stream";
   const storagePath = [
-    context.groupId,
+    storageScopeId,
     targetAuditSessionId,
     controlId,
     `${newId}-${filename}`,
@@ -1194,7 +1207,7 @@ async function copyBackendEvidenceItemToAudit(
   const insertPayload: Record<string, unknown> = {
     id: newId,
     owner_user_id: context.userId,
-    group_id: context.groupId,
+    group_id: context.subscriptionPlan === "premium_team" ? context.groupId : null,
     audit_session_id: targetAuditSessionId,
     control_id: controlId,
     filename,
@@ -1235,7 +1248,7 @@ async function copyBackendEvidenceItemToAudit(
     storageKind: "backend",
     storageKey: String(data?.storage_path || storagePath),
     ownerUserId: typeof data?.owner_user_id === "string" ? data.owner_user_id : context.userId,
-    groupId: typeof data?.group_id === "string" ? data.group_id : context.groupId,
+    groupId: context.subscriptionPlan === "premium_team" && typeof data?.group_id === "string" ? data.group_id : undefined,
     contentAvailable: true,
   };
 }
@@ -1380,7 +1393,7 @@ function evidenceStorageLabel(item: EvidenceItem, lang: LangKey): string {
     return lang === "fr" ? "Fichier stocké localement" : "File stored locally";
   }
   if (item.storageKind === "backend" && item.contentAvailable !== false) {
-    return lang === "fr" ? "Fichier stocké dans Supabase" : "File stored in Supabase";
+    return lang === "fr" ? "Fichier stocké dans le cloud GapTrack" : "File stored in GapTrack cloud";
   }
   return lang === "fr" ? "Référence seule" : "Reference only";
 }
@@ -1556,10 +1569,10 @@ const I18N = {
     cancel: "Annuler",
 	saving: "Enregistrement…",
 	localSaved: "Brouillon sauvegardé",
-	syncing: "Synchronisation serveur…",
+	syncing: "Synchronisation de l’audit…",
 	localOnly: "Mode hors ligne",
-	syncedShort: "Synchronisé",
-	syncError: "Synchronisation serveur impossible",
+	syncedShort: "Audit synchronisé",
+	syncError: "Synchronisation de l’audit impossible",
 	retrySync: "Réessayer",
 	savedShort: "Sauvegardé",
 	saveError: "Erreur de sauvegarde",
@@ -1613,7 +1626,7 @@ const I18N = {
 	localSaved: "Saved locally",
 	syncing: "Saved locally · Syncing…",
 	localOnly: "Local mode",
-	syncedShort: "Synced",
+	syncedShort: "Audit synced",
 	syncError: "Saved locally · Sync unavailable",
 	retrySync: "Retry",
 	savedShort: "Saved",
@@ -3001,13 +3014,18 @@ function storagePathBelongsToEvidenceItem(
   const parts = String(storageKey).split("/");
   if (parts.length < 4 || !parts.every((part) => isSafePathSegment(part))) return false;
 
-  // New shared storage path: <group_id>/<audit_id>/<control_id>/<file>
-  if (parts[0] === context.groupId) return true;
+  // Premium Solo is always personal: <user_id>/<audit_id>/<control_id>/<file>.
+  if (context.subscriptionPlan === "premium_solo") {
+    return parts[0] === context.userId && (!item?.ownerUserId || item.ownerUserId === context.userId);
+  }
 
-  // Backward compatibility for files uploaded before group sharing.
-  if (parts[0] === context.userId) return true;
-  if (item?.ownerUserId && parts[0] === item.ownerUserId) return true;
-  if (item?.groupId && parts[0] === item.groupId && item.groupId === context.groupId) return true;
+  // Premium Team uses the shared group path.
+  if (context.subscriptionPlan === "premium_team" && parts[0] === context.groupId) return true;
+
+  // Backward compatibility for Team files uploaded before group sharing.
+  if (context.subscriptionPlan === "premium_team" && parts[0] === context.userId) return true;
+  if (context.subscriptionPlan === "premium_team" && item?.ownerUserId && parts[0] === item.ownerUserId) return true;
+  if (context.subscriptionPlan === "premium_team" && item?.groupId && parts[0] === item.groupId && item.groupId === context.groupId) return true;
 
   return false;
 }
@@ -3759,6 +3777,7 @@ type SupabaseUserContext = {
   userId: string;
   groupId: string;
   groupName?: string;
+  subscriptionPlan: SubscriptionPlan;
 };
 
 function fallbackGroupIdForUserId(userId: string): string {
@@ -3775,17 +3794,19 @@ async function getSupabaseUserContext(): Promise<SupabaseUserContext> {
   const userId = await getSupabaseUserId();
   let groupId: string | undefined;
   let groupName: string | undefined;
+  let subscriptionPlan: SubscriptionPlan = "free";
 
   try {
     const { data, error } = await supabase
       .from("gaptrack_profiles")
-      .select("group_id, group_name")
+      .select("group_id, group_name, subscription_plan")
       .eq("id", userId)
       .maybeSingle();
 
     if (!error && data) {
       groupId = typeof data.group_id === "string" && data.group_id.trim() ? data.group_id.trim() : undefined;
       groupName = typeof data.group_name === "string" && data.group_name.trim() ? data.group_name.trim() : undefined;
+      subscriptionPlan = normalizeSubscriptionPlan(data.subscription_plan);
     }
   } catch (error) {
     console.warn("Unable to read GapTrack group context; using a personal fallback group.", error);
@@ -3813,7 +3834,12 @@ async function getSupabaseUserContext(): Promise<SupabaseUserContext> {
     userId,
     groupId: safeGroupId,
     groupName,
+    subscriptionPlan,
   };
+}
+
+function evidenceStorageScopeId(context: SupabaseUserContext): string {
+  return context.subscriptionPlan === "premium_solo" ? context.userId : context.groupId;
 }
 
 async function loadSessionsFromBackend(): Promise<Session[]> {
@@ -6560,13 +6586,14 @@ function FreeTrialExpiredScreen({
                 </div>
                 <p className="mt-3 text-sm leading-6 text-muted-foreground">
                   {lang === "fr"
-                    ? "Retrouvez l’usage individuel de Free, mais sans limite de durée."
-                    : "Keep the individual Free experience, with no time limit."}
+                    ? "Passez à un espace professionnel individuel avec audits illimités, exports et preuves cloud privées."
+                    : "Move to a professional individual workspace with unlimited audits, exports, and private cloud evidence."}
                 </p>
                 <div className="mt-5 space-y-2 text-sm">
                   <div className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-600" />{lang === "fr" ? "1 utilisateur" : "1 user"}</div>
-                  <div className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-600" />{lang === "fr" ? "Usage individuel" : "Individual use"}</div>
-                  <div className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-600" />{lang === "fr" ? "Durée illimitée" : "Unlimited duration"}</div>
+                  <div className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-600" />{lang === "fr" ? "Audits illimités" : "Unlimited audits"}</div>
+                  <div className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-600" />{lang === "fr" ? "Exports PDF / CSV" : "PDF / CSV exports"}</div>
+                  <div className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-600" />{lang === "fr" ? "Preuves cloud privées" : "Private cloud evidence"}</div>
                 </div>
                 <Button type="button" variant="outline" className="mt-6 w-full" onClick={onRequestSolo}>
                   <Mail className="mr-2 h-4 w-4" />
@@ -6586,13 +6613,13 @@ function FreeTrialExpiredScreen({
                 </div>
                 <p className="mt-3 text-sm leading-6 text-muted-foreground">
                   {lang === "fr"
-                    ? "Débloquez les fonctions avancées, les audits illimités et la collaboration."
-                    : "Unlock advanced features, unlimited audits, and collaboration."}
+                    ? "Ajoutez la collaboration, les rôles, les affectations et la validation des preuves à tout Premium Solo."
+                    : "Add collaboration, roles, assignments, and evidence review on top of everything in Premium Solo."}
                 </p>
                 <div className="mt-5 space-y-2 text-sm">
-                  <div className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-600" />{lang === "fr" ? "Audits illimités" : "Unlimited audits"}</div>
-                  <div className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-600" />{lang === "fr" ? "Utilisateurs et rôles" : "Users and roles"}</div>
-                  <div className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-600" />{lang === "fr" ? "Exports, preuves cloud et validation" : "Exports, cloud evidence, and validation"}</div>
+                  <div className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-600" />{lang === "fr" ? "Tout Premium Solo" : "Everything in Premium Solo"}</div>
+                  <div className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-600" />{lang === "fr" ? "Utilisateurs, rôles et affectations" : "Users, roles, and assignments"}</div>
+                  <div className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-600" />{lang === "fr" ? "Validation des preuves et journal avancé" : "Evidence review and advanced audit log"}</div>
                 </div>
                 <Button type="button" className="mt-6 w-full" onClick={onRequestTeam}>
                   <Mail className="mr-2 h-4 w-4" />
@@ -7228,29 +7255,42 @@ function SettingsProfileView({
   const hasPremiumSoloSubscription = currentSubscriptionPlan === "premium_solo";
   const subscriptionIncludedFeatures = hasPremiumTeamSubscription
     ? [
-        lang === "fr" ? "Audits illimités" : "Unlimited audits",
-        lang === "fr" ? "Exports PDF / CSV et journal exportable" : "PDF / CSV exports and exportable audit log",
+        lang === "fr" ? "Tout Premium Solo" : "Everything in Premium Solo",
         lang === "fr" ? "Utilisateurs, rôles et collaboration équipe" : "Users, roles, and team collaboration",
-        lang === "fr" ? "Stockage cloud sécurisé des preuves" : "Secure cloud evidence storage",
+        lang === "fr" ? "Stockage cloud partagé des preuves" : "Shared cloud evidence storage",
+        lang === "fr" ? "Affectation des actions" : "Action assignment",
         lang === "fr" ? "Validation / refus des preuves" : "Evidence validation / rejection workflow",
+        lang === "fr" ? "Journal d’audit avancé" : "Advanced audit log",
         lang === "fr" ? "Import de modèles personnalisés" : "Custom template imports",
-        lang === "fr" ? "Durée illimitée" : "Unlimited duration",
       ]
-    : [
-        lang === "fr" ? "1 audit actif" : "1 active audit",
-        lang === "fr" ? "1 utilisateur, usage individuel" : "1 user, individual use",
-        lang === "fr" ? "Saisie des contrôles et suivi des écarts" : "Control assessment and gap tracking",
-        lang === "fr" ? "Preuves et notes stockées localement" : "Locally stored evidence and notes",
-        ...(hasPremiumSoloSubscription ? [lang === "fr" ? "Accès sans limite de durée" : "No time limit"] : [lang === "fr" ? "Essai limité à 7 jours" : "7-day trial"]),
-      ];
-  const subscriptionLockedFeatures = hasPremiumTeamSubscription ? [] : [
-    lang === "fr" ? "Audits illimités" : "Unlimited audits",
-    lang === "fr" ? "Exports PDF / CSV" : "PDF / CSV exports",
+    : hasPremiumSoloSubscription
+      ? [
+          lang === "fr" ? "Audits illimités" : "Unlimited audits",
+          lang === "fr" ? "1 utilisateur, usage individuel" : "1 user, individual use",
+          lang === "fr" ? "Exports PDF / CSV" : "PDF / CSV exports",
+          lang === "fr" ? "Stockage cloud privé des fichiers de preuve" : "Private cloud evidence file storage",
+          lang === "fr" ? "Tableau de bord et plans d’action complets" : "Full dashboard and action plans",
+          lang === "fr" ? "Accès sans limite de durée" : "No time limit",
+        ]
+      : [
+          lang === "fr" ? "1 audit actif" : "1 active audit",
+          lang === "fr" ? "1 utilisateur, usage individuel" : "1 user, individual use",
+          lang === "fr" ? "Audit synchronisé avec votre compte" : "Audit synced with your account",
+          lang === "fr" ? "Fichiers de preuve stockés localement" : "Evidence files stored locally",
+          lang === "fr" ? "Essai limité à 7 jours" : "7-day trial",
+        ];
+  const subscriptionLockedFeatures = hasPremiumTeamSubscription ? [] : hasPremiumSoloSubscription ? [
     lang === "fr" ? "Utilisateurs, rôles et collaboration" : "Users, roles, and collaboration",
-    lang === "fr" ? "Stockage cloud sécurisé des preuves" : "Secure cloud evidence storage",
+    lang === "fr" ? "Stockage cloud partagé" : "Shared cloud storage",
+    lang === "fr" ? "Affectation des actions" : "Action assignment",
     lang === "fr" ? "Validation / refus des preuves" : "Evidence validation / rejection",
     lang === "fr" ? "Modèles personnalisés" : "Custom templates",
     lang === "fr" ? "Journal d’audit avancé" : "Advanced audit log",
+  ] : [
+    lang === "fr" ? "Audits illimités" : "Unlimited audits",
+    lang === "fr" ? "Exports PDF / CSV" : "PDF / CSV exports",
+    lang === "fr" ? "Stockage cloud privé des preuves" : "Private cloud evidence storage",
+    lang === "fr" ? "Fonctions d’équipe Premium Team" : "Premium Team collaboration features",
   ];
 
   function requestPremiumFromSettings(plan: PremiumPlan = "premium_team") {
@@ -7865,8 +7905,8 @@ function SettingsProfileView({
                     ? "Votre compte dispose des fonctionnalités avancées de GapTrack."
                     : "Your account has access to GapTrack advanced features.")
                   : (lang === "fr"
-                    ? (hasPremiumSoloSubscription ? "Votre compte Premium Solo reprend les fonctionnalités individuelles de Free, sans limite de durée." : "Votre compte Free est un essai de 7 jours. Vous pourrez ensuite passer à Premium Solo ou Premium Team sur ce même compte.")
-                    : (hasPremiumSoloSubscription ? "Your Premium Solo account keeps the individual Free features with no time limit." : "Your Free account is a 7-day trial. You can then upgrade to Premium Solo or Premium Team on the same account."))}
+                    ? (hasPremiumSoloSubscription ? "Votre compte Premium Solo est votre espace professionnel individuel : audits illimités, exports et preuves cloud privées." : "Votre compte Free est un essai de 7 jours. Vous pourrez ensuite passer à Premium Solo ou Premium Team sur ce même compte.")
+                    : (hasPremiumSoloSubscription ? "Your Premium Solo account is your professional individual workspace: unlimited audits, exports, and private cloud evidence." : "Your Free account is a 7-day trial. You can then upgrade to Premium Solo or Premium Team on the same account."))}
               </p>
               <div className="mt-4 rounded-xl border bg-background/60 p-3 text-xs text-muted-foreground">
                 {lang === "fr" ? "Adresse associée" : "Linked address"}
@@ -7921,8 +7961,8 @@ function SettingsProfileView({
                 {hasPremiumTeamSubscription
                   ? (lang === "fr" ? "Vous pouvez contacter le support pour toute question liée à votre offre Premium Team." : "You can contact support for any question about your Premium Team plan.")
                   : hasPremiumSoloSubscription
-                    ? (lang === "fr" ? "Premium Solo est illimité dans le temps. Passez à Premium Team si vous avez besoin des fonctions d’équipe et avancées." : "Premium Solo has no time limit. Upgrade to Premium Team if you need team and advanced features.")
-                    : (lang === "fr" ? "Votre Free dure 7 jours. Premium Solo conserve l’usage individuel sans limite ; Premium Team ajoute les fonctions avancées." : "Your Free plan lasts 7 days. Premium Solo keeps individual use unlimited; Premium Team adds advanced features.")}
+                    ? (lang === "fr" ? "Premium Solo couvre l’usage professionnel individuel. Passez à Premium Team si vous avez besoin de collaboration, rôles, affectations et validation des preuves." : "Premium Solo covers professional individual use. Upgrade to Premium Team if you need collaboration, roles, assignments, and evidence review.")
+                    : (lang === "fr" ? "Votre Free dure 7 jours. Premium Solo débloque l’usage professionnel individuel ; Premium Team ajoute la collaboration et les fonctions d’équipe." : "Your Free plan lasts 7 days. Premium Solo unlocks professional individual use; Premium Team adds collaboration and team features.")}
               </p>
               <div className="mt-4 flex flex-wrap gap-2">
                 {!hasPremiumSoloSubscription && !hasPremiumTeamSubscription ? <Button type="button" variant="outline" onClick={() => requestPremiumFromSettings("premium_solo")}><Mail className="mr-2 h-4 w-4" />{lang === "fr" ? "Demander Premium Solo" : "Request Premium Solo"}</Button> : null}
@@ -7950,7 +7990,7 @@ function SettingsProfileView({
                 </div>
                 <div className="flex items-start gap-2">
                   <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-300" />
-                  <span>{lang === "fr" ? "Les exports, la collaboration, les preuves cloud, la validation et les modèles personnalisés restent réservés à Premium Team." : "Exports, collaboration, cloud evidence, validation, and custom templates remain reserved for Premium Team."}</span>
+                  <span>{lang === "fr" ? "Les audits illimités, exports et preuves cloud privées sont inclus avec Premium Solo. La collaboration, les rôles avancés, l’affectation, la validation et les modèles personnalisés restent réservés à Premium Team." : "Unlimited audits, exports, and private cloud evidence are included with Premium Solo. Collaboration, advanced roles, assignments, review, and custom templates remain reserved for Premium Team."}</span>
                 </div>
               </div>
             </div>
@@ -8795,9 +8835,9 @@ function ListingView({ rows, setRows, lang, onOpenEvidence, evidenceCountFor, ev
                 variant="outline"
                 size="sm"
                 onClick={() => exportCSV(sorted, lang)}
-                title={!canExport ? (lang === "fr" ? "Premium Team requis" : "Premium Team required") : undefined}
+                title={!canExport ? (lang === "fr" ? "Premium Solo requis" : "Premium Solo required") : undefined}
               >
-                {lang === "fr" ? "Exporter CSV" : "Export CSV"}{!canExport ? " · Premium Team" : ""}
+                {lang === "fr" ? "Exporter CSV" : "Export CSV"}{!canExport ? " · Premium Solo" : ""}
               </Button>
               <Button
                 onClick={() => bulkSet(1)}
@@ -10123,17 +10163,17 @@ function PlanView({
                 variant="outline"
                 size="sm"
                 onClick={exportPlanCSV}
-                title={!canExport ? (lang === "fr" ? "Premium Team requis" : "Premium Team required") : undefined}
+                title={!canExport ? (lang === "fr" ? "Premium Solo requis" : "Premium Solo required") : undefined}
               >
-                {lang === "fr" ? "Exporter CSV (Plan)" : "Export CSV (Plan)"}{!canExport ? " · Premium Team" : ""}
+                {lang === "fr" ? "Exporter CSV (Plan)" : "Export CSV (Plan)"}{!canExport ? " · Premium Solo" : ""}
               </Button>
               <Button
                 variant="outline"
                 size="sm"
                 onClick={exportPlanPDF}
-                title={!canExport ? (lang === "fr" ? "Premium Team requis" : "Premium Team required") : undefined}
+                title={!canExport ? (lang === "fr" ? "Premium Solo requis" : "Premium Solo required") : undefined}
               >
-                {lang === "fr" ? "Exporter PDF (Plan)" : "Export PDF (Plan)"}{!canExport ? " · Premium Team" : ""}
+                {lang === "fr" ? "Exporter PDF (Plan)" : "Export PDF (Plan)"}{!canExport ? " · Premium Solo" : ""}
               </Button>
             </div>
           </div>
@@ -10722,10 +10762,10 @@ return (
               variant="outline"
               size="sm"
               onClick={onExport}
-              title={!canExport ? (lang === "fr" ? "Premium Team requis" : "Premium Team required") : undefined}
+              title={!canExport ? (lang === "fr" ? "Premium Solo requis" : "Premium Solo required") : undefined}
             >
               <Download className="h-4 w-4 mr-1" />
-              {t.export}{!canExport ? " · Premium Team" : ""}
+              {t.export}{!canExport ? " · Premium Solo" : ""}
             </Button>
           </div>
         </div>
@@ -11677,10 +11717,10 @@ function AuditLogView({ entries, lang, onExport, onClear, canClear, canExport = 
                 size="sm"
                 onClick={onExport}
                 disabled={entries.length === 0}
-                title={!canExport ? (lang === "fr" ? "Premium Team requis" : "Premium Team required") : undefined}
+                title={!canExport ? (lang === "fr" ? "Premium Solo requis" : "Premium Solo required") : undefined}
               >
                 <Download className="h-4 w-4 mr-1" />
-                {lang === "fr" ? "Exporter CSV" : "Export CSV"}{!canExport ? " · Premium Team" : ""}
+                {lang === "fr" ? "Exporter CSV" : "Export CSV"}{!canExport ? " · Premium Solo" : ""}
               </Button>
               {canClear && <Button variant="ghost" size="sm" onClick={onClear} disabled={entries.length === 0}><Trash2 className="h-4 w-4 mr-1" />{lang === "fr" ? "Vider" : "Clear"}</Button>}
             </div>
@@ -12012,11 +12052,11 @@ function EvidenceDrawer({ open, onClose, control, auditSessionId, evidenceMap, p
             <div>
               {canUseCloudStorage
                 ? (lang === "fr"
-                  ? "Premium Team actif : les fichiers ajoutés ici sont envoyés dans un bucket privé Supabase Storage avec URL signée temporaire et policies RLS."
-                  : "Premium Team active: files added here are uploaded to a private Supabase Storage bucket with temporary signed URLs and RLS policies.")
+                  ? "Stockage cloud actif : les fichiers ajoutés ici sont envoyés dans un bucket privé GapTrack. Premium Solo utilise un espace personnel ; Premium Team partage les fichiers selon les droits du groupe."
+                  : "Cloud storage active: files added here are uploaded to a private GapTrack bucket. Premium Solo uses a personal space; Premium Team shares files according to group permissions.")
                 : (lang === "fr"
-                  ? "Offres Free et Premium Solo : les fichiers sont conservés localement dans ce navigateur. Passez à Premium Team pour le stockage cloud sécurisé et partagé."
-                  : "Free and Premium Solo: files are stored locally in this browser. Upgrade to Premium Team for secure shared cloud storage.")}
+                  ? "Offre Free : les fichiers restent stockés localement dans ce navigateur. Premium Solo ajoute un cloud privé personnel ; Premium Team ajoute le partage sécurisé en équipe."
+                  : "Free plan: files remain stored locally in this browser. Premium Solo adds private personal cloud storage; Premium Team adds secure team sharing.")}
             </div>
           </div>
 
@@ -13033,6 +13073,7 @@ function GapTrackApp({
   const canManageAuditsFlag = userCanManageAudits(activeUser);
   const canDeleteAuditsFlag = userCanDeleteAudits(activeUser);
   const isPremiumTeamUser = isPremiumTeamPlan(activeUser?.subscriptionPlan);
+  const isPremiumProfessionalUser = isPremiumProfessionalPlan(activeUser?.subscriptionPlan);
 
   useEffect(() => {
     if (!activeUser || !userCanManageUsers(activeUser)) return;
@@ -13147,12 +13188,28 @@ function GapTrackApp({
       {
         action: {
           label: lang === "fr" ? "Demander Premium Team" : "Request Premium Team",
-          onClick: () => requestPremiumViaForm(featureLabel),
+          onClick: () => requestPremiumViaForm(featureLabel, "premium_team"),
         },
       }
     );
     return false;
   }, [isPremiumTeamUser, lang, requestPremiumViaForm]);
+
+  const requireProfessionalFeature = React.useCallback((featureLabel?: string) => {
+    if (isPremiumProfessionalUser) return true;
+    toast.error(
+      lang === "fr"
+        ? `${featureLabel || "Cette fonctionnalité"} est disponible avec Premium Solo ou Premium Team.`
+        : `${featureLabel || "This feature"} is available with Premium Solo or Premium Team.`,
+      {
+        action: {
+          label: lang === "fr" ? "Demander Premium Solo" : "Request Premium Solo",
+          onClick: () => requestPremiumViaForm(featureLabel, "premium_solo"),
+        },
+      }
+    );
+    return false;
+  }, [isPremiumProfessionalUser, lang, requestPremiumViaForm]);
 
 
   const updateOwnProfile = React.useCallback(async (patch: { name: string; organization?: string }) => {
@@ -14596,18 +14653,18 @@ function GapTrackApp({
 
   const allowCreateAuditForPlan = React.useCallback(() => {
     const hasOnlyBootstrap = sessions.length === 1 && isBootstrapAuditSession(sessions[0]);
-    if (normalizeSubscriptionPlan(activeUser?.subscriptionPlan) === "premium_team" || sessions.length === 0 || hasOnlyBootstrap) {
+    if (isPremiumProfessionalPlan(activeUser?.subscriptionPlan) || sessions.length === 0 || hasOnlyBootstrap) {
       return true;
     }
 
     toast.error(
       lang === "fr"
-        ? "Offres Free et Premium Solo : 1 audit actif. Premium Team débloque les audits illimités et la collaboration."
-        : "Free and Premium Solo plans: 1 active audit. Premium Team unlocks unlimited audits and collaboration.",
+        ? "L’offre Free est limitée à 1 audit actif. Premium Solo et Premium Team débloquent les audits illimités."
+        : "The Free plan is limited to 1 active audit. Premium Solo and Premium Team unlock unlimited audits.",
       {
         action: {
-          label: lang === "fr" ? "Demander Premium Team" : "Request Premium Team",
-          onClick: () => requestPremiumViaForm("Création de plusieurs audits"),
+          label: lang === "fr" ? "Demander Premium Solo" : "Request Premium Solo",
+          onClick: () => requestPremiumViaForm("Création de plusieurs audits", "premium_solo"),
         },
       }
     );
@@ -14878,7 +14935,7 @@ function GapTrackApp({
   }, [activeSessionId, fetchPersistedSnapshot, sessions]);
 
   const handleExport = React.useCallback(async () => {
-    if (!requirePremiumFeature(lang === "fr" ? "L’export PDF du rapport" : "PDF report export")) return;
+    if (!requireProfessionalFeature(lang === "fr" ? "L’export PDF du rapport" : "PDF report export")) return;
 
     try {
       const current = sessions.find((s) => s.id === activeSessionId) || currentSession;
@@ -14909,7 +14966,7 @@ function GapTrackApp({
     lang,
     plans,
     proofStatusMap,
-    requirePremiumFeature,
+    requireProfessionalFeature,
     rows,
     sessions,
   ]);
@@ -15090,8 +15147,8 @@ function GapTrackApp({
 				plans={plans}
 				openRequest={listingOpenRequest}
 				onOpenRequestConsumed={() => setListingOpenRequest(null)}
-					canExport={isPremiumTeamUser}
-					onPremiumRequired={requirePremiumFeature}
+					canExport={isPremiumProfessionalUser}
+					onPremiumRequired={requireProfessionalFeature}
               />
                 </motion.div>
               )}
@@ -15160,7 +15217,7 @@ function GapTrackApp({
 				lang={lang}
 				compareWith={compareRows || undefined}
 				onExport={handleExport}
-					canExport={isPremiumTeamUser}
+					canExport={isPremiumProfessionalUser}
 				onOpenDomain={(domain) => {
 					openListingFromDashboard(domain);
 				}}
@@ -15245,9 +15302,9 @@ function GapTrackApp({
 				proofStatusFor={proofStatusForRow}
 				setProofStatusForRow={setProofStatusForRow}
 				onOpenEvidence={openEvidence}
-					canExport={isPremiumTeamUser}
+					canExport={isPremiumProfessionalUser}
                         canAssignOwners={isPremiumTeamUser}
-					onPremiumRequired={requirePremiumFeature}
+					onPremiumRequired={requireProfessionalFeature}
 			  />
                 </motion.div>
               )}
@@ -15273,7 +15330,7 @@ function GapTrackApp({
         lang={lang}
         canAddEvidence={canEditAuditFlag}
         canReviewEvidence={canReviewEvidenceFlag && isPremiumTeamUser}
-        canUseCloudStorage={isPremiumTeamUser}
+        canUseCloudStorage={isPremiumProfessionalUser}
         onAuditEvent={appendAuditLog}
         onBusyChange={setIsEvidenceBusy}
       />

@@ -260,7 +260,7 @@ async function verifyFirstTotpFactor(code: string) {
 
 function planDescription(plan: SubscriptionPlan): string {
   if (plan === "premium_team") return "Durée illimitée, audits illimités, exports PDF/CSV, preuves cloud, validation, rôles avancés et modèles personnalisés.";
-  if (plan === "premium_solo") return "Même usage individuel que Free — 1 audit actif, 1 utilisateur et preuves locales — sans limite de durée.";
+  if (plan === "premium_solo") return "Usage professionnel individuel : audits illimités, exports PDF/CSV, preuves cloud privées et accès sans limite de durée.";
   return "Essai de 7 jours : 1 audit actif, 1 utilisateur et preuves locales. Vous pourrez ensuite passer à Premium Solo ou Premium Team sans recréer de compte.";
 }
 
@@ -764,10 +764,10 @@ export function LoginAccessPage({
                   <span>Free</span><strong>0€</strong><small>7 jours · 1 audit actif</small>
                 </button>
                 <button type="button" className="gt-plan-option gt-plan-option-solo" onClick={() => requestPremiumViaForm("premium_solo")} aria-pressed={false}>
-                  <span>Premium Solo</span><strong>Illimité</strong><small>Même usage individuel, sans expiration</small>
+                  <span>Premium Solo</span><strong>Illimité</strong><small>Audits, exports et cloud privé</small>
                 </button>
                 <button type="button" className="gt-plan-option gt-plan-option-premium" onClick={() => requestPremiumViaForm("premium_team")} aria-pressed={false}>
-                  <span>Premium Team</span><strong>Sur devis</strong><small>Équipe, exports, preuves cloud</small>
+                  <span>Premium Team</span><strong>Sur devis</strong><small>Équipe, rôles, validation et cloud partagé</small>
                 </button>
               </div>
             ) : null}
@@ -777,7 +777,7 @@ export function LoginAccessPage({
                 <Mail aria-hidden="true" />
                 <div>
                   <strong>Commencez avec Free pendant 7 jours</strong>
-                  <span>Premium Solo conserve ensuite le même usage individuel sans limite de durée ; Premium Team débloque les fonctions avancées et la collaboration.</span>
+                  <span>Premium Solo débloque l’usage professionnel individuel avec audits illimités, exports et cloud privé ; Premium Team ajoute la collaboration et les workflows d’équipe.</span>
                 </div>
               </div>
             ) : null}
@@ -861,7 +861,7 @@ export function LoginAccessPage({
             <div className="gt-protection-icon"><ShieldCheck aria-hidden="true" /></div>
             <div>
               <h3>{pendingMfaSession ? "Connexion renforcée" : "Vos données sont protégées"}</h3>
-              <p>{pendingMfaSession ? "Le code 2FA vérifie que vous possédez bien l’application d’authentification liée à ce compte." : "Compte Free utilisable pendant 7 jours : 1 utilisateur, 1 audit actif et preuves locales. Premium Solo ou Premium Team peut ensuite être activé côté serveur."}</p>
+              <p>{pendingMfaSession ? "Le code 2FA vérifie que vous possédez bien l’application d’authentification liée à ce compte." : "Compte Free utilisable pendant 7 jours : 1 utilisateur, 1 audit actif et fichiers de preuve locaux. Premium Solo ou Premium Team peut ensuite être activé côté serveur."}</p>
             </div>
           </div>
         </section>
