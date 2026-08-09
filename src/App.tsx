@@ -7347,7 +7347,7 @@ function SettingsProfileView({
 
       toast.success(
         lang === "fr"
-          ? "E-mail GapTrack de validation envoyé. Cliquez sur le bouton reçu pour confirmer la suppression."
+          ? "E-mail de validation envoyé. Cliquez sur le bouton reçu pour confirmer la suppression."
           : "GapTrack validation email sent. Click the button in the email to confirm deletion."
       );
     } catch (error) {
@@ -8048,7 +8048,7 @@ function SettingsProfileView({
               </h3>
               <p className="mt-1 text-sm text-muted-foreground">
                 {lang === "fr"
-                  ? "Envoie un e-mail GapTrack personnalisé contenant un lien de validation Supabase Auth sécurisé. Après clic sur le bouton, l’utilisateur devra confirmer une dernière fois avant la suppression serveur."
+                  ? "Envoie un e-mail personnalisé contenant un lien de validation Supabase Auth sécurisé. Après clic sur le bouton, l’utilisateur devra confirmer une dernière fois avant la suppression serveur."
                   : "Sends a custom GapTrack email containing a secure Supabase Auth validation link. After clicking the button, the user must confirm once more before server-side deletion."}
               </p>
               <Button type="button" variant="outline" className="mt-4" onClick={requestAccountDeletionByEmail} disabled={privacyAction !== null}>
@@ -8067,7 +8067,7 @@ function SettingsProfileView({
                 </h3>
                 <p className="text-sm text-sky-900/80 dark:text-sky-100/80">
                   {lang === "fr"
-                    ? "La suppression définitive reste sécurisée par Supabase Auth : une Edge Function génère un lien de validation à usage unique, l’envoie dans un e-mail GapTrack personnalisé, puis une confirmation finale dans l’application précède la suppression serveur."
+                    ? "La suppression définitive reste sécurisée par Supabase Auth : une Edge Function génère un lien de validation à usage unique, l’envoie dans un e-mail personnalisé, puis une confirmation finale dans l’application précède la suppression serveur."
                     : "Permanent deletion remains secured by Supabase Auth: an Edge Function generates a one-time validation link, sends it in a custom GapTrack email, and a final in-app confirmation takes place before server-side deletion."}
                 </p>
               </div>
