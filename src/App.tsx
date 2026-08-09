@@ -470,6 +470,79 @@ function subscriptionDurationLabel(user: Pick<AppUser, "subscriptionPlan" | "fre
     : (lang === "fr" ? `Essai jusqu’au ${formatted}` : `Trial until ${formatted}`);
 }
 
+const FREE_TRIAL_DURATION_DAYS = 7;
+const FREE_TRIAL_DAY_MS = 24 * 60 * 60 * 1000;
+const FREE_TRIAL_HOUR_MS = 60 * 60 * 1000;
+const FREE_TRIAL_MINUTE_MS = 60 * 1000;
+
+type FreeTrialState = {
+  isFree: boolean;
+  hasExpiration: boolean;
+  expired: boolean;
+  remainingMs: number;
+  expiration: Date | null;
+};
+
+function getFreeTrialState(
+  user: Pick<AppUser, "subscriptionPlan" | "freeExpiresAt"> | null | undefined,
+  now = Date.now()
+): FreeTrialState {
+  const isFree = normalizeSubscriptionPlan(user?.subscriptionPlan) === "free";
+  const expiration = isFree && user?.freeExpiresAt ? new Date(user.freeExpiresAt) : null;
+  const hasExpiration = Boolean(expiration && !Number.isNaN(expiration.getTime()));
+  const remainingMs = hasExpiration ? Math.max(0, (expiration as Date).getTime() - now) : 0;
+
+  return {
+    isFree,
+    hasExpiration,
+    expired: Boolean(isFree && hasExpiration && remainingMs <= 0),
+    remainingMs,
+    expiration: hasExpiration ? expiration : null,
+  };
+}
+
+function freeTrialCountdownLabel(
+  user: Pick<AppUser, "subscriptionPlan" | "freeExpiresAt"> | null | undefined,
+  lang: LangKey,
+  now = Date.now(),
+  compact = false
+): string | null {
+  const trial = getFreeTrialState(user, now);
+  if (!trial.isFree) return null;
+
+  if (!trial.hasExpiration) {
+    return compact
+      ? (lang === "fr" ? `Free · ${FREE_TRIAL_DURATION_DAYS} j` : `Free · ${FREE_TRIAL_DURATION_DAYS}d`)
+      : (lang === "fr" ? `Essai Free · ${FREE_TRIAL_DURATION_DAYS} jours` : `Free trial · ${FREE_TRIAL_DURATION_DAYS} days`);
+  }
+
+  if (trial.expired) {
+    return compact
+      ? (lang === "fr" ? "Free · expiré" : "Free · expired")
+      : (lang === "fr" ? "Essai Free expiré" : "Free trial expired");
+  }
+
+  const remaining = trial.remainingMs;
+  if (remaining > FREE_TRIAL_DAY_MS) {
+    const days = Math.ceil(remaining / FREE_TRIAL_DAY_MS);
+    return compact
+      ? (lang === "fr" ? `Free · ${days} j` : `Free · ${days}d`)
+      : (lang === "fr" ? `${days} jour${days > 1 ? "s" : ""} restant${days > 1 ? "s" : ""}` : `${days} day${days > 1 ? "s" : ""} left`);
+  }
+
+  if (remaining > FREE_TRIAL_HOUR_MS) {
+    const hours = Math.ceil(remaining / FREE_TRIAL_HOUR_MS);
+    return compact
+      ? (lang === "fr" ? `Free · ${hours} h` : `Free · ${hours}h`)
+      : (lang === "fr" ? `${hours} heure${hours > 1 ? "s" : ""} restante${hours > 1 ? "s" : ""}` : `${hours} hour${hours > 1 ? "s" : ""} left`);
+  }
+
+  const minutes = Math.max(1, Math.ceil(remaining / FREE_TRIAL_MINUTE_MS));
+  return compact
+    ? (lang === "fr" ? `Free · ${minutes} min` : `Free · ${minutes}m`)
+    : (lang === "fr" ? `${minutes} minute${minutes > 1 ? "s" : ""} restante${minutes > 1 ? "s" : ""}` : `${minutes} minute${minutes > 1 ? "s" : ""} left`);
+}
+
 interface Session {
   id: string;
   name: string;
@@ -6330,68 +6403,213 @@ function FreeTrialNotice({
   user,
   lang,
   onOpenSettings,
-  onRequestSolo,
-  onRequestTeam,
 }: {
   user: AppUser;
   lang: LangKey;
   onOpenSettings: () => void;
-  onRequestSolo: () => void;
-  onRequestTeam: () => void;
 }) {
-  if (normalizeSubscriptionPlan(user.subscriptionPlan) !== "free") return null;
+  const [now, setNow] = useState(() => Date.now());
 
-  const expiration = user.freeExpiresAt ? new Date(user.freeExpiresAt) : null;
-  const hasExpiration = Boolean(expiration && !Number.isNaN(expiration.getTime()));
-  const expired = Boolean(hasExpiration && (expiration as Date).getTime() <= Date.now());
-  const duration = subscriptionDurationLabel(user, lang);
+  useEffect(() => {
+    if (normalizeSubscriptionPlan(user.subscriptionPlan) !== "free") return;
+    const timer = window.setInterval(() => setNow(Date.now()), 60 * 1000);
+    return () => window.clearInterval(timer);
+  }, [user.subscriptionPlan, user.freeExpiresAt]);
+
+  const trial = getFreeTrialState(user, now);
+  if (!trial.isFree || trial.expired) return null;
+
+  const countdown = freeTrialCountdownLabel(user, lang, now) || subscriptionDurationLabel(user, lang);
+  const urgent = trial.hasExpiration && trial.remainingMs <= 2 * FREE_TRIAL_DAY_MS;
+  const expirationText = trial.expiration
+    ? trial.expiration.toLocaleString(lang === "fr" ? "fr-FR" : "en-US", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : null;
 
   return (
     <div className="px-4 pt-4 no-print">
-      <div className={expired
-        ? "rounded-2xl border border-rose-500/30 bg-rose-500/10 p-4"
+      <div className={urgent
+        ? "rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4"
         : "rounded-2xl border border-sky-500/30 bg-sky-500/10 p-4"}
       >
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex min-w-0 items-start gap-3">
-            {expired
-              ? <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-rose-700 dark:text-rose-300" />
-              : <Clock3 className="mt-0.5 h-5 w-5 shrink-0 text-sky-700 dark:text-sky-300" />}
+            <Clock3 className={urgent
+              ? "mt-0.5 h-5 w-5 shrink-0 text-amber-700 dark:text-amber-300"
+              : "mt-0.5 h-5 w-5 shrink-0 text-sky-700 dark:text-sky-300"}
+            />
             <div className="min-w-0">
-              <div className="font-semibold">
-                {expired
-                  ? (lang === "fr" ? "Votre essai Free de 7 jours est terminé" : "Your 7-day Free trial has ended")
-                  : (lang === "fr" ? "Offre Free · essai de 7 jours" : "Free plan · 7-day trial")}
+              <div className="flex flex-wrap items-center gap-2 font-semibold">
+                <span>{lang === "fr" ? "Offre Free · essai de 7 jours" : "Free plan · 7-day trial"}</span>
+                <Badge variant="outline" className={urgent
+                  ? "border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-200"
+                  : "border-sky-500/40 bg-sky-500/10 text-sky-800 dark:text-sky-200"}
+                >
+                  {countdown}
+                </Badge>
               </div>
               <p className="mt-1 text-sm text-muted-foreground">
-                {expired
+                {expirationText
                   ? (lang === "fr"
-                    ? "Votre compte reste accessible pour gérer votre profil et choisir une offre. Premium Solo conserve l’usage individuel sans limite ; Premium Team ajoute les fonctions avancées et la collaboration."
-                    : "Your account remains accessible to manage your profile and choose a plan. Premium Solo keeps individual use without a time limit; Premium Team adds advanced features and collaboration.")
-                  : `${duration}. ${lang === "fr" ? "Vous pourrez ensuite continuer avec Premium Solo ou Premium Team sans recréer de compte." : "You can then continue with Premium Solo or Premium Team without creating a new account."}`}
+                    ? `Votre essai se termine le ${expirationText}. Vos données resteront liées à ce compte si vous passez ensuite à Premium Solo ou Premium Team.`
+                    : `Your trial ends on ${expirationText}. Your data will remain linked to this account if you then upgrade to Premium Solo or Premium Team.`)
+                  : (lang === "fr"
+                    ? "Votre essai Free dure 7 jours. Vous pourrez ensuite continuer avec Premium Solo ou Premium Team sans recréer de compte."
+                    : "Your Free trial lasts 7 days. You can then continue with Premium Solo or Premium Team without creating a new account.")}
               </p>
             </div>
           </div>
-          <div className="flex shrink-0 flex-wrap gap-2">
-            <Button type="button" variant="outline" onClick={onOpenSettings}>
-              <Settings className="mr-2 h-4 w-4" />
-              {lang === "fr" ? "Voir mon offre" : "View my plan"}
-            </Button>
-            {expired ? (
-              <>
-                <Button type="button" variant="outline" onClick={onRequestSolo}>
-                  <Mail className="mr-2 h-4 w-4" />
-                  Premium Solo
-                </Button>
-                <Button type="button" onClick={onRequestTeam}>
-                  <Mail className="mr-2 h-4 w-4" />
-                  Premium Team
-                </Button>
-              </>
-            ) : null}
-          </div>
+          <Button type="button" variant="outline" className="shrink-0" onClick={onOpenSettings}>
+            <Settings className="mr-2 h-4 w-4" />
+            {lang === "fr" ? "Voir mon offre" : "View my plan"}
+          </Button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function FreeTrialExpiredScreen({
+  user,
+  lang,
+  onRequestSolo,
+  onRequestTeam,
+  onLogout,
+}: {
+  user: AppUser;
+  lang: LangKey;
+  onRequestSolo: () => void;
+  onRequestTeam: () => void;
+  onLogout: () => void;
+}) {
+  const trial = getFreeTrialState(user);
+  const expirationText = trial.expiration
+    ? trial.expiration.toLocaleString(lang === "fr" ? "fr-FR" : "en-US", {
+        day: "2-digit",
+        month: "long",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : null;
+
+  return (
+    <div className="relative min-h-screen overflow-hidden bg-background text-foreground">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(59,130,246,0.14),transparent_42%)]" />
+
+      <header className="relative z-10 border-b border-border/70 bg-background/80 backdrop-blur">
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-5 sm:px-6">
+          <div className="flex items-center gap-3">
+            <img src="/icon-192.png" alt="" aria-hidden="true" className="h-9 w-9 rounded-lg object-contain" />
+            <div>
+              <div className="font-semibold leading-tight">GapTrack</div>
+              <div className="text-xs text-muted-foreground">Audit SSI</div>
+            </div>
+          </div>
+          <div className="flex min-w-0 items-center gap-2">
+            <div className="hidden min-w-0 text-right sm:block">
+              <div className="truncate text-sm font-medium">{user.name || user.email}</div>
+              <div className="truncate text-xs text-muted-foreground">{user.email}</div>
+            </div>
+            <Button type="button" variant="ghost" size="sm" onClick={onLogout}>
+              <LogOut className="mr-2 h-4 w-4" />
+              {lang === "fr" ? "Déconnexion" : "Sign out"}
+            </Button>
+          </div>
+        </div>
+      </header>
+
+      <main className="relative z-10 mx-auto flex min-h-[calc(100vh-4rem)] max-w-6xl items-center px-5 py-10 sm:px-6 lg:py-16">
+        <div className="w-full">
+          <section className="mx-auto max-w-3xl text-center">
+            <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl border border-rose-500/30 bg-rose-500/10">
+              <Clock3 className="h-8 w-8 text-rose-600 dark:text-rose-300" />
+            </div>
+            <Badge variant="outline" className="mb-4 border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-200">
+              {lang === "fr" ? "Essai Free terminé" : "Free trial ended"}
+            </Badge>
+            <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl lg:text-5xl">
+              {lang === "fr" ? "Votre essai GapTrack de 7 jours est terminé" : "Your 7-day GapTrack trial has ended"}
+            </h1>
+            <p className="mx-auto mt-4 max-w-2xl text-base leading-7 text-muted-foreground sm:text-lg">
+              {lang === "fr"
+                ? "Votre compte reste actif, mais l’espace d’audit est maintenant verrouillé. Choisissez une offre pour reprendre votre travail sur ce même compte."
+                : "Your account remains active, but the audit workspace is now locked. Choose a plan to resume your work on the same account."}
+            </p>
+            {expirationText ? (
+              <p className="mt-3 text-sm text-muted-foreground">
+                {lang === "fr" ? `Fin de l’essai : ${expirationText}` : `Trial ended: ${expirationText}`}
+              </p>
+            ) : null}
+          </section>
+
+          <div className="mx-auto mt-10 grid max-w-4xl gap-4 md:grid-cols-2">
+            <Card className="border-violet-500/25 bg-violet-500/5">
+              <CardContent className="flex h-full flex-col p-6">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-medium text-violet-700 dark:text-violet-300">Premium Solo</div>
+                    <h2 className="mt-1 text-2xl font-semibold">{lang === "fr" ? "Continuez en individuel" : "Continue individually"}</h2>
+                  </div>
+                  <ShieldCheck className="h-7 w-7 shrink-0 text-violet-600 dark:text-violet-300" />
+                </div>
+                <p className="mt-3 text-sm leading-6 text-muted-foreground">
+                  {lang === "fr"
+                    ? "Retrouvez l’usage individuel de Free, mais sans limite de durée."
+                    : "Keep the individual Free experience, with no time limit."}
+                </p>
+                <div className="mt-5 space-y-2 text-sm">
+                  <div className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-600" />{lang === "fr" ? "1 utilisateur" : "1 user"}</div>
+                  <div className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-600" />{lang === "fr" ? "Usage individuel" : "Individual use"}</div>
+                  <div className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-600" />{lang === "fr" ? "Durée illimitée" : "Unlimited duration"}</div>
+                </div>
+                <Button type="button" variant="outline" className="mt-6 w-full" onClick={onRequestSolo}>
+                  <Mail className="mr-2 h-4 w-4" />
+                  {lang === "fr" ? "Choisir Premium Solo" : "Choose Premium Solo"}
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card className="border-cyan-500/30 bg-cyan-500/5 shadow-lg shadow-cyan-950/5">
+              <CardContent className="flex h-full flex-col p-6">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-medium text-cyan-700 dark:text-cyan-300">Premium Team</div>
+                    <h2 className="mt-1 text-2xl font-semibold">{lang === "fr" ? "Passez au travail en équipe" : "Move to team collaboration"}</h2>
+                  </div>
+                  <Users className="h-7 w-7 shrink-0 text-cyan-600 dark:text-cyan-300" />
+                </div>
+                <p className="mt-3 text-sm leading-6 text-muted-foreground">
+                  {lang === "fr"
+                    ? "Débloquez les fonctions avancées, les audits illimités et la collaboration."
+                    : "Unlock advanced features, unlimited audits, and collaboration."}
+                </p>
+                <div className="mt-5 space-y-2 text-sm">
+                  <div className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-600" />{lang === "fr" ? "Audits illimités" : "Unlimited audits"}</div>
+                  <div className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-600" />{lang === "fr" ? "Utilisateurs et rôles" : "Users and roles"}</div>
+                  <div className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-600" />{lang === "fr" ? "Exports, preuves cloud et validation" : "Exports, cloud evidence, and validation"}</div>
+                </div>
+                <Button type="button" className="mt-6 w-full" onClick={onRequestTeam}>
+                  <Mail className="mr-2 h-4 w-4" />
+                  {lang === "fr" ? "Choisir Premium Team" : "Choose Premium Team"}
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="mx-auto mt-6 max-w-4xl rounded-2xl border bg-muted/20 p-4 text-center text-sm text-muted-foreground">
+            <strong className="text-foreground">{lang === "fr" ? "Aucun nouveau compte à créer." : "No new account required."}</strong>{" "}
+            {lang === "fr"
+              ? "Une fois l’offre activée côté serveur, vous pourrez reprendre GapTrack avec la même adresse e-mail."
+              : "Once the plan is enabled server-side, you can resume GapTrack with the same email address."}
+          </div>
+        </div>
+      </main>
     </div>
   );
 }
@@ -6524,6 +6742,20 @@ function Toolbar({
 }) {
   const t = I18N[lang];
   const [showSessionActions, setShowSessionActions] = useState(false);
+  const [trialNow, setTrialNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!activeUser || normalizeSubscriptionPlan(activeUser.subscriptionPlan) !== "free" || !activeUser.freeExpiresAt) return;
+    const timer = window.setInterval(() => setTrialNow(Date.now()), 60 * 1000);
+    return () => window.clearInterval(timer);
+  }, [activeUser?.id, activeUser?.subscriptionPlan, activeUser?.freeExpiresAt]);
+
+  const toolbarPlanLabel = activeUser && normalizeSubscriptionPlan(activeUser.subscriptionPlan) === "free"
+    ? (freeTrialCountdownLabel(activeUser, lang, trialNow, true) || subscriptionPlanLabel(activeUser.subscriptionPlan))
+    : activeUser
+      ? subscriptionPlanLabel(activeUser.subscriptionPlan)
+      : "";
+
   const saveIndicatorClass =
     saveState === "error"
       ? "border-destructive/40 text-destructive"
@@ -6575,7 +6807,7 @@ function Toolbar({
                   {userRoleLabel(activeUser.role, lang)}
                 </Badge>
                 <Badge variant="outline" className={"shrink-0 whitespace-nowrap px-2.5 " + subscriptionPlanBadgeClass(activeUser.subscriptionPlan)}>
-                  {subscriptionPlanLabel(activeUser.subscriptionPlan)}
+                  {toolbarPlanLabel}
                 </Badge>
               </div>
             )}
@@ -12691,6 +12923,17 @@ function GapTrackApp({
     () => users.find((u) => u.id === activeUserId && u.active !== false) || null,
     [users, activeUserId]
   );
+  const [trialGateNow, setTrialGateNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!activeUser || normalizeSubscriptionPlan(activeUser.subscriptionPlan) !== "free" || !activeUser.freeExpiresAt) return;
+    setTrialGateNow(Date.now());
+    const timer = window.setInterval(() => setTrialGateNow(Date.now()), 30 * 1000);
+    return () => window.clearInterval(timer);
+  }, [activeUser?.id, activeUser?.subscriptionPlan, activeUser?.freeExpiresAt]);
+
+  const activeFreeTrial = getFreeTrialState(activeUser, trialGateNow);
+  const isFreeTrialExpired = activeFreeTrial.isFree && activeFreeTrial.hasExpiration && activeFreeTrial.expired;
   const accountDeletionConfirmationHandledRef = useRef(false);
 
   useEffect(() => {
@@ -14734,6 +14977,23 @@ function GapTrackApp({
     );
   }
 
+  if (activeUser && isFreeTrialExpired) {
+    return (
+      <MotionConfig transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }} reducedMotion="user">
+        <>
+          <ThemeStyles />
+          <FreeTrialExpiredScreen
+            user={activeUser}
+            lang={lang}
+            onRequestSolo={() => requestPremiumViaForm(lang === "fr" ? "Écran essai Free expiré - Premium Solo" : "Expired Free trial screen - Premium Solo", "premium_solo")}
+            onRequestTeam={() => requestPremiumViaForm(lang === "fr" ? "Écran essai Free expiré - Premium Team" : "Expired Free trial screen - Premium Team", "premium_team")}
+            onLogout={() => { void logoutAfterSaving(); }}
+          />
+        </>
+      </MotionConfig>
+    );
+  }
+
   return (
     <MotionConfig transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }} reducedMotion="user">
       <div className="min-h-screen bg-background text-foreground app-shell">
@@ -14773,8 +15033,6 @@ function GapTrackApp({
         user={activeUser}
         lang={lang}
         onOpenSettings={() => setTab("settings")}
-        onRequestSolo={() => requestPremiumViaForm(lang === "fr" ? "Bannière essai Free - Premium Solo" : "Free trial banner - Premium Solo", "premium_solo")}
-        onRequestTeam={() => requestPremiumViaForm(lang === "fr" ? "Bannière essai Free - Premium Team" : "Free trial banner - Premium Team", "premium_team")}
       />
       <div className="flex">
         <Sidebar current={tab} onNavigate={setTab} lang={lang} />
