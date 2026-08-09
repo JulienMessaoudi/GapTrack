@@ -7315,7 +7315,7 @@ function SettingsProfileView({
     }
   }
 
-  async function requestAccountDeletionByMagicLink() {
+  async function requestAccountDeletionByEmail() {
     if (privacyAction) return;
 
     const typedEmail = normalizeEmail(
@@ -7336,24 +7336,29 @@ function SettingsProfileView({
     setPrivacyAction("deletion");
     try {
       const redirectTo = `${window.location.origin}/app?gaptrack_delete_confirm=1`;
-      const { error } = await supabase.auth.signInWithOtp({
-        email: accountEmail,
-        options: {
-          emailRedirectTo: redirectTo,
-          shouldCreateUser: false,
-        },
+      const { data, error } = await supabase.functions.invoke("gaptrack-send-account-deletion-email", {
+        body: { redirectTo },
       });
 
       if (error) throw error;
+      if (data && data.ok === false) {
+        throw new Error(typeof data.error === "string" ? data.error : "Unable to send account deletion email.");
+      }
 
       toast.success(
         lang === "fr"
-          ? "E-mail de validation envoyé. Cliquez sur le lien reçu pour confirmer la suppression."
-          : "Validation email sent. Click the link you received to confirm deletion."
+          ? "E-mail GapTrack de validation envoyé. Cliquez sur le bouton reçu pour confirmer la suppression."
+          : "GapTrack validation email sent. Click the button in the email to confirm deletion."
       );
     } catch (error) {
-      console.error("Unable to send account deletion magic link.", error);
-      toast.error(authErrorMessage(error));
+      console.error("Unable to send custom account deletion email.", error);
+      const message = error instanceof Error ? error.message : "";
+      toast.error(
+        message ||
+          (lang === "fr"
+            ? "Impossible d’envoyer l’e-mail de validation de suppression."
+            : "Unable to send the account deletion validation email.")
+      );
     } finally {
       setPrivacyAction(null);
     }
@@ -8043,10 +8048,10 @@ function SettingsProfileView({
               </h3>
               <p className="mt-1 text-sm text-muted-foreground">
                 {lang === "fr"
-                  ? "Envoie un lien Supabase Auth au compte connecté. Après clic sur le lien, l’utilisateur devra confirmer une dernière fois avant suppression serveur."
-                  : "Sends a Supabase Auth link to the signed-in account. After clicking the link, the user must confirm once more before server-side deletion."}
+                  ? "Envoie un e-mail GapTrack personnalisé contenant un lien de validation Supabase Auth sécurisé. Après clic sur le bouton, l’utilisateur devra confirmer une dernière fois avant la suppression serveur."
+                  : "Sends a custom GapTrack email containing a secure Supabase Auth validation link. After clicking the button, the user must confirm once more before server-side deletion."}
               </p>
-              <Button type="button" variant="outline" className="mt-4" onClick={requestAccountDeletionByMagicLink} disabled={privacyAction !== null}>
+              <Button type="button" variant="outline" className="mt-4" onClick={requestAccountDeletionByEmail} disabled={privacyAction !== null}>
                 {privacyAction === "deletion" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Mail className="mr-2 h-4 w-4" />}
                 {lang === "fr" ? "Demander la suppression" : "Request deletion"}
               </Button>
@@ -8062,8 +8067,8 @@ function SettingsProfileView({
                 </h3>
                 <p className="text-sm text-sky-900/80 dark:text-sky-100/80">
                   {lang === "fr"
-                    ? "La suppression définitive passe par Supabase Auth : lien de validation envoyé par e-mail, confirmation finale dans l’application, puis Edge Function sécurisée côté serveur. Aucun service e-mail externe n’est nécessaire."
-                    : "Permanent deletion goes through Supabase Auth: validation link by email, final confirmation in the app, then a secured server-side Edge Function. No external email provider is required."}
+                    ? "La suppression définitive reste sécurisée par Supabase Auth : une Edge Function génère un lien de validation à usage unique, l’envoie dans un e-mail GapTrack personnalisé, puis une confirmation finale dans l’application précède la suppression serveur."
+                    : "Permanent deletion remains secured by Supabase Auth: an Edge Function generates a one-time validation link, sends it in a custom GapTrack email, and a final in-app confirmation takes place before server-side deletion."}
                 </p>
               </div>
             </div>
