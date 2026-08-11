@@ -6240,7 +6240,7 @@ function AuditProfileDialog({
   );
 }
 
-function AuditIdentityBanner({ session, lang, onEdit }: { session: Session | null | undefined; lang: LangKey; onEdit: () => void }) {
+function AuditIdentityBanner({ session, lang, onEdit, readOnly = false }: { session: Session | null | undefined; lang: LangKey; onEdit: () => void; readOnly?: boolean }) {
   if (!session) return null;
 
   const completion = auditProfileCompletion(session);
@@ -6278,7 +6278,7 @@ function AuditIdentityBanner({ session, lang, onEdit }: { session: Session | nul
             <h2 className="text-lg font-semibold truncate">{org}</h2>
             <p className="text-sm text-muted-foreground truncate">{session.name} • {formatAuditDate(session.auditDate, lang)} • {auditor}</p>
           </div>
-          <Button size="sm" variant={complete ? "outline" : "default"} onClick={onEdit}>
+          <Button size="sm" variant={complete ? "outline" : "default"} onClick={onEdit} disabled={readOnly} title={readOnly ? (lang === "fr" ? "Essai terminé : fiche en lecture seule" : "Trial ended: profile is read only") : undefined}>
             <Pencil className="h-4 w-4 mr-2" />
             {complete ? (lang === "fr" ? "Modifier la fiche" : "Edit profile") : (lang === "fr" ? "Compléter la fiche" : "Complete profile")}
           </Button>
@@ -6500,20 +6500,20 @@ function FreeTrialNotice({
   );
 }
 
-function FreeTrialExpiredScreen({
+function FreeTrialReadOnlyNotice({
   user,
   lang,
   onRequestSolo,
   onRequestTeam,
-  onLogout,
 }: {
   user: AppUser;
   lang: LangKey;
   onRequestSolo: () => void;
   onRequestTeam: () => void;
-  onLogout: () => void;
 }) {
   const trial = getFreeTrialState(user);
+  if (!trial.isFree || !trial.expired) return null;
+
   const expirationText = trial.expiration
     ? trial.expiration.toLocaleString(lang === "fr" ? "fr-FR" : "en-US", {
         day: "2-digit",
@@ -6525,118 +6525,47 @@ function FreeTrialExpiredScreen({
     : null;
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-background text-foreground">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(59,130,246,0.14),transparent_42%)]" />
-
-      <header className="relative z-10 border-b border-border/70 bg-background/80 backdrop-blur">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-5 sm:px-6">
-          <div className="flex items-center gap-3">
-            <img src="/icon-192.png" alt="" aria-hidden="true" className="h-9 w-9 rounded-lg object-contain" />
-            <div>
-              <div className="font-semibold leading-tight">GapTrack</div>
-              <div className="text-xs text-muted-foreground">Audit SSI</div>
+    <div className="px-4 pt-4 no-print">
+      <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 shadow-sm">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+          <div className="flex min-w-0 items-start gap-3">
+            <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-amber-500/30 bg-background/60">
+              <Clock3 className="h-5 w-5 text-amber-700 dark:text-amber-300" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <strong className="text-sm sm:text-base">
+                  {lang === "fr" ? "Votre essai est terminé · espace en lecture seule" : "Your trial has ended · read-only workspace"}
+                </strong>
+                <Badge variant="outline" className="border-amber-500/40 bg-background/50 text-amber-800 dark:text-amber-200">
+                  {lang === "fr" ? "Lecture seule" : "Read only"}
+                </Badge>
+              </div>
+              <p className="mt-1 max-w-4xl text-sm leading-6 text-muted-foreground">
+                {lang === "fr"
+                  ? "Vous gardez l’accès à vos audits, tableaux de bord, contrôles, plans et métadonnées de preuves. Les modifications, ajouts de preuves et créations ou duplications d’audits sont désactivés."
+                  : "You keep access to your audits, dashboards, controls, plans, and evidence metadata. Editing, evidence uploads, and audit creation or duplication are disabled."}
+              </p>
+              {expirationText ? (
+                <div className="mt-1 text-xs text-muted-foreground">
+                  {lang === "fr" ? `Fin de l’essai : ${expirationText}` : `Trial ended: ${expirationText}`}
+                </div>
+              ) : null}
             </div>
           </div>
-          <div className="flex min-w-0 items-center gap-2">
-            <div className="hidden min-w-0 text-right sm:block">
-              <div className="truncate text-sm font-medium">{user.name || user.email}</div>
-              <div className="truncate text-xs text-muted-foreground">{user.email}</div>
-            </div>
-            <Button type="button" variant="ghost" size="sm" onClick={onLogout}>
-              <LogOut className="mr-2 h-4 w-4" />
-              {lang === "fr" ? "Déconnexion" : "Sign out"}
+
+          <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
+            <Button type="button" variant="outline" onClick={onRequestSolo}>
+              <ShieldCheck className="mr-2 h-4 w-4" />
+              {lang === "fr" ? "Continuer avec Solo" : "Continue with Solo"}
+            </Button>
+            <Button type="button" onClick={onRequestTeam}>
+              <Users className="mr-2 h-4 w-4" />
+              {lang === "fr" ? "Découvrir Team" : "Discover Team"}
             </Button>
           </div>
         </div>
-      </header>
-
-      <main className="relative z-10 mx-auto flex min-h-[calc(100vh-4rem)] max-w-6xl items-center px-5 py-10 sm:px-6 lg:py-16">
-        <div className="w-full">
-          <section className="mx-auto max-w-3xl text-center">
-            <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl border border-rose-500/30 bg-rose-500/10">
-              <Clock3 className="h-8 w-8 text-rose-600 dark:text-rose-300" />
-            </div>
-            <Badge variant="outline" className="mb-4 border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-200">
-              {lang === "fr" ? "Essai Free terminé" : "Free trial ended"}
-            </Badge>
-            <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl lg:text-5xl">
-              {lang === "fr" ? "Votre essai GapTrack de 7 jours est terminé" : "Your 7-day GapTrack trial has ended"}
-            </h1>
-            <p className="mx-auto mt-4 max-w-2xl text-base leading-7 text-muted-foreground sm:text-lg">
-              {lang === "fr"
-                ? "Votre compte reste actif, mais l’espace d’audit est maintenant verrouillé. Choisissez une offre pour reprendre votre travail sur ce même compte."
-                : "Your account remains active, but the audit workspace is now locked. Choose a plan to resume your work on the same account."}
-            </p>
-            {expirationText ? (
-              <p className="mt-3 text-sm text-muted-foreground">
-                {lang === "fr" ? `Fin de l’essai : ${expirationText}` : `Trial ended: ${expirationText}`}
-              </p>
-            ) : null}
-          </section>
-
-          <div className="mx-auto mt-10 grid max-w-4xl gap-4 md:grid-cols-2">
-            <Card className="border-violet-500/25 bg-violet-500/5">
-              <CardContent className="flex h-full flex-col p-6">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <div className="text-sm font-medium text-violet-700 dark:text-violet-300">Premium Solo</div>
-                    <h2 className="mt-1 text-2xl font-semibold">{lang === "fr" ? "Continuez en individuel" : "Continue individually"}</h2>
-                  </div>
-                  <ShieldCheck className="h-7 w-7 shrink-0 text-violet-600 dark:text-violet-300" />
-                </div>
-                <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                  {lang === "fr"
-                    ? "Passez à un espace professionnel individuel avec audits illimités, exports et preuves cloud privées."
-                    : "Move to a professional individual workspace with unlimited audits, exports, and private cloud evidence."}
-                </p>
-                <div className="mt-5 space-y-2 text-sm">
-                  <div className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-600" />{lang === "fr" ? "1 utilisateur" : "1 user"}</div>
-                  <div className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-600" />{lang === "fr" ? "Audits illimités" : "Unlimited audits"}</div>
-                  <div className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-600" />{lang === "fr" ? "Exports PDF / CSV" : "PDF / CSV exports"}</div>
-                  <div className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-600" />{lang === "fr" ? "Preuves cloud privées" : "Private cloud evidence"}</div>
-                </div>
-                <Button type="button" variant="outline" className="mt-6 w-full" onClick={onRequestSolo}>
-                  <Mail className="mr-2 h-4 w-4" />
-                  {lang === "fr" ? "Choisir Premium Solo" : "Choose Premium Solo"}
-                </Button>
-              </CardContent>
-            </Card>
-
-            <Card className="border-cyan-500/30 bg-cyan-500/5 shadow-lg shadow-cyan-950/5">
-              <CardContent className="flex h-full flex-col p-6">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <div className="text-sm font-medium text-cyan-700 dark:text-cyan-300">Premium Team</div>
-                    <h2 className="mt-1 text-2xl font-semibold">{lang === "fr" ? "Passez au travail en équipe" : "Move to team collaboration"}</h2>
-                  </div>
-                  <Users className="h-7 w-7 shrink-0 text-cyan-600 dark:text-cyan-300" />
-                </div>
-                <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                  {lang === "fr"
-                    ? "Ajoutez la collaboration, les rôles, les affectations et la validation des preuves à tout Premium Solo."
-                    : "Add collaboration, roles, assignments, and evidence review on top of everything in Premium Solo."}
-                </p>
-                <div className="mt-5 space-y-2 text-sm">
-                  <div className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-600" />{lang === "fr" ? "Tout Premium Solo" : "Everything in Premium Solo"}</div>
-                  <div className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-600" />{lang === "fr" ? "Utilisateurs, rôles et affectations" : "Users, roles, and assignments"}</div>
-                  <div className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-600" />{lang === "fr" ? "Validation des preuves et journal avancé" : "Evidence review and advanced audit log"}</div>
-                </div>
-                <Button type="button" className="mt-6 w-full" onClick={onRequestTeam}>
-                  <Mail className="mr-2 h-4 w-4" />
-                  {lang === "fr" ? "Choisir Premium Team" : "Choose Premium Team"}
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="mx-auto mt-6 max-w-4xl rounded-2xl border bg-muted/20 p-4 text-center text-sm text-muted-foreground">
-            <strong className="text-foreground">{lang === "fr" ? "Aucun nouveau compte à créer." : "No new account required."}</strong>{" "}
-            {lang === "fr"
-              ? "Une fois l’offre activée côté serveur, vous pourrez reprendre GapTrack avec la même adresse e-mail."
-              : "Once the plan is enabled server-side, you can resume GapTrack with the same email address."}
-          </div>
-        </div>
-      </main>
+      </div>
     </div>
   );
 }
@@ -8209,7 +8138,7 @@ function useStickyShadow() {
   return { sentinelRef, isStuck };
 }
 
-function ListingView({ rows, setRows, lang, onOpenEvidence, evidenceCountFor, evidenceListFor, proofStatusFor, setProofStatusForRow, plans, openRequest, onOpenRequestConsumed, canExport = true, onPremiumRequired }: { rows: ControlItem[]; setRows: (r: ControlItem[]) => void; lang: LangKey; theme: "dark" | "light"; onOpenEvidence: (control: ControlItem) => void; evidenceCountFor: (controlId: string) => number; evidenceListFor: (controlId: string) => EvidenceItem[]; proofStatusFor: (controlId: string) => EvidenceStatus; setProofStatusForRow: (controlId: string, status: EvidenceStatus) => void; plans: Record<string, PlanAction>; openRequest?: ListingOpenRequest | null; onOpenRequestConsumed?: () => void; canExport?: boolean; onPremiumRequired?: (featureLabel?: string) => boolean}) {
+function ListingView({ rows, setRows, lang, onOpenEvidence, evidenceCountFor, evidenceListFor, proofStatusFor, setProofStatusForRow, plans, openRequest, onOpenRequestConsumed, canExport = true, readOnly = false, onPremiumRequired }: { rows: ControlItem[]; setRows: (r: ControlItem[]) => void; lang: LangKey; theme: "dark" | "light"; onOpenEvidence: (control: ControlItem) => void; evidenceCountFor: (controlId: string) => number; evidenceListFor: (controlId: string) => EvidenceItem[]; proofStatusFor: (controlId: string) => EvidenceStatus; setProofStatusForRow: (controlId: string, status: EvidenceStatus) => void; plans: Record<string, PlanAction>; openRequest?: ListingOpenRequest | null; onOpenRequestConsumed?: () => void; canExport?: boolean; readOnly?: boolean; onPremiumRequired?: (featureLabel?: string) => boolean}) {
   const t = I18N[lang];
 
   const { sentinelRef: listingSentinelRef, isStuck: listingStuck } = useStickyShadow();
@@ -8248,6 +8177,7 @@ function ListingView({ rows, setRows, lang, onOpenEvidence, evidenceCountFor, ev
 
   
   const setRealized = (id: string, v: ControlStatus) => {
+    if (readOnly) return;
 	setRows(rows.map((r) => (r.id === id ? { ...r, realized: v } : r)));
   };
 
@@ -8626,6 +8556,7 @@ function ListingView({ rows, setRows, lang, onOpenEvidence, evidenceCountFor, ev
   
   
   const bulkSet = (value: ControlStatus) => {
+    if (readOnly) return;
     const targets = sorted;
 
     if (!targets.length) {
@@ -8843,7 +8774,7 @@ function ListingView({ rows, setRows, lang, onOpenEvidence, evidenceCountFor, ev
                 onClick={() => bulkSet(1)}
                 variant="outline"
                 size="sm"
-                disabled={filtersAreDefault || sorted.length === 0}
+                disabled={readOnly || filtersAreDefault || sorted.length === 0}
                 title={
                   filtersAreDefault
                     ? (lang === "fr" ? "Activez un filtre ou une recherche avant une action de masse." : "Apply a filter or search before using a bulk action.")
@@ -8856,7 +8787,7 @@ function ListingView({ rows, setRows, lang, onOpenEvidence, evidenceCountFor, ev
                 onClick={() => bulkSet(0)}
                 variant="outline"
                 size="sm"
-                disabled={filtersAreDefault || sorted.length === 0}
+                disabled={readOnly || filtersAreDefault || sorted.length === 0}
                 title={
                   filtersAreDefault
                     ? (lang === "fr" ? "Activez un filtre ou une recherche avant une action de masse." : "Apply a filter or search before using a bulk action.")
@@ -9190,6 +9121,7 @@ function ListingView({ rows, setRows, lang, onOpenEvidence, evidenceCountFor, ev
 				    </div>
 				    <Select
 					  value={controlStatusKey(selectedRow.realized)}
+					  disabled={readOnly}
 					  onValueChange={(v) => setRealized(selectedRow.id, controlStatusFromKey(v))}
 				    >
 					  <SelectTrigger className="w-full">
@@ -9228,7 +9160,7 @@ function ListingView({ rows, setRows, lang, onOpenEvidence, evidenceCountFor, ev
 
 				    <Select
 				      value={proofStatusFor(selectedRow.id)}
-				      disabled={evidenceCountFor(selectedRow.id) === 0}
+				      disabled={readOnly || evidenceCountFor(selectedRow.id) === 0}
 				      onValueChange={(v) => setProofStatusForRow(selectedRow.id, v as EvidenceStatus)}
 				    >
 				      <SelectTrigger className="w-full">
@@ -9348,6 +9280,7 @@ function WeeklyPriorityView({
   patchPlan,
   proofStatusFor,
   onOpenPlan,
+  readOnly = false,
 }: {
   rows: ControlItem[];
   setRows: (r: ControlItem[]) => void;
@@ -9356,6 +9289,7 @@ function WeeklyPriorityView({
   patchPlan: (rowId: string, patch: Partial<PlanAction>) => void;
   proofStatusFor: (controlId: string) => EvidenceStatus;
   onOpenPlan: (rowId?: string) => void;
+  readOnly?: boolean;
 }) {
   const gaps = useMemo(() => rows.filter((r) => isGapStatus(r.realized)), [rows]);
 
@@ -9392,6 +9326,7 @@ function WeeklyPriorityView({
   const validatedProofs = priorities.filter((p) => proofStatusFor(p.row.id) === "validated").length;
 
   const generateWeeklyPlans = (overwrite = false) => {
+    if (readOnly) return;
     const targets = priorities.filter((p) => overwrite || !hasAnyPlanFields(p.existingPlan));
     if (!targets.length) {
       toast.info(lang === "fr" ? "Les actions affichées ont déjà un plan." : "Displayed actions already have a plan.");
@@ -9410,6 +9345,7 @@ function WeeklyPriorityView({
   };
 
   const markDone = (row: ControlItem) => {
+    if (readOnly) return;
     setRows(rows.map((r) => (r.id === row.id ? { ...r, realized: 1 as ControlStatus } : r)));
     toast.success(lang === "fr" ? `Contrôle ${row.ref} marqué conforme.` : `Control ${row.ref} marked compliant.`);
   };
@@ -9465,7 +9401,7 @@ function WeeklyPriorityView({
             </div>
 
             <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-              <Button size="sm" onClick={() => generateWeeklyPlans(false)} disabled={missingPlans === 0}>
+              <Button size="sm" onClick={() => generateWeeklyPlans(false)} disabled={readOnly || missingPlans === 0}>
                 <Lightbulb className="h-4 w-4 mr-1" />
                 {lang === "fr" ? `Préparer ma semaine (${missingPlans})` : `Prepare my week (${missingPlans})`}
               </Button>
@@ -9535,14 +9471,14 @@ function WeeklyPriorityView({
                     </div>
 
                     <div className="flex flex-wrap gap-2 lg:justify-end">
-                      <Button size="sm" onClick={() => patchPlan(row.id, generateWeeklyPlanForControl(row, lang))}>
+                      <Button size="sm" onClick={() => patchPlan(row.id, generateWeeklyPlanForControl(row, lang))} disabled={readOnly}>
                         <Lightbulb className="h-4 w-4 mr-1" />
                         {isPlanned ? (lang === "fr" ? "Mettre à jour" : "Update") : (lang === "fr" ? "Générer" : "Generate")}
                       </Button>
                       <Button size="sm" variant="outline" onClick={() => onOpenPlan(row.id)}>
                         {lang === "fr" ? "Ouvrir plan" : "Open plan"}
                       </Button>
-                      <Button size="sm" variant="outline" onClick={() => markDone(row)}>
+                      <Button size="sm" variant="outline" onClick={() => markDone(row)} disabled={readOnly}>
                         <CheckCircle2 className="h-4 w-4 mr-1" />
                         {lang === "fr" ? "Marquer conforme" : "Mark compliant"}
                       </Button>
@@ -9618,6 +9554,7 @@ function PlanView({
   onOpenEvidence,
   canExport = true,
   canAssignOwners = true,
+  readOnly = false,
   onPremiumRequired,
 }: {
   rows: ControlItem[];
@@ -9630,6 +9567,7 @@ function PlanView({
   onOpenEvidence: (control: ControlItem) => void;
   canExport?: boolean;
   canAssignOwners?: boolean;
+  readOnly?: boolean;
   onPremiumRequired?: (featureLabel?: string) => boolean;
 }) {
   const t = I18N[lang];
@@ -9891,6 +9829,7 @@ function PlanView({
   );
 
   const generateVisiblePlans = (overwrite = false) => {
+    if (readOnly) return;
     const targets = filtered.filter((r) => overwrite || !hasAnyPlan(plans[r.id]));
 
     if (!targets.length) {
@@ -9909,6 +9848,7 @@ function PlanView({
 
 
   const generateSelectedPlan = (row: ControlItem) => {
+    if (readOnly) return;
     patchPlan(row.id, generatePlanForControl(row, lang));
     toast.success(lang === "fr" ? "Proposition de plan générée." : "Suggested action plan generated.");
   };
@@ -10035,7 +9975,7 @@ function PlanView({
                 variant="default"
                 size="sm"
                 onClick={() => generateVisiblePlans(false)}
-                disabled={visibleWithoutPlan === 0}
+                disabled={readOnly || visibleWithoutPlan === 0}
                 title={
                   lang === "fr"
                     ? "Génère uniquement les plans manquants parmi les écarts visibles"
@@ -10330,7 +10270,7 @@ function PlanView({
 
                   <Select
                     value={proofStatusFor(selectedRow.id)}
-                    disabled={evidenceCountFor(selectedRow.id) === 0}
+                    disabled={readOnly || evidenceCountFor(selectedRow.id) === 0}
                     onValueChange={(v) => setProofStatusForRow(selectedRow.id, v as EvidenceStatus)}
                   >
                     <SelectTrigger className="w-full">
@@ -10369,7 +10309,7 @@ function PlanView({
                     <div className="space-y-2 pt-2">
                       <div className="flex items-center justify-between gap-2">
                         <div className="text-xs text-muted-foreground">{lang === "fr" ? "Plan d’action" : "Action plan"}</div>
-                        <Button variant="outline" size="sm" onClick={() => generateSelectedPlan(selectedRow)}>
+                        <Button variant="outline" size="sm" onClick={() => generateSelectedPlan(selectedRow)} disabled={readOnly}>
                           <Lightbulb className="h-4 w-4 mr-1" />
                           {lang === "fr" ? "Générer" : "Generate"}
                         </Button>
@@ -10381,9 +10321,10 @@ function PlanView({
                           <Input
                             value={plan.owner || ""}
                             placeholder={canAssignOwners ? (lang === "fr" ? "Ex: DSI / RSSI / Prestataire..." : "e.g., CIO / CISO / Vendor...") : (lang === "fr" ? "Assignation réservée à Premium Team" : "Assignment reserved for Premium Team")}
-                            readOnly={!canAssignOwners}
+                            readOnly={readOnly || !canAssignOwners}
+                            disabled={readOnly}
                             onFocus={() => {
-                              if (!canAssignOwners) onPremiumRequired?.(lang === "fr" ? "L’assignation des responsables" : "Owner assignment");
+                              if (!readOnly && !canAssignOwners) onPremiumRequired?.(lang === "fr" ? "L’assignation des responsables" : "Owner assignment");
                             }}
                             onChange={(e) => patchPlan(selectedRow.id, { owner: e.target.value })}
                           />
@@ -10399,6 +10340,7 @@ function PlanView({
                           <Input
                             type="date"
                             value={plan.due || ""}
+                            disabled={readOnly}
                             onChange={(e) => patchPlan(selectedRow.id, { due: e.target.value })}
                           />
                         </div>
@@ -10408,6 +10350,7 @@ function PlanView({
                         <div className="text-xs text-muted-foreground">{lang === "fr" ? "Priorité" : "Priority"}</div>
                         <Select
                           value={plan.priority ?? "none"}
+                          disabled={readOnly}
                           onValueChange={(v) => patchPlan(selectedRow.id, { priority: v === "none" ? undefined : (v as any) })}
                         >
                           <SelectTrigger className="w-full">
@@ -10428,6 +10371,7 @@ function PlanView({
                           className="w-full min-h-[120px] resize-y rounded-md border bg-background/40 p-2 text-sm outline-none focus:ring-2 focus:ring-primary/30"
                           placeholder={lang === "fr" ? "Détail complet visible ici uniquement : quoi faire, comment, preuve attendue, critère de clôture..." : "Full detail shown here only: what to do, how, expected evidence, closure criteria..."}
                           value={plan.comment || ""}
+                          disabled={readOnly}
                           onChange={(e) => patchPlan(selectedRow.id, { comment: e.target.value })}
                         />
                       </div>
@@ -12091,12 +12035,12 @@ function EvidenceDrawer({ open, onClose, control, auditSessionId, evidenceMap, p
           </div>
 
           <div className="flex gap-2 items-center">
-            <input ref={fileInputRef} type="file" accept={EVIDENCE_ACCEPT_ATTRIBUTE} disabled={busy} onChange={(e)=>{ const f=e.target.files?.[0]; if(f) void addFile(f); e.currentTarget.value=''; }} className="hidden"/>
+            <input ref={fileInputRef} type="file" accept={EVIDENCE_ACCEPT_ATTRIBUTE} disabled={busy || !canAddEvidence} onChange={(e)=>{ const f=e.target.files?.[0]; if(f) void addFile(f); e.currentTarget.value=''; }} className="hidden"/>
             <Button variant="outline" disabled={busy || !canAddEvidence} onClick={()=>fileInputRef.current?.click()}>{busy ? <Loader2 className="h-4 w-4 mr-1 animate-spin"/> : <Paperclip className="h-4 w-4 mr-1"/>}{busy ? (lang === "fr" ? "Traitement…" : "Processing…") : t.addFile}</Button>
           </div>
           <div className="space-y-1">
             <label className="text-sm">{t.addNote}</label>
-            <textarea className="w-full min-h-[90px] rounded-md border bg-background p-2" value={note} disabled={busy} onChange={e=>setNote(e.target.value)} placeholder="..."/>
+            <textarea className="w-full min-h-[90px] rounded-md border bg-background p-2" value={note} disabled={busy || !canAddEvidence} onChange={e=>setNote(e.target.value)} placeholder="..."/>
             <div><Button size="sm" disabled={busy || !canAddEvidence} onClick={addNote}>{lang==='fr'? 'Enregistrer' : 'Save'}</Button></div>
           </div>
 
@@ -12979,6 +12923,13 @@ function GapTrackApp({
 
   const activeFreeTrial = getFreeTrialState(activeUser, trialGateNow);
   const isFreeTrialExpired = activeFreeTrial.isFree && activeFreeTrial.hasExpiration && activeFreeTrial.expired;
+
+  useEffect(() => {
+    if (!isFreeTrialExpired) return;
+    setWizardOpen(false);
+    setProfileOpen(false);
+  }, [isFreeTrialExpired]);
+
   const accountDeletionConfirmationHandledRef = useRef(false);
 
   useEffect(() => {
@@ -13068,10 +13019,10 @@ function GapTrackApp({
   const canManageUsersFlag = userCanManageUsers(activeUser);
   const canCreateUsersFlag = userCanCreateUsers(activeUser);
   const canManageSubscriptionsFlag = userCanManageSubscriptions(activeUser);
-  const canEditAuditFlag = userCanEditAudit(activeUser);
-  const canReviewEvidenceFlag = userCanReviewEvidence(activeUser);
-  const canManageAuditsFlag = userCanManageAudits(activeUser);
-  const canDeleteAuditsFlag = userCanDeleteAudits(activeUser);
+  const canEditAuditFlag = !isFreeTrialExpired && userCanEditAudit(activeUser);
+  const canReviewEvidenceFlag = !isFreeTrialExpired && userCanReviewEvidence(activeUser);
+  const canManageAuditsFlag = !isFreeTrialExpired && userCanManageAudits(activeUser);
+  const canDeleteAuditsFlag = !isFreeTrialExpired && userCanDeleteAudits(activeUser);
   const isPremiumTeamUser = isPremiumTeamPlan(activeUser?.subscriptionPlan);
   const isPremiumProfessionalUser = isPremiumProfessionalPlan(activeUser?.subscriptionPlan);
 
@@ -13146,27 +13097,43 @@ function GapTrackApp({
 
   const requireAuditEditor = React.useCallback(() => {
     if (canEditAuditFlag) return true;
+    if (isFreeTrialExpired) {
+      toast.error(lang === "fr" ? "Essai terminé : l’espace d’audit est en lecture seule." : "Trial ended: the audit workspace is read only.");
+      return false;
+    }
     toast.error(lang === "fr" ? "Votre rôle ne permet pas de modifier cet audit." : "Your role cannot edit this audit.");
     return false;
-  }, [canEditAuditFlag, lang]);
+  }, [canEditAuditFlag, isFreeTrialExpired, lang]);
 
   const requireEvidenceReviewer = React.useCallback(() => {
     if (canReviewEvidenceFlag) return true;
+    if (isFreeTrialExpired) {
+      toast.error(lang === "fr" ? "Essai terminé : les preuves sont consultables mais non modifiables." : "Trial ended: evidence can be viewed but not changed.");
+      return false;
+    }
     toast.error(lang === "fr" ? "Seul un auditeur ou administrateur peut valider ou refuser une preuve." : "Only an auditor or administrator can validate or reject evidence.");
     return false;
-  }, [canReviewEvidenceFlag, lang]);
+  }, [canReviewEvidenceFlag, isFreeTrialExpired, lang]);
 
   const requireAuditManager = React.useCallback(() => {
     if (canManageAuditsFlag) return true;
+    if (isFreeTrialExpired) {
+      toast.error(lang === "fr" ? "Essai terminé : création, duplication et modification d’audits désactivées." : "Trial ended: audit creation, duplication, and editing are disabled.");
+      return false;
+    }
     toast.error(lang === "fr" ? "Votre rôle ne permet pas de créer ou gérer des audits." : "Your role cannot create or manage audits.");
     return false;
-  }, [canManageAuditsFlag, lang]);
+  }, [canManageAuditsFlag, isFreeTrialExpired, lang]);
 
   const requireAuditDeletion = React.useCallback(() => {
     if (canDeleteAuditsFlag) return true;
+    if (isFreeTrialExpired) {
+      toast.error(lang === "fr" ? "Essai terminé : la suppression d’audits est désactivée en lecture seule." : "Trial ended: audit deletion is disabled in read-only mode.");
+      return false;
+    }
     toast.error(lang === "fr" ? "Seul un administrateur peut supprimer un audit." : "Only an administrator can delete an audit.");
     return false;
-  }, [canDeleteAuditsFlag, lang]);
+  }, [canDeleteAuditsFlag, isFreeTrialExpired, lang]);
 
   const requestPremiumViaForm = React.useCallback((source?: string, plan: PremiumPlan = "premium_team") => {
     const href = buildContactFormUrl({
@@ -14106,20 +14073,20 @@ function GapTrackApp({
   }, []);
 
   const undoAuditChange = React.useCallback(() => {
-    if (isAuditLoading || isAuditMutating || auditLoadError) return;
+    if (!canEditAuditFlag || isAuditLoading || isAuditMutating || auditLoadError) return;
     const previous = undoStack.current.pop();
     if (!previous) return;
     redoStack.current.push(currentSnapshot());
     applySnapshot(previous);
-  }, [applySnapshot, auditLoadError, currentSnapshot, isAuditLoading, isAuditMutating]);
+  }, [applySnapshot, auditLoadError, canEditAuditFlag, currentSnapshot, isAuditLoading, isAuditMutating]);
 
   const redoAuditChange = React.useCallback(() => {
-    if (isAuditLoading || isAuditMutating || auditLoadError) return;
+    if (!canEditAuditFlag || isAuditLoading || isAuditMutating || auditLoadError) return;
     const next = redoStack.current.pop();
     if (!next) return;
     undoStack.current.push(currentSnapshot());
     applySnapshot(next);
-  }, [applySnapshot, auditLoadError, currentSnapshot, isAuditLoading, isAuditMutating]);
+  }, [applySnapshot, auditLoadError, canEditAuditFlag, currentSnapshot, isAuditLoading, isAuditMutating]);
 
   useEffect(() => { rowsRef.current = rows; }, [rows]);
   useEffect(() => { evidenceMapRef.current = evidenceMap; }, [evidenceMap]);
@@ -14652,6 +14619,10 @@ function GapTrackApp({
   }, [requireAuditManager, requirePremiumFeature, lang]);
 
   const allowCreateAuditForPlan = React.useCallback(() => {
+    if (isFreeTrialExpired) {
+      toast.error(lang === "fr" ? "Essai terminé : la création d’audits est désactivée en lecture seule." : "Trial ended: audit creation is disabled in read-only mode.");
+      return false;
+    }
     const hasOnlyBootstrap = sessions.length === 1 && isBootstrapAuditSession(sessions[0]);
     if (isPremiumProfessionalPlan(activeUser?.subscriptionPlan) || sessions.length === 0 || hasOnlyBootstrap) {
       return true;
@@ -14669,7 +14640,7 @@ function GapTrackApp({
       }
     );
     return false;
-  }, [activeUser?.subscriptionPlan, lang, requestPremiumViaForm, sessions]);
+  }, [activeUser?.subscriptionPlan, isFreeTrialExpired, lang, requestPremiumViaForm, sessions]);
 
   const isPristineBootstrapAudit = React.useCallback((session: Session | null | undefined) => {
     return Boolean(
@@ -15039,22 +15010,6 @@ function GapTrackApp({
     );
   }
 
-  if (activeUser && isFreeTrialExpired) {
-    return (
-      <MotionConfig transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }} reducedMotion="user">
-        <>
-          <ThemeStyles />
-          <FreeTrialExpiredScreen
-            user={activeUser}
-            lang={lang}
-            onRequestSolo={() => requestPremiumViaForm(lang === "fr" ? "Écran essai Free expiré - Premium Solo" : "Expired Free trial screen - Premium Solo", "premium_solo")}
-            onRequestTeam={() => requestPremiumViaForm(lang === "fr" ? "Écran essai Free expiré - Premium Team" : "Expired Free trial screen - Premium Team", "premium_team")}
-            onLogout={() => { void logoutAfterSaving(); }}
-          />
-        </>
-      </MotionConfig>
-    );
-  }
 
   return (
     <MotionConfig transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }} reducedMotion="user">
@@ -15083,7 +15038,7 @@ function GapTrackApp({
 		onRetrySync={retryBackendSync}
         activeUser={activeUser}
         canChangeSession={!isAuditLoading && !isAuditMutating && !isEvidenceBusy}
-        canEditAuditSession={!isAuditLoading && !isAuditMutating && !isEvidenceBusy && !auditLoadError}
+        canEditAuditSession={canEditAuditFlag && !isAuditLoading && !isAuditMutating && !isEvidenceBusy && !auditLoadError}
         canManageUsers={canManageUsersFlag}
         canManageAudits={canManageAuditsFlag}
         canDeleteAudits={canDeleteAuditsFlag}
@@ -15091,11 +15046,20 @@ function GapTrackApp({
         onRequestPremium={() => requestPremiumViaForm("Barre d’outils GapTrack")}
         onLogout={() => { void logoutAfterSaving(); }}
       />
-      <FreeTrialNotice
-        user={activeUser}
-        lang={lang}
-        onOpenSettings={() => setTab("settings")}
-      />
+      {isFreeTrialExpired ? (
+        <FreeTrialReadOnlyNotice
+          user={activeUser}
+          lang={lang}
+          onRequestSolo={() => requestPremiumViaForm(lang === "fr" ? "Bandeau lecture seule - Premium Solo" : "Read-only banner - Premium Solo", "premium_solo")}
+          onRequestTeam={() => requestPremiumViaForm(lang === "fr" ? "Bandeau lecture seule - Premium Team" : "Read-only banner - Premium Team", "premium_team")}
+        />
+      ) : (
+        <FreeTrialNotice
+          user={activeUser}
+          lang={lang}
+          onOpenSettings={() => setTab("settings")}
+        />
+      )}
       <div className="flex">
         <Sidebar current={tab} onNavigate={setTab} lang={lang} />
         <div className="main-surface flex-1">
@@ -15125,7 +15089,7 @@ function GapTrackApp({
           ) : (
           <>
           <PageHeader tab={tab} lang={lang} rows={rows} />
-          <AuditIdentityBanner session={currentSession} lang={lang} onEdit={() => setProfileOpen(true)} />
+          <AuditIdentityBanner session={currentSession} lang={lang} onEdit={() => setProfileOpen(true)} readOnly={isFreeTrialExpired} />
             <AnimatePresence mode="wait">
               {tab === "listing" && (
                 <motion.div
@@ -15148,6 +15112,7 @@ function GapTrackApp({
 				openRequest={listingOpenRequest}
 				onOpenRequestConsumed={() => setListingOpenRequest(null)}
 					canExport={isPremiumProfessionalUser}
+                    readOnly={isFreeTrialExpired}
 					onPremiumRequired={requireProfessionalFeature}
               />
                 </motion.div>
@@ -15167,6 +15132,7 @@ function GapTrackApp({
                     plans={plans}
                     patchPlan={patchPlanForRow}
                     proofStatusFor={proofStatusForRow}
+                    readOnly={isFreeTrialExpired}
                     onOpenPlan={(controlId) => {
                       setTab("plan");
                       if (controlId) {
@@ -15304,6 +15270,7 @@ function GapTrackApp({
 				onOpenEvidence={openEvidence}
 					canExport={isPremiumProfessionalUser}
                         canAssignOwners={isPremiumTeamUser}
+                        readOnly={isFreeTrialExpired}
 					onPremiumRequired={requireProfessionalFeature}
 			  />
                 </motion.div>
