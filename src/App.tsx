@@ -3911,6 +3911,12 @@ async function markTeamMentionReadOnServer(mentionId: string): Promise<void> {
   if (error) throw error;
 }
 
+function isTeamDiscussionNotification(item: MyWorkItem): boolean {
+  return item.kind === "mention"
+    && item.payload?.entity_type === "control"
+    && item.payload?.entity_id === TEAM_DISCUSSION_ENTITY_ID;
+}
+
 function useTeamMyWork(enabled: boolean, userId: string | undefined) {
   const [items, setItems] = useState<MyWorkItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -7118,7 +7124,9 @@ function TeamDiscussionView({
         entityType: "control",
         entityId: TEAM_DISCUSSION_ENTITY_ID,
         body,
-        mentionedUserIds,
+        // Tous les autres membres reçoivent une notification de Discussion,
+        // même si le message ne contient aucun @mention. Le RPC exclut l'auteur.
+        mentionedUserIds: teamMembers.map((member) => member.id),
       });
       setDraft("");
       await loadMessages();
@@ -7276,8 +7284,8 @@ function TeamDiscussionView({
                 <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-muted-foreground">
                   <span>
                     {mentionedUserIds.length > 0
-                      ? (lang === "fr" ? `${mentionedUserIds.length} mention(s) détectée(s)` : `${mentionedUserIds.length} mention(s) detected`)
-                      : (lang === "fr" ? "Visible par les membres de votre groupe." : "Visible to members of your group.")}
+                      ? (lang === "fr" ? `${mentionedUserIds.length} mention(s) détectée(s) · le message notifiera aussi les autres membres dans Discussion.` : `${mentionedUserIds.length} mention(s) detected · the message will also notify the other members in Discussion.`)
+                      : (lang === "fr" ? "Chaque nouveau message est comptabilisé dans les notifications de Discussion pour les autres membres." : "Every new message counts as a Discussion notification for the other members.")}
                   </span>
                   <span>{draft.length}/4000</span>
                 </div>
@@ -7463,13 +7471,14 @@ function MyWorkView({
 }
 
 
-function Sidebar({ current, onNavigate, lang, myWorkCount = 0 }: { current: string; onNavigate: (k: string) => void; lang: LangKey; myWorkCount?: number }) {
+function Sidebar({ current, onNavigate, lang, myWorkCount = 0, discussionCount = 0 }: { current: string; onNavigate: (k: string) => void; lang: LangKey; myWorkCount?: number; discussionCount?: number }) {
   const t = I18N[lang];
 
   const items = [
     { key: "listing", label: t.listing, icon: <ListChecks className="h-5 w-5" /> },
     { key: "weekly", label: lang === "fr" ? "Cette semaine" : "This week", icon: <Lightbulb className="h-5 w-5" /> },
-    { key: "inbox", label: lang === "fr" ? "Pour moi" : "My work", icon: <Inbox className="h-5 w-5" />, count: myWorkCount },
+    { key: "mywork", label: lang === "fr" ? "Pour moi" : "My work", icon: <Inbox className="h-5 w-5" />, count: myWorkCount },
+    { key: "inbox", label: lang === "fr" ? "Discussion" : "Discussion", icon: <MessageSquare className="h-5 w-5" />, count: discussionCount },
     { key: "plan", label: t.actionPlan, icon: <ListTodo className="h-5 w-5" /> },
     { key: "risks", label: lang === "fr" ? "Risques" : "Risks", icon: <AlertTriangle className="h-5 w-5" /> },
     { key: "dashboard", label: t.dashboard, icon: <BarChart3 className="h-5 w-5" /> },
@@ -7784,12 +7793,13 @@ function PremiumFeatureNotice({ lang, title, description, bullets, onRequestPrem
   );
 }
 
-function MobileNav({ current, onNavigate, lang, myWorkCount = 0 }: { current: string; onNavigate: (k: string) => void; lang: LangKey; myWorkCount?: number }) {
+function MobileNav({ current, onNavigate, lang, myWorkCount = 0, discussionCount = 0 }: { current: string; onNavigate: (k: string) => void; lang: LangKey; myWorkCount?: number; discussionCount?: number }) {
   const t = I18N[lang];
   const items = [
     { key: "listing", label: t.listing, icon: <ListChecks className="h-5 w-5" /> },
     { key: "weekly", label: lang === "fr" ? "Semaine" : "Week", icon: <Lightbulb className="h-5 w-5" /> },
-    { key: "inbox", label: lang === "fr" ? "Pour moi" : "My work", icon: <Inbox className="h-5 w-5" />, count: myWorkCount },
+    { key: "mywork", label: lang === "fr" ? "Pour moi" : "My work", icon: <Inbox className="h-5 w-5" />, count: myWorkCount },
+    { key: "inbox", label: lang === "fr" ? "Discussion" : "Discussion", icon: <MessageSquare className="h-5 w-5" />, count: discussionCount },
     { key: "plan", label: t.actionPlan, icon: <ListTodo className="h-5 w-5" /> },
     { key: "risks", label: lang === "fr" ? "Risques" : "Risks", icon: <AlertTriangle className="h-5 w-5" /> },
     { key: "dashboard", label: t.dashboard, icon: <BarChart3 className="h-5 w-5" /> },
@@ -9267,7 +9277,8 @@ function PageHeader({ tab, lang, rows }: { tab: string; lang: LangKey; rows: Con
   const titleMap: Record<string, string> = {
     listing: t.listing,
     weekly: lang === "fr" ? "Cette semaine" : "This week",
-    inbox: lang === "fr" ? "Pour moi" : "My work",
+    mywork: lang === "fr" ? "Pour moi" : "My work",
+    inbox: lang === "fr" ? "Discussion d’équipe" : "Team discussion",
 	plan: t.actionPlan,
     risks: lang === "fr" ? "Risques" : "Risks",
     dashboard: t.dashboard,
@@ -9278,7 +9289,8 @@ function PageHeader({ tab, lang, rows }: { tab: string; lang: LangKey; rows: Con
     ? {
         listing: "Évaluer les contrôles et saisir les preuves",
         weekly: "Les actions prioritaires à lancer maintenant",
-        inbox: "Actions assignées, validations, mentions et échéances",
+        mywork: "Actions assignées, validations, mentions et échéances",
+        inbox: "Fil collaboratif permanent de l’audit, partagé en temps réel",
 		plan: "Construire et suivre le plan d’action",
         risks: "Traduire les écarts en risques métier concrets",
         dashboard: "Synthèse de maturité et priorités",
@@ -9288,7 +9300,8 @@ function PageHeader({ tab, lang, rows }: { tab: string; lang: LangKey; rows: Con
     : {
         listing: "Assessment and 0/1 entry of controls",
         weekly: "Priority actions to start now",
-        inbox: "Assigned actions, reviews, mentions and due dates",
+        mywork: "Assigned actions, reviews, mentions and due dates",
+        inbox: "Permanent audit discussion shared with the team in real time",
 		plan: "Track gaps and complete the action plan",
         risks: "Turn gaps into concrete business risks",
         dashboard: "Scores and priorities overview",
@@ -14344,6 +14357,45 @@ function GapTrackApp({
     Boolean(activeUser?.id && isPremiumTeamUser && !isFreeTrialExpired),
     activeUser?.id
   );
+  const visibleMyWorkItems = useMemo(
+    () => myWorkItems.filter((item) => !isTeamDiscussionNotification(item)),
+    [myWorkItems]
+  );
+  const unreadMyWorkCount = useMemo(
+    () => visibleMyWorkItems.filter((item) => item.kind === "mention" && item.unread).length,
+    [visibleMyWorkItems]
+  );
+  const unreadDiscussionNotifications = useMemo(
+    () => myWorkItems.filter((item) =>
+      isTeamDiscussionNotification(item)
+      && item.unread
+      && item.auditSessionId === activeSessionId
+    ),
+    [activeSessionId, myWorkItems]
+  );
+  const discussionUnreadCount = unreadDiscussionNotifications.length;
+  const markingDiscussionReadRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (tab !== "inbox" || !isPremiumTeamUser || unreadDiscussionNotifications.length === 0) return;
+
+    const pending = unreadDiscussionNotifications.filter((item) => !markingDiscussionReadRef.current.has(item.itemId));
+    if (pending.length === 0) return;
+
+    pending.forEach((item) => markingDiscussionReadRef.current.add(item.itemId));
+
+    void Promise.allSettled(pending.map((item) => markTeamMentionReadOnServer(item.itemId)))
+      .then((results) => {
+        const failed = results.some((result) => result.status === "rejected");
+        if (failed) {
+          console.warn("Unable to mark one or more Discussion notifications as read.");
+        }
+        void reloadMyWork();
+      })
+      .finally(() => {
+        pending.forEach((item) => markingDiscussionReadRef.current.delete(item.itemId));
+      });
+  }, [isPremiumTeamUser, reloadMyWork, tab, unreadDiscussionNotifications]);
 
   useEffect(() => {
     let cancelled = false;
@@ -16501,7 +16553,13 @@ This will remove the account from GapTrack administration and persist the deleti
         />
       )}
       <div className="flex">
-        <Sidebar current={tab} onNavigate={setTab} lang={lang} myWorkCount={isPremiumTeamUser ? myWorkItems.filter((item) => item.kind === "mention" && item.unread).length : 0} />
+        <Sidebar
+          current={tab}
+          onNavigate={setTab}
+          lang={lang}
+          myWorkCount={isPremiumTeamUser ? unreadMyWorkCount : 0}
+          discussionCount={isPremiumTeamUser ? discussionUnreadCount : 0}
+        />
         <div className="main-surface flex-1">
           {isAuditLoading ? (
             <main className="mx-auto max-w-3xl p-6">
@@ -16589,6 +16647,26 @@ This will remove the account from GapTrack administration and persist the deleti
                 </motion.div>
               )}
 
+              {tab === "mywork" && (
+                <motion.div
+                  key="mywork"
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                >
+                  <MyWorkView
+                    enabled={isPremiumTeamUser}
+                    items={visibleMyWorkItems}
+                    loading={myWorkLoading}
+                    sessions={sessions}
+                    lang={lang}
+                    onRefresh={reloadMyWork}
+                    onOpenItem={openMyWorkItem}
+                    onRequestPremium={() => requestPremiumViaForm(lang === "fr" ? "Pour moi" : "My work", "premium_team")}
+                  />
+                </motion.div>
+              )}
+
               {tab === "inbox" && (
                 <motion.div
                   key="inbox"
@@ -16596,15 +16674,15 @@ This will remove the account from GapTrack administration and persist the deleti
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -8 }}
                 >
-                  <MyWorkView
+                  <TeamDiscussionView
                     enabled={isPremiumTeamUser}
-                    items={myWorkItems}
-                    loading={myWorkLoading}
-                    sessions={sessions}
+                    auditSessionId={activeSessionId}
+                    session={currentSession}
+                    currentUserId={activeUser?.id}
+                    teamMembers={teamMembers}
                     lang={lang}
-                    onRefresh={reloadMyWork}
-                    onOpenItem={openMyWorkItem}
-                    onRequestPremium={() => requestPremiumViaForm(lang === "fr" ? "Pour moi" : "My work", "premium_team")}
+                    canWrite={canEditAuditFlag}
+                    onRequestPremium={() => requestPremiumViaForm(lang === "fr" ? "Discussion collaborative" : "Collaborative discussion", "premium_team")}
                   />
                 </motion.div>
               )}
@@ -16749,7 +16827,13 @@ This will remove the account from GapTrack administration and persist the deleti
 </div>
       </div>
 
-            <MobileNav current={tab} onNavigate={setTab} lang={lang} myWorkCount={isPremiumTeamUser ? myWorkItems.filter((item) => item.kind === "mention" && item.unread).length : 0} />
+            <MobileNav
+              current={tab}
+              onNavigate={setTab}
+              lang={lang}
+              myWorkCount={isPremiumTeamUser ? unreadMyWorkCount : 0}
+              discussionCount={isPremiumTeamUser ? discussionUnreadCount : 0}
+            />
 
 <CommandPalette open={paletteOpen} setOpen={setPaletteOpen} onNavigate={setTab} onToggleTheme={() => setTheme(theme==='dark'?'light':'dark')} domains={(Array.from(new Set(rows.map((r) => r.domain))) as string[]).sort()} />
       <ScrollTopButton/>
