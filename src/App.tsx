@@ -7469,8 +7469,7 @@ function Sidebar({ current, onNavigate, lang, myWorkCount = 0 }: { current: stri
   const items = [
     { key: "listing", label: t.listing, icon: <ListChecks className="h-5 w-5" /> },
     { key: "weekly", label: lang === "fr" ? "Cette semaine" : "This week", icon: <Lightbulb className="h-5 w-5" /> },
-    { key: "mywork", label: lang === "fr" ? "Pour moi" : "My work", icon: <Inbox className="h-5 w-5" />, count: myWorkCount },
-    { key: "inbox", label: lang === "fr" ? "Discussion" : "Discussion", icon: <MessageSquare className="h-5 w-5" /> },
+    { key: "inbox", label: lang === "fr" ? "Pour moi" : "My work", icon: <Inbox className="h-5 w-5" />, count: myWorkCount },
     { key: "plan", label: t.actionPlan, icon: <ListTodo className="h-5 w-5" /> },
     { key: "risks", label: lang === "fr" ? "Risques" : "Risks", icon: <AlertTriangle className="h-5 w-5" /> },
     { key: "dashboard", label: t.dashboard, icon: <BarChart3 className="h-5 w-5" /> },
@@ -7790,8 +7789,7 @@ function MobileNav({ current, onNavigate, lang, myWorkCount = 0 }: { current: st
   const items = [
     { key: "listing", label: t.listing, icon: <ListChecks className="h-5 w-5" /> },
     { key: "weekly", label: lang === "fr" ? "Semaine" : "Week", icon: <Lightbulb className="h-5 w-5" /> },
-    { key: "mywork", label: lang === "fr" ? "Pour moi" : "My work", icon: <Inbox className="h-5 w-5" />, count: myWorkCount },
-    { key: "inbox", label: lang === "fr" ? "Discussion" : "Discussion", icon: <MessageSquare className="h-5 w-5" /> },
+    { key: "inbox", label: lang === "fr" ? "Pour moi" : "My work", icon: <Inbox className="h-5 w-5" />, count: myWorkCount },
     { key: "plan", label: t.actionPlan, icon: <ListTodo className="h-5 w-5" /> },
     { key: "risks", label: lang === "fr" ? "Risques" : "Risks", icon: <AlertTriangle className="h-5 w-5" /> },
     { key: "dashboard", label: t.dashboard, icon: <BarChart3 className="h-5 w-5" /> },
@@ -9269,8 +9267,7 @@ function PageHeader({ tab, lang, rows }: { tab: string; lang: LangKey; rows: Con
   const titleMap: Record<string, string> = {
     listing: t.listing,
     weekly: lang === "fr" ? "Cette semaine" : "This week",
-    mywork: lang === "fr" ? "Pour moi" : "My work",
-    inbox: lang === "fr" ? "Discussion d’équipe" : "Team discussion",
+    inbox: lang === "fr" ? "Pour moi" : "My work",
 	plan: t.actionPlan,
     risks: lang === "fr" ? "Risques" : "Risks",
     dashboard: t.dashboard,
@@ -9281,8 +9278,7 @@ function PageHeader({ tab, lang, rows }: { tab: string; lang: LangKey; rows: Con
     ? {
         listing: "Évaluer les contrôles et saisir les preuves",
         weekly: "Les actions prioritaires à lancer maintenant",
-        mywork: "Actions assignées, validations, mentions et échéances",
-        inbox: "Fil collaboratif permanent de l’audit, partagé en temps réel",
+        inbox: "Actions assignées, validations, mentions et échéances",
 		plan: "Construire et suivre le plan d’action",
         risks: "Traduire les écarts en risques métier concrets",
         dashboard: "Synthèse de maturité et priorités",
@@ -9292,8 +9288,7 @@ function PageHeader({ tab, lang, rows }: { tab: string; lang: LangKey; rows: Con
     : {
         listing: "Assessment and 0/1 entry of controls",
         weekly: "Priority actions to start now",
-        mywork: "Assigned actions, reviews, mentions and due dates",
-        inbox: "Permanent audit discussion shared with the team in real time",
+        inbox: "Assigned actions, reviews, mentions and due dates",
 		plan: "Track gaps and complete the action plan",
         risks: "Turn gaps into concrete business risks",
         dashboard: "Scores and priorities overview",
@@ -16594,9 +16589,9 @@ This will remove the account from GapTrack administration and persist the deleti
                 </motion.div>
               )}
 
-              {tab === "mywork" && (
+              {tab === "inbox" && (
                 <motion.div
-                  key="mywork"
+                  key="inbox"
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -8 }}
@@ -16610,26 +16605,6 @@ This will remove the account from GapTrack administration and persist the deleti
                     onRefresh={reloadMyWork}
                     onOpenItem={openMyWorkItem}
                     onRequestPremium={() => requestPremiumViaForm(lang === "fr" ? "Pour moi" : "My work", "premium_team")}
-                  />
-                </motion.div>
-              )}
-
-              {tab === "inbox" && (
-                <motion.div
-                  key="inbox"
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -8 }}
-                >
-                  <TeamDiscussionView
-                    enabled={isPremiumTeamUser}
-                    auditSessionId={activeSessionId}
-                    session={currentSession}
-                    currentUserId={activeUser?.id}
-                    teamMembers={teamMembers}
-                    lang={lang}
-                    canWrite={canEditAuditFlag}
-                    onRequestPremium={() => requestPremiumViaForm(lang === "fr" ? "Discussion collaborative" : "Collaborative discussion", "premium_team")}
                   />
                 </motion.div>
               )}
