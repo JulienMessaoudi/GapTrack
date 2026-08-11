@@ -6,7 +6,7 @@ import { Input } from "./components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "./components/ui/select";
 import { Badge } from "./components/ui/badge";
 import { toast } from "sonner";
-import {Filter, Redo2, Search, Undo2, ArrowUp, Paperclip, Download, Plus, Copy, X, Trash2, AlertTriangle, Shield, ShieldCheck, Lightbulb, Info, Loader2, CheckCircle2, AlertCircle, Pencil, BarChart3, ListChecks, ListTodo, Users, LogOut, UserPlus, History, FileCheck2, Clock3, Mail, Settings, MessageSquare, AtSign, Inbox} from "lucide-react";
+import {Filter, Redo2, Search, Undo2, ArrowUp, Paperclip, Download, Plus, Copy, X, Trash2, AlertTriangle, Shield, ShieldCheck, Lightbulb, Info, Loader2, CheckCircle2, AlertCircle, Pencil, BarChart3, ListChecks, ListTodo, Users, LogOut, UserPlus, History, FileCheck2, Clock3, Mail, Settings, MessageSquare, AtSign} from "lucide-react";
 import { ResponsiveContainer, Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Tooltip } from "recharts";
 import { LoginAccessPage } from "./components/LoginAccessPage";
 import { ResetPasswordPage } from "./components/ResetPasswordPage";
@@ -632,6 +632,10 @@ interface TeamComment {
   body: string;
   createdAt: string;
 }
+
+// One durable collaborative room per audit. Messages written to this target are
+// intentionally append-only in the UI: GapTrack never exposes edit/delete actions.
+const TEAM_DISCUSSION_ENTITY_ID = "__gaptrack_team_discussion__";
 
 type MyWorkKind = "action" | "evidence_review" | "mention";
 
@@ -3847,6 +3851,43 @@ async function createTeamCommentOnServer(params: {
   if (error) throw error;
 }
 
+async function fetchTeamDiscussionOnServer(auditSessionId: string): Promise<TeamComment[]> {
+  if (!auditSessionId) return [];
+
+  const pageSize = 500;
+  const rows: any[] = [];
+
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await supabase
+      .from("gaptrack_comments")
+      .select("id, audit_session_id, entity_type, entity_id, control_id, author_user_id, author_name, author_email, body, created_at")
+      .eq("audit_session_id", auditSessionId)
+      .eq("entity_type", "control")
+      .eq("entity_id", TEAM_DISCUSSION_ENTITY_ID)
+      .order("created_at", { ascending: true })
+      .range(from, from + pageSize - 1);
+
+    if (error) throw error;
+
+    const page = Array.isArray(data) ? data : [];
+    rows.push(...page);
+    if (page.length < pageSize) break;
+  }
+
+  return rows.map((row: any) => ({
+    id: String(row.id || ""),
+    auditSessionId: String(row.audit_session_id || ""),
+    entityType: row.entity_type as TeamCommentEntity,
+    entityId: String(row.entity_id || ""),
+    controlId: typeof row.control_id === "string" ? row.control_id : undefined,
+    authorUserId: typeof row.author_user_id === "string" ? row.author_user_id : undefined,
+    authorName: typeof row.author_name === "string" ? row.author_name : undefined,
+    authorEmail: typeof row.author_email === "string" ? row.author_email : undefined,
+    body: String(row.body || ""),
+    createdAt: typeof row.created_at === "string" ? row.created_at : new Date().toISOString(),
+  })).filter((comment: TeamComment) => Boolean(comment.id));
+}
+
 async function fetchMyWorkOnServer(limit = 100): Promise<MyWorkItem[]> {
   const { data, error } = await supabase.rpc("gaptrack_my_work", { p_limit: limit });
   if (error) throw error;
@@ -6937,161 +6978,307 @@ function TeamCommentsPanel({
   );
 }
 
-function MyWorkView({
+function TeamDiscussionView({
   enabled,
+  auditSessionId,
+  session,
+  currentUserId,
+  teamMembers,
   lang,
-  items,
-  loading,
-  sessions,
-  onOpenItem,
-  onReload,
+  canWrite = true,
   onRequestPremium,
 }: {
   enabled: boolean;
+  auditSessionId: string;
+  session?: Session | null;
+  currentUserId?: string;
+  teamMembers: TeamMember[];
   lang: LangKey;
-  items: MyWorkItem[];
-  loading: boolean;
-  sessions: Session[];
-  onOpenItem: (item: MyWorkItem) => void;
-  onReload: () => Promise<void>;
+  canWrite?: boolean;
   onRequestPremium: () => void;
 }) {
+  const [messages, setMessages] = useState<TeamComment[]>([]);
+  const [draft, setDraft] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [sending, setSending] = useState(false);
+  const endRef = useRef<HTMLDivElement | null>(null);
+
+  const loadMessages = React.useCallback(async () => {
+    if (!enabled || !auditSessionId) {
+      setMessages([]);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      setMessages(await fetchTeamDiscussionOnServer(auditSessionId));
+    } catch (error) {
+      console.error("Unable to load Team discussion.", error);
+      toast.error(
+        lang === "fr"
+          ? "Impossible de charger la discussion collaborative."
+          : "Unable to load the collaborative discussion."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [auditSessionId, enabled, lang]);
+
+  useEffect(() => {
+    void loadMessages();
+  }, [loadMessages]);
+
+  useEffect(() => {
+    if (!enabled || !auditSessionId) return;
+
+    const channel = supabase
+      .channel(`gaptrack-team-discussion:${auditSessionId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "gaptrack_comments",
+          filter: `audit_session_id=eq.${auditSessionId}`,
+        },
+        () => { void loadMessages(); }
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [auditSessionId, enabled, loadMessages]);
+
+  useEffect(() => {
+    if (!loading) {
+      window.setTimeout(() => endRef.current?.scrollIntoView({ block: "end" }), 0);
+    }
+  }, [loading, messages.length]);
+
   if (!enabled) {
     return (
       <PremiumFeatureNotice
         lang={lang}
-        title={lang === "fr" ? "Boîte « Pour moi »" : "“For me” inbox"}
+        title={lang === "fr" ? "Discussion collaborative" : "Collaborative discussion"}
         description={lang === "fr"
-          ? "Premium Team rassemble les actions qui vous sont assignées, les preuves à valider, vos @mentions et les échéances proches."
-          : "Premium Team brings together assigned actions, evidence awaiting review, your @mentions, and upcoming deadlines."}
+          ? "Premium Team ouvre un fil de discussion permanent pour chaque audit, partagé avec les membres du groupe."
+          : "Premium Team opens a permanent discussion thread for each audit, shared with group members."}
         bullets={lang === "fr"
-          ? ["Actions assignées", "Preuves à valider", "@mentions", "Échéances imminentes"]
-          : ["Assigned actions", "Evidence to review", "@mentions", "Upcoming deadlines"]}
+          ? ["Messages persistants", "@mentions", "Temps réel", "Historique conservé"]
+          : ["Persistent messages", "@mentions", "Real time", "Preserved history"]}
         onRequestPremium={onRequestPremium}
       />
     );
   }
 
-  const tomorrow = new Date();
-  tomorrow.setHours(12, 0, 0, 0);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const tomorrowKey = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, "0")}-${String(tomorrow.getDate()).padStart(2, "0")}`;
+  const locale = lang === "fr" ? "fr-FR" : "en-US";
+  const normalizedDraft = draft.toLocaleLowerCase(locale);
+  const mentionedUserIds = teamMembers
+    .filter((member) => {
+      const display = teamMemberDisplayName(member).toLocaleLowerCase(locale);
+      const email = member.email.toLocaleLowerCase();
+      return normalizedDraft.includes(`@${display}`) || normalizedDraft.includes(`@${email}`);
+    })
+    .map((member) => member.id);
 
-  const actionCount = items.filter((item) => item.kind === "action").length;
-  const evidenceCount = items.filter((item) => item.kind === "evidence_review").length;
-  const mentionCount = items.filter((item) => item.kind === "mention").length;
-  const dueTomorrowCount = items.filter((item) => item.kind === "action" && item.dueOn === tomorrowKey).length;
-
-  const sessionName = (id: string) => sessions.find((session) => session.id === id)?.name || (lang === "fr" ? "Audit" : "Audit");
-
-  const openItem = async (item: MyWorkItem) => {
-    if (item.kind === "mention" && item.unread) {
-      try {
-        await markTeamMentionReadOnServer(item.itemId);
-        await onReload();
-      } catch (error) {
-        console.warn("Unable to mark mention as read.", error);
-      }
-    }
-    onOpenItem(item);
+  const insertMention = (member: TeamMember) => {
+    const mention = `@${teamMemberDisplayName(member)}`;
+    setDraft((current) => {
+      const trimmed = current.trimEnd();
+      if (trimmed.toLocaleLowerCase(locale).includes(mention.toLocaleLowerCase(locale))) return current;
+      return `${trimmed}${trimmed ? " " : ""}${mention} `;
+    });
   };
 
-  const summary = [
-    { key: "actions", value: actionCount, label: lang === "fr" ? "Actions assignées" : "Assigned actions", icon: <ListTodo className="h-4 w-4" /> },
-    { key: "reviews", value: evidenceCount, label: lang === "fr" ? "Preuves à valider" : "Evidence to review", icon: <FileCheck2 className="h-4 w-4" /> },
-    { key: "mentions", value: mentionCount, label: lang === "fr" ? "Mentions" : "Mentions", icon: <AtSign className="h-4 w-4" /> },
-    { key: "due", value: dueTomorrowCount, label: lang === "fr" ? "Échéances demain" : "Due tomorrow", icon: <Clock3 className="h-4 w-4" /> },
-  ];
+  const submit = async () => {
+    const body = draft.trim();
+    if (!body || sending || !auditSessionId) return;
+
+    setSending(true);
+    try {
+      await createTeamCommentOnServer({
+        auditSessionId,
+        entityType: "control",
+        entityId: TEAM_DISCUSSION_ENTITY_ID,
+        body,
+        mentionedUserIds,
+      });
+      setDraft("");
+      await loadMessages();
+    } catch (error) {
+      console.error("Unable to send Team discussion message.", error);
+      toast.error(
+        lang === "fr"
+          ? "Impossible d’envoyer le message."
+          : "Unable to send the message."
+      );
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const onComposerKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      void submit();
+    }
+  };
 
   return (
-    <div className="p-4 space-y-4">
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {summary.map((entry) => (
-          <Card key={entry.key}>
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <div className="text-2xl font-semibold">{entry.value}</div>
-                  <div className="mt-1 text-xs text-muted-foreground">{entry.label}</div>
-                </div>
-                <div className="rounded-xl border bg-muted/20 p-2">{entry.icon}</div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      <Card>
+    <div className="p-4">
+      <Card className="overflow-hidden">
         <CardHeader className="border-b bg-muted/10">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Inbox className="h-5 w-5" />
-                {lang === "fr" ? "À traiter" : "To do"}
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <CardTitle className="flex flex-wrap items-center gap-2 text-base">
+                <MessageSquare className="h-5 w-5" />
+                {lang === "fr" ? "Discussion collaborative" : "Collaborative discussion"}
+                <Badge variant="outline" className="text-[10px]">Premium Team</Badge>
               </CardTitle>
               <p className="mt-1 text-xs text-muted-foreground">
                 {lang === "fr"
-                  ? "Votre file de travail personnelle, synchronisée avec Supabase."
-                  : "Your personal work queue, synchronized with Supabase."}
+                  ? `Fil permanent de ${session?.name || "cet audit"} · ${teamMembers.length} membre(s) du groupe.`
+                  : `Permanent thread for ${session?.name || "this audit"} · ${teamMembers.length} group member(s).`}
               </p>
             </div>
-            <Button variant="outline" size="sm" disabled={loading} onClick={() => { void onReload(); }}>
-              {loading ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
-              {lang === "fr" ? "Actualiser" : "Refresh"}
-            </Button>
+            <div className="flex items-center gap-2 rounded-xl border bg-background/50 px-3 py-2 text-xs text-muted-foreground">
+              <ShieldCheck className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-300" />
+              <span>
+                {lang === "fr"
+                  ? "Historique conservé dans Supabase"
+                  : "History preserved in Supabase"}
+              </span>
+            </div>
           </div>
         </CardHeader>
-        <CardContent className="p-4">
-          {loading && items.length === 0 ? (
-            <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              {lang === "fr" ? "Chargement de votre file…" : "Loading your queue…"}
-            </div>
-          ) : items.length === 0 ? (
-            <div className="py-8 text-center text-sm text-muted-foreground">
-              {lang === "fr" ? "Rien à traiter pour le moment." : "Nothing to do right now."}
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {items.map((item) => (
-                <button
-                  key={`${item.kind}:${item.itemId}`}
-                  type="button"
-                  onClick={() => { void openItem(item); }}
-                  className="w-full rounded-xl border p-3 text-left transition-colors hover:bg-muted/30"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge variant="outline">
-                          {item.kind === "action"
-                            ? (lang === "fr" ? "Action" : "Action")
-                            : item.kind === "evidence_review"
-                              ? (lang === "fr" ? "Validation" : "Review")
-                              : "@mention"}
-                        </Badge>
-                        {item.unread ? <Badge>{lang === "fr" ? "Nouveau" : "New"}</Badge> : null}
-                        <span className="truncate text-sm font-semibold">{item.title}</span>
-                      </div>
-                      <div className="mt-1 line-clamp-2 text-sm text-muted-foreground">{item.detail}</div>
-                      <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
-                        <span>{sessionName(item.auditSessionId)}</span>
-                        {item.dueOn ? <span>{lang === "fr" ? "Échéance" : "Due"} : {item.dueOn}</span> : null}
-                        <span>{new Date(item.createdAt).toLocaleString(lang === "fr" ? "fr-FR" : "en-US")}</span>
+
+        <CardContent className="p-0">
+          <div className="border-b bg-background/20 px-4 py-3 text-xs text-muted-foreground">
+            {lang === "fr"
+              ? "Les messages sont append-only dans GapTrack : aucun bouton de modification ou de suppression n’est proposé. Les échanges restent rattachés à cet audit."
+              : "Messages are append-only in GapTrack: no edit or delete action is exposed. The conversation remains attached to this audit."}
+          </div>
+
+          <div className="h-[48vh] min-h-[360px] overflow-y-auto px-4 py-5 sm:px-6">
+            {loading && messages.length === 0 ? (
+              <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                {lang === "fr" ? "Chargement de la discussion…" : "Loading discussion…"}
+              </div>
+            ) : messages.length === 0 ? (
+              <div className="flex h-full flex-col items-center justify-center text-center text-muted-foreground">
+                <MessageSquare className="mb-3 h-8 w-8 opacity-60" />
+                <div className="text-sm font-medium text-foreground">
+                  {lang === "fr" ? "Aucun message pour le moment" : "No messages yet"}
+                </div>
+                <div className="mt-1 max-w-md text-xs">
+                  {lang === "fr"
+                    ? "Démarrez la discussion de l’audit. Les prochains messages seront conservés dans ce fil."
+                    : "Start the audit discussion. Future messages will be preserved in this thread."}
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {messages.map((message) => {
+                  const fallbackMember = teamMembers.find((member) => member.id === message.authorUserId);
+                  const author = message.authorName?.trim()
+                    || (fallbackMember ? teamMemberDisplayName(fallbackMember) : "")
+                    || message.authorEmail
+                    || (lang === "fr" ? "Membre" : "Member");
+                  const mine = Boolean(currentUserId && message.authorUserId === currentUserId);
+
+                  return (
+                    <div key={message.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
+                      <div className={`max-w-[86%] sm:max-w-[72%] rounded-2xl border px-4 py-3 ${mine ? "bg-primary/15 border-primary/25" : "bg-muted/20"}`}>
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
+                          <span className="font-semibold text-foreground">{mine ? (lang === "fr" ? "Vous" : "You") : author}</span>
+                          {message.authorEmail && !mine ? <span className="truncate">{message.authorEmail}</span> : null}
+                          <span aria-hidden="true">•</span>
+                          <time dateTime={message.createdAt}>
+                            {new Date(message.createdAt).toLocaleString(locale, {
+                              day: "2-digit",
+                              month: "2-digit",
+                              year: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </time>
+                        </div>
+                        <div className="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed">{message.body}</div>
                       </div>
                     </div>
-                    <ArrowUp className="mt-1 h-4 w-4 shrink-0 rotate-45 text-muted-foreground" />
+                  );
+                })}
+                <div ref={endRef} />
+              </div>
+            )}
+          </div>
+
+          <div className="border-t bg-muted/5 p-4 sm:p-5">
+            {canWrite ? (
+              <div className="space-y-3">
+                {teamMembers.length > 0 ? (
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="mr-1 flex items-center gap-1 text-[11px] text-muted-foreground">
+                      <AtSign className="h-3.5 w-3.5" />
+                      {lang === "fr" ? "Mentionner" : "Mention"}
+                    </span>
+                    {teamMembers.slice(0, 12).map((member) => (
+                      <Button
+                        key={member.id}
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-7 px-2 text-[11px]"
+                        disabled={sending}
+                        onClick={() => insertMention(member)}
+                        title={member.email}
+                      >
+                        {teamMemberDisplayName(member)}
+                      </Button>
+                    ))}
                   </div>
-                </button>
-              ))}
-            </div>
-          )}
+                ) : null}
+
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                  <textarea
+                    className="min-h-[92px] flex-1 resize-y rounded-xl border bg-background p-3 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+                    value={draft}
+                    disabled={sending}
+                    maxLength={4000}
+                    onChange={(event) => setDraft(event.target.value)}
+                    onKeyDown={onComposerKeyDown}
+                    placeholder={lang === "fr" ? "Écrire un message… Entrée pour envoyer, Maj+Entrée pour une nouvelle ligne" : "Write a message… Enter to send, Shift+Enter for a new line"}
+                  />
+                  <Button className="h-11 sm:h-[44px] sm:px-5" disabled={sending || !draft.trim()} onClick={() => { void submit(); }}>
+                    {sending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ArrowUp className="mr-2 h-4 w-4" />}
+                    {lang === "fr" ? "Envoyer" : "Send"}
+                  </Button>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-muted-foreground">
+                  <span>
+                    {mentionedUserIds.length > 0
+                      ? (lang === "fr" ? `${mentionedUserIds.length} mention(s) détectée(s)` : `${mentionedUserIds.length} mention(s) detected`)
+                      : (lang === "fr" ? "Visible par les membres de votre groupe." : "Visible to members of your group.")}
+                  </span>
+                  <span>{draft.length}/4000</span>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-xl border bg-muted/20 p-3 text-sm text-muted-foreground">
+                {lang === "fr"
+                  ? "Lecture seule : votre rôle peut consulter l’intégralité de la discussion, mais pas envoyer de message."
+                  : "Read only: your role can view the full discussion but cannot send messages."}
+              </div>
+            )}
+          </div>
         </CardContent>
       </Card>
     </div>
   );
 }
-
 
 
 function Sidebar({ current, onNavigate, lang, myWorkCount = 0 }: { current: string; onNavigate: (k: string) => void; lang: LangKey; myWorkCount?: number }) {
@@ -7100,7 +7287,7 @@ function Sidebar({ current, onNavigate, lang, myWorkCount = 0 }: { current: stri
   const items = [
     { key: "listing", label: t.listing, icon: <ListChecks className="h-5 w-5" /> },
     { key: "weekly", label: lang === "fr" ? "Cette semaine" : "This week", icon: <Lightbulb className="h-5 w-5" /> },
-    { key: "inbox", label: lang === "fr" ? "Pour moi" : "For me", icon: <Inbox className="h-5 w-5" />, count: myWorkCount },
+    { key: "inbox", label: lang === "fr" ? "Discussion" : "Discussion", icon: <MessageSquare className="h-5 w-5" />, count: myWorkCount },
     { key: "plan", label: t.actionPlan, icon: <ListTodo className="h-5 w-5" /> },
     { key: "risks", label: lang === "fr" ? "Risques" : "Risks", icon: <AlertTriangle className="h-5 w-5" /> },
     { key: "dashboard", label: t.dashboard, icon: <BarChart3 className="h-5 w-5" /> },
@@ -7420,7 +7607,7 @@ function MobileNav({ current, onNavigate, lang, myWorkCount = 0 }: { current: st
   const items = [
     { key: "listing", label: t.listing, icon: <ListChecks className="h-5 w-5" /> },
     { key: "weekly", label: lang === "fr" ? "Semaine" : "Week", icon: <Lightbulb className="h-5 w-5" /> },
-    { key: "inbox", label: lang === "fr" ? "Pour moi" : "For me", icon: <Inbox className="h-5 w-5" />, count: myWorkCount },
+    { key: "inbox", label: lang === "fr" ? "Discussion" : "Discussion", icon: <MessageSquare className="h-5 w-5" />, count: myWorkCount },
     { key: "plan", label: t.actionPlan, icon: <ListTodo className="h-5 w-5" /> },
     { key: "risks", label: lang === "fr" ? "Risques" : "Risks", icon: <AlertTriangle className="h-5 w-5" /> },
     { key: "dashboard", label: t.dashboard, icon: <BarChart3 className="h-5 w-5" /> },
@@ -8898,7 +9085,7 @@ function PageHeader({ tab, lang, rows }: { tab: string; lang: LangKey; rows: Con
   const titleMap: Record<string, string> = {
     listing: t.listing,
     weekly: lang === "fr" ? "Cette semaine" : "This week",
-    inbox: lang === "fr" ? "Pour moi" : "For me",
+    inbox: lang === "fr" ? "Discussion d’équipe" : "Team discussion",
 	plan: t.actionPlan,
     risks: lang === "fr" ? "Risques" : "Risks",
     dashboard: t.dashboard,
@@ -8909,7 +9096,7 @@ function PageHeader({ tab, lang, rows }: { tab: string; lang: LangKey; rows: Con
     ? {
         listing: "Évaluer les contrôles et saisir les preuves",
         weekly: "Les actions prioritaires à lancer maintenant",
-        inbox: "Actions assignées, validations, mentions et échéances",
+        inbox: "Fil collaboratif permanent de l’audit, partagé en temps réel",
 		plan: "Construire et suivre le plan d’action",
         risks: "Traduire les écarts en risques métier concrets",
         dashboard: "Synthèse de maturité et priorités",
@@ -8919,7 +9106,7 @@ function PageHeader({ tab, lang, rows }: { tab: string; lang: LangKey; rows: Con
     : {
         listing: "Assessment and 0/1 entry of controls",
         weekly: "Priority actions to start now",
-        inbox: "Assigned actions, reviews, mentions, and deadlines",
+        inbox: "Permanent audit discussion shared with the team in real time",
 		plan: "Track gaps and complete the action plan",
         risks: "Turn gaps into concrete business risks",
         dashboard: "Scores and priorities overview",
@@ -10084,16 +10271,6 @@ function ListingView({ rows, setRows, lang, onOpenEvidence, evidenceCountFor, ev
 					
 					
 
-					<TeamCommentsPanel
-					  enabled={collaborationEnabled}
-					  auditSessionId={auditSessionId}
-					  entityType="control"
-					  entityId={selectedRow.id}
-					  controlId={selectedRow.id}
-					  teamMembers={teamMembers}
-					  lang={lang}
-					  canWrite={canCollaborateWrite}
-					/>
 
 					<div className="flex gap-2">
 					  <Button
@@ -11239,7 +11416,7 @@ function PlanView({
                           )}
                           {!canAssignOwners ? (
                             <div className="text-[11px] text-muted-foreground">
-                              {lang === "fr" ? "L’assignation nominative et la boîte « Pour moi » sont réservées à Premium Team." : "Named assignment and the “For me” inbox are reserved for Premium Team."}
+                              {lang === "fr" ? "L’assignation nominative et la collaboration d’équipe sont réservées à Premium Team." : "Named assignment and team collaboration are reserved for Premium Team."}
                             </div>
                           ) : null}
                         </div>
@@ -13981,7 +14158,7 @@ function GapTrackApp({
   const isPremiumTeamUser = isPremiumTeamPlan(activeUser?.subscriptionPlan);
   const isPremiumProfessionalUser = isPremiumProfessionalPlan(activeUser?.subscriptionPlan);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
-  const { items: myWorkItems, loading: myWorkLoading, reload: reloadMyWork } = useTeamMyWork(
+  const { items: myWorkItems } = useTeamMyWork(
     Boolean(activeUser?.id && isPremiumTeamUser && !isFreeTrialExpired),
     activeUser?.id
   );
@@ -16133,7 +16310,7 @@ This will remove the account from GapTrack administration and persist the deleti
         />
       )}
       <div className="flex">
-        <Sidebar current={tab} onNavigate={setTab} lang={lang} myWorkCount={isPremiumTeamUser ? myWorkItems.length : 0} />
+        <Sidebar current={tab} onNavigate={setTab} lang={lang} myWorkCount={isPremiumTeamUser ? myWorkItems.filter((item) => item.kind === "mention" && item.unread).length : 0} />
         <div className="main-surface flex-1">
           {isAuditLoading ? (
             <main className="mx-auto max-w-3xl p-6">
@@ -16228,15 +16405,15 @@ This will remove the account from GapTrack administration and persist the deleti
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -8 }}
                 >
-                  <MyWorkView
+                  <TeamDiscussionView
                     enabled={isPremiumTeamUser}
+                    auditSessionId={activeSessionId}
+                    session={currentSession}
+                    currentUserId={activeUser?.id}
+                    teamMembers={teamMembers}
                     lang={lang}
-                    items={myWorkItems}
-                    loading={myWorkLoading}
-                    sessions={sessions}
-                    onOpenItem={(item) => { void openMyWorkItem(item); }}
-                    onReload={reloadMyWork}
-                    onRequestPremium={() => requestPremiumViaForm(lang === "fr" ? "Boîte Pour moi" : "For me inbox", "premium_team")}
+                    canWrite={canEditAuditFlag}
+                    onRequestPremium={() => requestPremiumViaForm(lang === "fr" ? "Discussion collaborative" : "Collaborative discussion", "premium_team")}
                   />
                 </motion.div>
               )}
@@ -16381,7 +16558,7 @@ This will remove the account from GapTrack administration and persist the deleti
 </div>
       </div>
 
-            <MobileNav current={tab} onNavigate={setTab} lang={lang} myWorkCount={isPremiumTeamUser ? myWorkItems.length : 0} />
+            <MobileNav current={tab} onNavigate={setTab} lang={lang} myWorkCount={isPremiumTeamUser ? myWorkItems.filter((item) => item.kind === "mention" && item.unread).length : 0} />
 
 <CommandPalette open={paletteOpen} setOpen={setPaletteOpen} onNavigate={setTab} onToggleTheme={() => setTheme(theme==='dark'?'light':'dark')} domains={(Array.from(new Set(rows.map((r) => r.domain))) as string[]).sort()} />
       <ScrollTopButton/>
