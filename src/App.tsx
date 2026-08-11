@@ -4656,8 +4656,13 @@ function CommandPalette({ open, setOpen, onNavigate, onToggleTheme, domains }: {
   );
 }
 
-function ConfirmDialog({ open, title, description, confirmLabel, cancelLabel, onConfirm, onCancel }:{ open:boolean; title:string; description:string; confirmLabel:string; cancelLabel:string; onConfirm:()=>void; onCancel:()=>void }){
-  useEffect(()=>{ document.body.style.overflow = open ? 'hidden' : ''; return () => { document.body.style.overflow = ''; }; }, [open]);
+function ConfirmDialog({ open, title, description, confirmLabel, cancelLabel, onConfirm, onCancel, destructive = false }:{ open:boolean; title:string; description:string; confirmLabel:string; cancelLabel:string; onConfirm:()=>void; onCancel:()=>void; destructive?:boolean }){
+  useEffect(()=>{
+    if (!open) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = previousOverflow; };
+  }, [open]);
   useEffect(()=>{
     if(!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -4669,16 +4674,232 @@ function ConfirmDialog({ open, title, description, confirmLabel, cancelLabel, on
   }, [open, onConfirm, onCancel]);
   if(!open) return null;
   return (
-    <div className="modal-overlay no-print" role="dialog" aria-modal="true" onClick={onCancel}>
+    <div className="modal-overlay no-print" role="dialog" aria-modal="true" aria-label={title} onClick={onCancel}>
       <div className="modal" onClick={e=>e.stopPropagation()}>
-        <header>{title}</header>
-        <div className="body">{description}</div>
+        <header className="flex items-center gap-2">
+          {destructive && <AlertTriangle className="h-5 w-5 text-destructive" />}
+          <span>{title}</span>
+        </header>
+        <div className="body whitespace-pre-line">{description}</div>
         <footer>
           <Button variant="ghost" onClick={onCancel}>{cancelLabel}</Button>
-          <Button variant="destructive" onClick={onConfirm}>{confirmLabel}</Button>
+          <Button variant={destructive ? "destructive" : "default"} onClick={onConfirm}>{confirmLabel}</Button>
         </footer>
       </div>
     </div>
+  );
+}
+
+type DialogMatchMode = "exact" | "case_insensitive";
+
+type AppDialogBaseOptions = {
+  title: string;
+  description?: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  destructive?: boolean;
+};
+
+type AppPromptDialogOptions = AppDialogBaseOptions & {
+  defaultValue?: string;
+  placeholder?: string;
+  inputType?: React.HTMLInputTypeAttribute;
+  required?: boolean;
+  expectedValue?: string;
+  expectedInstruction?: string;
+  matchMode?: DialogMatchMode;
+};
+
+type AppDialogRequest =
+  | ({ kind: "confirm"; resolve: (value: boolean) => void } & AppDialogBaseOptions)
+  | ({ kind: "prompt"; resolve: (value: string | null) => void } & AppPromptDialogOptions);
+
+type AppDialogApi = {
+  confirm: (options: AppDialogBaseOptions) => Promise<boolean>;
+  prompt: (options: AppPromptDialogOptions) => Promise<string | null>;
+};
+
+const AppDialogContext = React.createContext<AppDialogApi | null>(null);
+
+function useAppDialog(): AppDialogApi {
+  const value = React.useContext(AppDialogContext);
+  if (!value) throw new Error("useAppDialog must be used inside AppDialogProvider");
+  return value;
+}
+
+function PromptDialog({
+  open,
+  title,
+  description,
+  value,
+  onValueChange,
+  placeholder,
+  inputType = "text",
+  confirmLabel,
+  cancelLabel,
+  onConfirm,
+  onCancel,
+  destructive = false,
+  required = false,
+  expectedValue,
+  expectedInstruction,
+  matchMode = "exact",
+}: {
+  open: boolean;
+  title: string;
+  description?: string;
+  value: string;
+  onValueChange: (value: string) => void;
+  placeholder?: string;
+  inputType?: React.HTMLInputTypeAttribute;
+  confirmLabel: string;
+  cancelLabel: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+  destructive?: boolean;
+  required?: boolean;
+  expectedValue?: string;
+  expectedInstruction?: string;
+  matchMode?: DialogMatchMode;
+}) {
+  const normalizedInput = matchMode === "case_insensitive" ? value.trim().toLocaleLowerCase() : value.trim();
+  const normalizedExpected = expectedValue == null
+    ? null
+    : (matchMode === "case_insensitive" ? expectedValue.trim().toLocaleLowerCase() : expectedValue.trim());
+  const matchesExpected = normalizedExpected == null || normalizedInput === normalizedExpected;
+  const canConfirm = (!required || value.trim().length > 0) && matchesExpected;
+
+  useEffect(()=>{
+    if (!open) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = previousOverflow; };
+  }, [open]);
+
+  useEffect(()=>{
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onCancel();
+      if (e.key === 'Enter' && canConfirm) {
+        e.preventDefault();
+        onConfirm();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open, onConfirm, onCancel, canConfirm]);
+
+  if (!open) return null;
+
+  return (
+    <div className="modal-overlay no-print" role="dialog" aria-modal="true" aria-label={title} onClick={onCancel}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <header className="flex items-center gap-2">
+          {destructive && <AlertTriangle className="h-5 w-5 text-destructive" />}
+          <span>{title}</span>
+        </header>
+        <div className="body space-y-3">
+          {description && <div className="whitespace-pre-line">{description}</div>}
+          {expectedInstruction && (
+            <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-foreground">
+              {expectedInstruction}
+            </div>
+          )}
+          <Input
+            autoFocus
+            type={inputType}
+            value={value}
+            onChange={(e) => onValueChange(e.target.value)}
+            placeholder={placeholder}
+            autoComplete={inputType === "password" ? "new-password" : "off"}
+          />
+        </div>
+        <footer>
+          <Button variant="ghost" onClick={onCancel}>{cancelLabel}</Button>
+          <Button variant={destructive ? "destructive" : "default"} disabled={!canConfirm} onClick={onConfirm}>
+            {confirmLabel}
+          </Button>
+        </footer>
+      </div>
+    </div>
+  );
+}
+
+function AppDialogProvider({ children }: { children: React.ReactNode }) {
+  const [request, setRequest] = useState<AppDialogRequest | null>(null);
+  const [promptValue, setPromptValue] = useState("");
+
+  const confirm = React.useCallback((options: AppDialogBaseOptions) => {
+    return new Promise<boolean>((resolve) => {
+      setRequest({ kind: "confirm", ...options, resolve });
+    });
+  }, []);
+
+  const prompt = React.useCallback((options: AppPromptDialogOptions) => {
+    return new Promise<string | null>((resolve) => {
+      setPromptValue(options.defaultValue || "");
+      setRequest({ kind: "prompt", ...options, resolve });
+    });
+  }, []);
+
+  const api = React.useMemo<AppDialogApi>(() => ({ confirm, prompt }), [confirm, prompt]);
+
+  const cancelCurrent = React.useCallback(() => {
+    setRequest((current) => {
+      if (!current) return null;
+      if (current.kind === "confirm") current.resolve(false);
+      else current.resolve(null);
+      return null;
+    });
+    setPromptValue("");
+  }, []);
+
+  const confirmCurrent = React.useCallback(() => {
+    setRequest((current) => {
+      if (!current) return null;
+      if (current.kind === "confirm") current.resolve(true);
+      else current.resolve(promptValue);
+      return null;
+    });
+    setPromptValue("");
+  }, [promptValue]);
+
+  return (
+    <AppDialogContext.Provider value={api}>
+      {children}
+      {request?.kind === "confirm" && (
+        <ConfirmDialog
+          open
+          title={request.title}
+          description={request.description || ""}
+          confirmLabel={request.confirmLabel || "Confirmer"}
+          cancelLabel={request.cancelLabel || "Annuler"}
+          destructive={request.destructive}
+          onConfirm={confirmCurrent}
+          onCancel={cancelCurrent}
+        />
+      )}
+      {request?.kind === "prompt" && (
+        <PromptDialog
+          open
+          title={request.title}
+          description={request.description}
+          value={promptValue}
+          onValueChange={setPromptValue}
+          placeholder={request.placeholder}
+          inputType={request.inputType}
+          confirmLabel={request.confirmLabel || "Confirmer"}
+          cancelLabel={request.cancelLabel || "Annuler"}
+          destructive={request.destructive}
+          required={request.required}
+          expectedValue={request.expectedValue}
+          expectedInstruction={request.expectedInstruction}
+          matchMode={request.matchMode}
+          onConfirm={confirmCurrent}
+          onCancel={cancelCurrent}
+        />
+      )}
+    </AppDialogContext.Provider>
   );
 }
 
@@ -4726,6 +4947,7 @@ function UserManagementDialog({
   canManageSubscriptions: boolean;
   canCreateUsers: boolean;
 }) {
+  const appDialog = useAppDialog();
   useEffect(()=>{ document.body.style.overflow = open ? 'hidden' : ''; return () => { document.body.style.overflow = ''; }; }, [open]);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -5044,10 +5266,17 @@ function UserManagementDialog({
                                     size="sm"
                                     variant="outline"
                                     disabled={!canEditTarget || isOwnerAccount}
-                                    onClick={() => {
-                                      const next = window.prompt(lang === "fr" ? "Nouveau mot de passe temporaire" : "New temporary password");
-                                      if (!next) return;
-                                      onResetPassword(u.id, next);
+                                    onClick={async () => {
+                                      const confirmed = await appDialog.confirm({
+                                        title: lang === "fr" ? "Réinitialiser le mot de passe ?" : "Reset password?",
+                                        description: lang === "fr"
+                                          ? `Un e-mail de réinitialisation sécurisé sera envoyé à ${u.email}.`
+                                          : `A secure password reset email will be sent to ${u.email}.`,
+                                        confirmLabel: lang === "fr" ? "Envoyer l’e-mail" : "Send email",
+                                        cancelLabel: lang === "fr" ? "Annuler" : "Cancel",
+                                      });
+                                      if (!confirmed) return;
+                                      await onResetPassword(u.id, "");
                                     }}
                                   >
                                     {lang === "fr" ? "Réinitialiser" : "Reset"}
@@ -5105,6 +5334,7 @@ function ServiceOwnerAdminConsole({
   onSetSubscriptionByEmail: (email: string, plan: SubscriptionPlan) => void | Promise<void>;
   onLogout: () => void;
 }) {
+  const appDialog = useAppDialog();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [organization, setOrganization] = useState("");
@@ -5406,10 +5636,17 @@ function ServiceOwnerAdminConsole({
                             size="sm"
                             variant="outline"
                             disabled={!canEditTarget || isOwnerAccount}
-                            onClick={() => {
-                              const next = window.prompt(lang === "fr" ? "Nouveau mot de passe temporaire" : "New temporary password");
-                              if (!next) return;
-                              onResetPassword(u.id, next);
+                            onClick={async () => {
+                              const confirmed = await appDialog.confirm({
+                                title: lang === "fr" ? "Réinitialiser le mot de passe ?" : "Reset password?",
+                                description: lang === "fr"
+                                  ? `Un e-mail de réinitialisation sécurisé sera envoyé à ${u.email}.`
+                                  : `A secure password reset email will be sent to ${u.email}.`,
+                                confirmLabel: lang === "fr" ? "Envoyer l’e-mail" : "Send email",
+                                cancelLabel: lang === "fr" ? "Annuler" : "Cancel",
+                              });
+                              if (!confirmed) return;
+                              await onResetPassword(u.id, "");
                             }}
                           >
                             {lang === "fr" ? "Réinitialiser" : "Reset"}
@@ -6696,6 +6933,7 @@ function Toolbar({
   onRequestPremium?: () => void;
   onLogout?: () => void;
 }) {
+  const appDialog = useAppDialog();
   const t = I18N[lang];
   const [showSessionActions, setShowSessionActions] = useState(false);
   const [trialNow, setTrialNow] = useState(() => Date.now());
@@ -6837,9 +7075,16 @@ function Toolbar({
                   size="sm"
                   variant="outline"
                   disabled={!canManageAudits || !canEditAuditSession}
-                  onClick={() => {
+                  onClick={async () => {
                     const current = sessions.find((s) => s.id === activeSessionId)?.name || "";
-                    const proposed = window.prompt(lang === "fr" ? "Nom de la session" : "Session name", current);
+                    const proposed = await appDialog.prompt({
+                      title: lang === "fr" ? "Renommer l’audit" : "Rename audit",
+                      description: lang === "fr" ? "Saisissez le nouveau nom de l’audit." : "Enter the new audit name.",
+                      defaultValue: current,
+                      placeholder: lang === "fr" ? "Nom de l’audit" : "Audit name",
+                      confirmLabel: lang === "fr" ? "Renommer" : "Rename",
+                      cancelLabel: lang === "fr" ? "Annuler" : "Cancel",
+                    });
                     if (proposed === null) return;
                     onRenameSession(activeSessionId, proposed);
                   }}
@@ -6916,6 +7161,7 @@ function SettingsProfileView({
   onLogout: () => void;
   onRequestPremium?: (plan?: PremiumPlan) => void;
 }) {
+  const appDialog = useAppDialog();
   const [name, setName] = useState(activeUser?.name || "");
   const [organization, setOrganization] = useState(activeUser?.organization || "");
   const [saving, setSaving] = useState(false);
@@ -7127,11 +7373,15 @@ function SettingsProfileView({
   async function unenrollMfaFactor(factorId: string) {
     if (mfaAction) return;
 
-    const confirmed = window.confirm(
-      lang === "fr"
-        ? "Désactiver la double authentification pour ce compte ?"
-        : "Disable two-factor authentication for this account?"
-    );
+    const confirmed = await appDialog.confirm({
+      title: lang === "fr" ? "Désactiver la double authentification ?" : "Disable two-factor authentication?",
+      description: lang === "fr"
+        ? "Cette action retirera le facteur MFA actuellement enregistré pour ce compte."
+        : "This will remove the MFA factor currently enrolled for this account.",
+      confirmLabel: lang === "fr" ? "Désactiver" : "Disable",
+      cancelLabel: lang === "fr" ? "Annuler" : "Cancel",
+      destructive: true,
+    });
     if (!confirmed) return;
 
     const mfa = getMfaClient();
@@ -7163,12 +7413,15 @@ function SettingsProfileView({
     }
   }
 
-  function confirmLogout() {
-    const confirmed = window.confirm(
-      lang === "fr"
-        ? "Voulez-vous vraiment vous déconnecter de cette session ?"
-        : "Do you really want to sign out of this session?"
-    );
+  async function confirmLogout() {
+    const confirmed = await appDialog.confirm({
+      title: lang === "fr" ? "Se déconnecter ?" : "Sign out?",
+      description: lang === "fr"
+        ? "Vous allez fermer la session GapTrack actuellement connectée."
+        : "You are about to end the currently signed-in GapTrack session.",
+      confirmLabel: lang === "fr" ? "Se déconnecter" : "Sign out",
+      cancelLabel: lang === "fr" ? "Annuler" : "Cancel",
+    });
 
     if (!confirmed) return;
     setSecurityAction("logout");
@@ -7287,14 +7540,25 @@ function SettingsProfileView({
   async function requestAccountDeletionByEmail() {
     if (privacyAction) return;
 
-    const typedEmail = normalizeEmail(
-      window.prompt(
-        lang === "fr"
-          ? `Pour recevoir le lien de validation, retapez votre e-mail : ${accountEmail}`
-          : `To receive the validation link, retype your email: ${accountEmail}`
-      ) || ""
-    );
+    const typedEmailInput = await appDialog.prompt({
+      title: lang === "fr" ? "Confirmer la demande de suppression" : "Confirm deletion request",
+      description: lang === "fr"
+        ? "Un lien de validation sera envoyé par e-mail avant toute suppression définitive."
+        : "A validation link will be sent by email before any permanent deletion.",
+      placeholder: accountEmail,
+      inputType: "email",
+      required: true,
+      expectedValue: accountEmail,
+      matchMode: "case_insensitive",
+      expectedInstruction: lang === "fr"
+        ? `Saisissez « ${accountEmail} » pour confirmer.`
+        : `Type “${accountEmail}” to confirm.`,
+      confirmLabel: lang === "fr" ? "Envoyer le lien" : "Send validation link",
+      cancelLabel: lang === "fr" ? "Annuler" : "Cancel",
+    });
 
+    if (typedEmailInput === null) return;
+    const typedEmail = normalizeEmail(typedEmailInput);
     if (!typedEmail) return;
 
     if (typedEmail !== normalizeEmail(accountEmail)) {
@@ -8139,6 +8403,7 @@ function useStickyShadow() {
 }
 
 function ListingView({ rows, setRows, lang, onOpenEvidence, evidenceCountFor, evidenceListFor, proofStatusFor, setProofStatusForRow, plans, openRequest, onOpenRequestConsumed, canExport = true, readOnly = false, onPremiumRequired }: { rows: ControlItem[]; setRows: (r: ControlItem[]) => void; lang: LangKey; theme: "dark" | "light"; onOpenEvidence: (control: ControlItem) => void; evidenceCountFor: (controlId: string) => number; evidenceListFor: (controlId: string) => EvidenceItem[]; proofStatusFor: (controlId: string) => EvidenceStatus; setProofStatusForRow: (controlId: string, status: EvidenceStatus) => void; plans: Record<string, PlanAction>; openRequest?: ListingOpenRequest | null; onOpenRequestConsumed?: () => void; canExport?: boolean; readOnly?: boolean; onPremiumRequired?: (featureLabel?: string) => boolean}) {
+  const appDialog = useAppDialog();
   const t = I18N[lang];
 
   const { sentinelRef: listingSentinelRef, isStuck: listingStuck } = useStickyShadow();
@@ -8555,7 +8820,7 @@ function ListingView({ rows, setRows, lang, onOpenEvidence, evidenceCountFor, ev
   
   
   
-  const bulkSet = (value: ControlStatus) => {
+  const bulkSet = async (value: ControlStatus) => {
     if (readOnly) return;
     const targets = sorted;
 
@@ -8581,7 +8846,13 @@ function ListingView({ rows, setRows, lang, onOpenEvidence, evidenceCountFor, ev
       ? `Vous allez marquer ${targets.length} contrôle(s) visible(s) comme ${targetLabel}. Cette action s’applique uniquement aux filtres actifs. Continuer ?`
       : `You are about to mark ${targets.length} visible control(s) as ${targetLabel}. This only applies to the active filters. Continue?`;
 
-    if (!window.confirm(confirmMessage)) return;
+    const confirmed = await appDialog.confirm({
+      title: lang === "fr" ? "Confirmer l’action de masse" : "Confirm bulk action",
+      description: confirmMessage,
+      confirmLabel: lang === "fr" ? "Appliquer" : "Apply",
+      cancelLabel: lang === "fr" ? "Annuler" : "Cancel",
+    });
+    if (!confirmed) return;
 
     const previousRows = rows;
     const ids = new Set(targets.map((f) => f.id));
@@ -12846,7 +13117,11 @@ function AppRouter() {
     return <ResetPasswordPage />;
   }
 
-  return <GapTrackApp route={route} navigate={navigate} />;
+  return (
+    <AppDialogProvider>
+      <GapTrackApp route={route} navigate={navigate} />
+    </AppDialogProvider>
+  );
 }
 
 export default AppRouter;
@@ -12858,6 +13133,7 @@ function GapTrackApp({
   route: AppRoute;
   navigate: (route: AppRoute, replace?: boolean) => void;
 }) {
+  const appDialog = useAppDialog();
   const [theme, setTheme] = useState<"light" | "dark">(() => {
     const savedTheme = loadSettings().theme;
     return savedTheme === "light" || savedTheme === "dark" ? savedTheme : "dark";
@@ -12959,25 +13235,30 @@ function GapTrackApp({
 
     async function confirmAndDeleteAccount() {
       try {
-        const firstConfirmation = window.confirm(
-          lang === "fr"
-            ? `Le lien e-mail a été validé. Voulez-vous supprimer définitivement le compte ${deletionUserEmail} et ses données serveur ?`
-            : `The email link was validated. Do you want to permanently delete the account ${deletionUserEmail} and its server data?`
-        );
+        const typedEmailInput = await appDialog.prompt({
+          title: lang === "fr" ? "Supprimer définitivement ce compte ?" : "Permanently delete this account?",
+          description: lang === "fr"
+            ? `Le lien e-mail a été validé. Le compte ${deletionUserEmail} et ses données serveur seront supprimés définitivement.`
+            : `The email link was validated. The account ${deletionUserEmail} and its server data will be permanently deleted.`,
+          placeholder: deletionUserEmail,
+          inputType: "email",
+          required: true,
+          expectedValue: deletionUserEmail,
+          matchMode: "case_insensitive",
+          expectedInstruction: lang === "fr"
+            ? `Saisissez « ${deletionUserEmail} » pour confirmer.`
+            : `Type “${deletionUserEmail}” to confirm.`,
+          confirmLabel: lang === "fr" ? "Supprimer définitivement" : "Delete permanently",
+          cancelLabel: lang === "fr" ? "Annuler" : "Cancel",
+          destructive: true,
+        });
 
-        if (!firstConfirmation) {
+        if (typedEmailInput === null) {
           toast.info(lang === "fr" ? "Suppression du compte annulée." : "Account deletion cancelled.");
           return;
         }
 
-        const typedEmail = normalizeEmail(
-          window.prompt(
-            lang === "fr"
-              ? `Dernière confirmation : retapez votre e-mail (${deletionUserEmail}) pour supprimer le compte.`
-              : `Final confirmation: retype your email (${deletionUserEmail}) to delete the account.`
-          ) || ""
-        );
-
+        const typedEmail = normalizeEmail(typedEmailInput);
         if (typedEmail !== deletionUserEmail) {
           toast.error(lang === "fr" ? "E-mail incorrect. Suppression annulée." : "Incorrect email. Deletion cancelled.");
           return;
@@ -13014,7 +13295,7 @@ function GapTrackApp({
     }
 
     void confirmAndDeleteAccount();
-  }, [activeUser, lang, navigate]);
+  }, [activeUser, appDialog, lang, navigate]);
 
   const canManageUsersFlag = userCanManageUsers(activeUser);
   const canCreateUsersFlag = userCanCreateUsers(activeUser);
@@ -13846,25 +14127,34 @@ function GapTrackApp({
     }
 
     const targetLabel = `${target.name || target.email} (${target.email})`;
-    const firstConfirmation = window.confirm(
-      lang === "fr"
-        ? `Êtes-vous sûr de vouloir supprimer le compte ${targetLabel} ?\n\nCette action le retirera de l’administration GapTrack et sera enregistrée côté Supabase.`
-        : `Are you sure you want to delete the account ${targetLabel}?\n\nThis will remove it from GapTrack administration and persist the change in Supabase.`
-    );
+    const typedEmailInput = await appDialog.prompt({
+      title: lang === "fr" ? "Supprimer définitivement ce compte ?" : "Permanently delete this account?",
+      description: lang === "fr"
+        ? `${targetLabel}
 
-    if (!firstConfirmation) {
+Cette action le retirera de l’administration GapTrack et enregistrera la suppression côté Supabase.`
+        : `${targetLabel}
+
+This will remove the account from GapTrack administration and persist the deletion in Supabase.`,
+      placeholder: target.email,
+      inputType: "email",
+      required: true,
+      expectedValue: target.email,
+      matchMode: "case_insensitive",
+      expectedInstruction: lang === "fr"
+        ? `Saisissez « ${target.email} » pour confirmer.`
+        : `Type “${target.email}” to confirm.`,
+      confirmLabel: lang === "fr" ? "Supprimer" : "Delete",
+      cancelLabel: lang === "fr" ? "Annuler" : "Cancel",
+      destructive: true,
+    });
+
+    if (typedEmailInput === null) {
       toast.info(lang === "fr" ? "Suppression annulée." : "Deletion cancelled.");
       return;
     }
 
-    const typedEmail = normalizeEmail(
-      window.prompt(
-        lang === "fr"
-          ? `Dernière confirmation : retapez l’e-mail du compte à supprimer (${target.email}).`
-          : `Final confirmation: retype the email of the account to delete (${target.email}).`
-      ) || ""
-    );
-
+    const typedEmail = normalizeEmail(typedEmailInput);
     if (typedEmail !== normalizeEmail(target.email)) {
       toast.error(lang === "fr" ? "E-mail incorrect. Suppression annulée." : "Incorrect email. Deletion cancelled.");
       return;
@@ -13889,7 +14179,7 @@ function GapTrackApp({
           : `Unable to delete the account server-side${message ? `: ${message}` : "."}`
       );
     }
-  }, [activeUser, activeUserId, canManageUsersFlag, lang, users]);
+  }, [activeUser, activeUserId, appDialog, canManageUsersFlag, lang, users]);
 
   const resetUserPassword = React.useCallback(async (userId: string, _password: string) => {
     if (!canManageUsersFlag) {
@@ -14839,10 +15129,38 @@ function GapTrackApp({
     }
   }, [activeSessionId, activatePersistedAudit, auditLoadError, cancelScheduledAutosave, isAuditLoading, isAuditMutating, isEvidenceBusy, lang, requireAuditDeletion, sessions, waitForPendingSave]);
 
-  const [confirmDelOpen, setConfirmDelOpen] = useState(false);
-  const deleteSession = () => {
+  const deleteSession = async () => {
     if (!requireAuditDeletion() || auditLoadError || isAuditLoading || isAuditMutating || isEvidenceBusy) return;
-    setConfirmDelOpen(true);
+
+    const auditName = currentSession?.name?.trim() || (lang === "fr" ? "Audit" : "Audit");
+    const evidenceTotal = Object.values(evidenceMap as Record<string, EvidenceItem[]>).reduce((total, items) => total + (items?.length || 0), 0);
+    const actionTotal = Object.values(plans as Record<string, PlanAction>).filter((action) => Boolean(
+      action?.owner?.trim() || action?.due?.trim() || action?.comment?.trim() || action?.priority
+    )).length;
+    const deletionImpact = sessions.length <= 1
+      ? (lang === "fr"
+          ? `${rows.length} contrôles, ${evidenceTotal} preuves et ${actionTotal} actions seront supprimés. Un nouvel audit vierge sera ensuite créé.`
+          : `${rows.length} controls, ${evidenceTotal} evidence items and ${actionTotal} actions will be deleted. A fresh blank audit will then be created.`)
+      : (lang === "fr"
+          ? `${rows.length} contrôles, ${evidenceTotal} preuves et ${actionTotal} actions seront supprimés avec cet audit.`
+          : `${rows.length} controls, ${evidenceTotal} evidence items and ${actionTotal} actions will be deleted with this audit.`);
+
+    const typedAuditName = await appDialog.prompt({
+      title: lang === "fr" ? "Supprimer définitivement cet audit ?" : "Permanently delete this audit?",
+      description: deletionImpact,
+      placeholder: auditName,
+      required: true,
+      expectedValue: auditName,
+      expectedInstruction: lang === "fr"
+        ? `Saisissez « ${auditName} » pour confirmer.`
+        : `Type “${auditName}” to confirm.`,
+      confirmLabel: lang === "fr" ? "Supprimer" : "Delete",
+      cancelLabel: lang === "fr" ? "Annuler" : "Cancel",
+      destructive: true,
+    });
+
+    if (typedAuditName === null) return;
+    await performDeleteSession();
   };
 
   // Evidence drawer state
@@ -14944,9 +15262,6 @@ function GapTrackApp({
 
 
   const t = I18N[lang];
-  const delDesc = sessions.length <= 1
-    ? (lang==='fr' ? "Ceci réinitialisera l'application avec une session vierge." : "This will reset the app to a fresh session.")
-    : (lang==='fr' ? t.confirmDeleteDesc : t.confirmDeleteDesc);
 
   if (!activeUser) {
     if (route === "login" || route === "app") {
@@ -15375,16 +15690,6 @@ function GapTrackApp({
           if (!activeSessionId) return false;
           return updateSessionProfile(activeSessionId, patch);
         }}
-      />
-
-      <ConfirmDialog
-        open={confirmDelOpen}
-        title={t.confirmDeleteTitle}
-        description={delDesc}
-        confirmLabel={t.confirm}
-        cancelLabel={t.cancel}
-        onConfirm={()=>{ setConfirmDelOpen(false); void performDeleteSession(); }}
-        onCancel={()=>setConfirmDelOpen(false)}
       />
 
       <PrintExecutive
