@@ -7007,6 +7007,7 @@ function TeamDiscussionView({
   currentUserId,
   teamMembers,
   lang,
+  subscriptionPlan,
   canWrite = true,
   onRequestPremium,
 }: {
@@ -7016,6 +7017,7 @@ function TeamDiscussionView({
   currentUserId?: string;
   teamMembers: TeamMember[];
   lang: LangKey;
+  subscriptionPlan?: SubscriptionPlan;
   canWrite?: boolean;
   onRequestPremium: () => void;
 }) {
@@ -7079,13 +7081,18 @@ function TeamDiscussionView({
   }, [loading, messages.length]);
 
   if (!enabled) {
+    const isFreePlan = normalizeSubscriptionPlan(subscriptionPlan) === "free";
     return (
       <PremiumFeatureNotice
         lang={lang}
         title={lang === "fr" ? "Discussion collaborative" : "Collaborative discussion"}
-        description={lang === "fr"
-          ? "Premium Team ouvre un fil de discussion permanent pour chaque audit, partagé avec les membres du groupe."
-          : "Premium Team opens a permanent discussion thread for each audit, shared with group members."}
+        description={isFreePlan
+          ? (lang === "fr"
+            ? "L’offre Free ne comprend pas la discussion d’équipe. Passez à Premium Team pour échanger en temps réel dans un fil permanent lié à chaque audit."
+            : "The Free plan does not include team discussion. Upgrade to Premium Team to chat in real time in a permanent thread linked to each audit.")
+          : (lang === "fr"
+            ? "Premium Team ouvre un fil de discussion permanent pour chaque audit, partagé avec les membres du groupe."
+            : "Premium Team opens a permanent discussion thread for each audit, shared with group members.")}
         bullets={lang === "fr"
           ? ["Messages persistants", "@mentions", "Temps réel", "Historique conservé"]
           : ["Persistent messages", "@mentions", "Real time", "Preserved history"]}
@@ -7311,6 +7318,7 @@ function MyWorkView({
   loading,
   sessions,
   lang,
+  subscriptionPlan,
   onRefresh,
   onOpenItem,
   onRequestPremium,
@@ -7320,18 +7328,24 @@ function MyWorkView({
   loading: boolean;
   sessions: Session[];
   lang: LangKey;
+  subscriptionPlan?: SubscriptionPlan;
   onRefresh: () => Promise<void>;
   onOpenItem: (item: MyWorkItem) => Promise<void>;
   onRequestPremium: () => void;
 }) {
   if (!enabled) {
+    const isFreePlan = normalizeSubscriptionPlan(subscriptionPlan) === "free";
     return (
       <PremiumFeatureNotice
         lang={lang}
         title={lang === "fr" ? "Pour moi" : "My work"}
-        description={lang === "fr"
-          ? "Premium Team centralise ici vos actions assignées, validations de preuve et notifications d’équipe."
-          : "Premium Team centralizes your assigned actions, evidence reviews and team notifications here."}
+        description={isFreePlan
+          ? (lang === "fr"
+            ? "L’offre Free ne comprend pas « Pour moi ». Passez à Premium Team pour centraliser vos actions assignées, preuves à valider, commentaires d’équipe et échéances."
+            : "The Free plan does not include My work. Upgrade to Premium Team to centralize assigned actions, evidence to review, team comments, and due dates.")
+          : (lang === "fr"
+            ? "Premium Team centralise ici vos actions assignées, validations de preuve et notifications d’équipe."
+            : "Premium Team centralizes your assigned actions, evidence reviews and team notifications here.")}
         bullets={lang === "fr"
           ? ["Actions assignées", "Preuves à valider", "Commentaires d’équipe", "Échéances"]
           : ["Assigned actions", "Evidence to review", "Team comments", "Due dates"]}
@@ -9278,8 +9292,9 @@ function SettingsProfileView({
   );
 }
 
-function PageHeader({ tab, lang, rows }: { tab: string; lang: LangKey; rows: ControlItem[] }) {
+function PageHeader({ tab, lang, rows, subscriptionPlan }: { tab: string; lang: LangKey; rows: ControlItem[]; subscriptionPlan?: SubscriptionPlan }) {
   const t = I18N[lang];
+  const isFreePlan = normalizeSubscriptionPlan(subscriptionPlan) === "free";
   const titleMap: Record<string, string> = {
     listing: t.listing,
     weekly: lang === "fr" ? "Cette semaine" : "This week",
@@ -9295,8 +9310,8 @@ function PageHeader({ tab, lang, rows }: { tab: string; lang: LangKey; rows: Con
     ? {
         listing: "Évaluer les contrôles et saisir les preuves",
         weekly: "Les actions prioritaires à lancer maintenant",
-        mywork: "Vos éléments à traiter, tous audits confondus",
-        inbox: "Fil collaboratif permanent de l’audit, partagé en temps réel",
+        mywork: isFreePlan ? "Fonctionnalité Premium Team — non disponible avec l’offre Free" : "Vos éléments à traiter, tous audits confondus",
+        inbox: isFreePlan ? "Fonctionnalité Premium Team — non disponible avec l’offre Free" : "Fil collaboratif permanent de l’audit, partagé en temps réel",
 		plan: "Construire et suivre le plan d’action",
         risks: "Traduire les écarts en risques métier concrets",
         dashboard: "Synthèse de maturité et priorités",
@@ -9306,8 +9321,8 @@ function PageHeader({ tab, lang, rows }: { tab: string; lang: LangKey; rows: Con
     : {
         listing: "Assessment and 0/1 entry of controls",
         weekly: "Priority actions to start now",
-        mywork: "Items requiring your attention across all audits",
-        inbox: "Permanent audit discussion shared with the team in real time",
+        mywork: isFreePlan ? "Premium Team feature — not available on the Free plan" : "Items requiring your attention across all audits",
+        inbox: isFreePlan ? "Premium Team feature — not available on the Free plan" : "Permanent audit discussion shared with the team in real time",
 		plan: "Track gaps and complete the action plan",
         risks: "Turn gaps into concrete business risks",
         dashboard: "Scores and priorities overview",
@@ -16582,7 +16597,7 @@ This will remove the account from GapTrack administration and persist the deleti
             </main>
           ) : (
           <>
-          <PageHeader tab={tab} lang={lang} rows={rows} />
+          <PageHeader tab={tab} lang={lang} rows={rows} subscriptionPlan={activeUser?.subscriptionPlan} />
           {tab !== "mywork" ? (
             <AuditIdentityBanner
               session={currentSession}
@@ -16663,6 +16678,7 @@ This will remove the account from GapTrack administration and persist the deleti
                     loading={myWorkLoading}
                     sessions={sessions}
                     lang={lang}
+                    subscriptionPlan={activeUser?.subscriptionPlan}
                     onRefresh={reloadMyWork}
                     onOpenItem={openMyWorkItem}
                     onRequestPremium={() => requestPremiumViaForm(lang === "fr" ? "Pour moi" : "My work", "premium_team")}
@@ -16684,6 +16700,7 @@ This will remove the account from GapTrack administration and persist the deleti
                     currentUserId={activeUser?.id}
                     teamMembers={teamMembers}
                     lang={lang}
+                    subscriptionPlan={activeUser?.subscriptionPlan}
                     canWrite={canEditAuditFlag}
                     onRequestPremium={() => requestPremiumViaForm(lang === "fr" ? "Discussion collaborative" : "Collaborative discussion", "premium_team")}
                   />
