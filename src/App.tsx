@@ -7365,28 +7365,28 @@ function MyWorkView({
   return (
     <div className="px-4 pb-4">
       <Card className="overflow-hidden">
-        <CardHeader className="border-b bg-muted/5">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Inbox className="h-5 w-5" />
-                {lang === "fr" ? "À traiter" : "To do"}
-              </CardTitle>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {lang === "fr"
-                  ? "Votre file de travail personnelle, synchronisée avec Supabase."
-                  : "Your personal work queue, synchronized with Supabase."}
-              </p>
+        <CardHeader className="border-b bg-muted/5 py-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-2 text-sm font-medium">
+              <Inbox className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <span>
+                {items.length === 1
+                  ? (lang === "fr" ? "1 élément" : "1 item")
+                  : (lang === "fr" ? `${items.length} éléments` : `${items.length} items`)}
+              </span>
             </div>
             <Button
               type="button"
-              size="sm"
-              variant="outline"
+              size="icon"
+              variant="ghost"
               disabled={loading}
+              aria-label={lang === "fr" ? "Actualiser" : "Refresh"}
+              title={lang === "fr" ? "Actualiser" : "Refresh"}
               onClick={() => { void onRefresh(); }}
             >
-              {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              {lang === "fr" ? "Actualiser" : "Refresh"}
+              {loading
+                ? <Loader2 className="h-4 w-4 animate-spin" />
+                : <Redo2 className="h-4 w-4" />}
             </Button>
           </div>
         </CardHeader>
@@ -7413,11 +7413,18 @@ function MyWorkView({
                     ? item.payload.author_email
                     : "";
                 const displayTitle = item.kind === "mention"
-                  ? (lang === "fr" ? "Nouveau commentaire d’équipe" : "New team comment")
-                  : item.title;
-                const displayDetail = item.kind === "mention" && author
-                  ? `${author} · ${item.detail}`
-                  : item.detail;
+                  ? (author
+                      ? (lang === "fr" ? `Commentaire de ${author}` : `Comment from ${author}`)
+                      : (lang === "fr" ? "Commentaire d’équipe" : "Team comment"))
+                  : (item.title.trim() || meta.label);
+                const displayDetail = item.detail;
+                const targetLabel = entityType === "evidence"
+                  ? (lang === "fr" ? "Preuve" : "Evidence")
+                  : entityType === "action"
+                    ? (lang === "fr" ? "Action" : "Action")
+                    : entityType === "control" && item.controlId
+                      ? (lang === "fr" ? "Contrôle" : "Control")
+                      : "";
                 const dueLabel = item.dueOn
                   ? new Date(`${item.dueOn}T00:00:00`).toLocaleDateString(locale, { day: "2-digit", month: "2-digit", year: "numeric" })
                   : "";
@@ -7439,7 +7446,6 @@ function MyWorkView({
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="font-medium">{displayTitle}</span>
-                          <Badge variant="outline" className="text-[10px]">{meta.label}</Badge>
                           {item.unread ? (
                             <Badge className="text-[10px]">{lang === "fr" ? "Nouveau" : "New"}</Badge>
                           ) : null}
@@ -7449,7 +7455,7 @@ function MyWorkView({
                         </p>
                         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
                           <span>{session?.name || item.auditSessionId}</span>
-                          {entityType === "evidence" && item.controlId ? <span>{lang === "fr" ? "Preuve / contrôle" : "Evidence / control"}</span> : null}
+                          {targetLabel ? <span>{targetLabel}</span> : null}
                           {dueLabel ? (
                             <span className="inline-flex items-center gap-1">
                               <Clock3 className="h-3.5 w-3.5" />
@@ -9289,7 +9295,7 @@ function PageHeader({ tab, lang, rows }: { tab: string; lang: LangKey; rows: Con
     ? {
         listing: "Évaluer les contrôles et saisir les preuves",
         weekly: "Les actions prioritaires à lancer maintenant",
-        mywork: "Actions assignées, validations, mentions et échéances",
+        mywork: "Vos éléments à traiter, tous audits confondus",
         inbox: "Fil collaboratif permanent de l’audit, partagé en temps réel",
 		plan: "Construire et suivre le plan d’action",
         risks: "Traduire les écarts en risques métier concrets",
@@ -9300,7 +9306,7 @@ function PageHeader({ tab, lang, rows }: { tab: string; lang: LangKey; rows: Con
     : {
         listing: "Assessment and 0/1 entry of controls",
         weekly: "Priority actions to start now",
-        mywork: "Assigned actions, reviews, mentions and due dates",
+        mywork: "Items requiring your attention across all audits",
         inbox: "Permanent audit discussion shared with the team in real time",
 		plan: "Track gaps and complete the action plan",
         risks: "Turn gaps into concrete business risks",
@@ -16587,7 +16593,14 @@ This will remove the account from GapTrack administration and persist the deleti
           ) : (
           <>
           <PageHeader tab={tab} lang={lang} rows={rows} />
-          <AuditIdentityBanner session={currentSession} lang={lang} onEdit={() => setProfileOpen(true)} readOnly={isFreeTrialExpired} />
+          {tab !== "mywork" ? (
+            <AuditIdentityBanner
+              session={currentSession}
+              lang={lang}
+              onEdit={() => setProfileOpen(true)}
+              readOnly={isFreeTrialExpired}
+            />
+          ) : null}
             <AnimatePresence mode="wait">
               {tab === "listing" && (
                 <motion.div
