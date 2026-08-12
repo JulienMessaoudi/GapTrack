@@ -4384,7 +4384,10 @@ html,body{background:var(--background);color:var(--foreground);width:100%;max-wi
   width:100%;
   max-width:100%;
   min-width:0;
-  overflow-x:hidden;
+  /* `hidden` creates a scroll container and can prevent descendants using
+     position: sticky from following the viewport. `clip` keeps the horizontal
+     overflow contained without breaking the sticky detail panel. */
+  overflow-x:clip;
   min-height:100vh;
   background:
     radial-gradient(circle at 18% -10%, color-mix(in srgb, var(--primary) 18%, transparent), transparent 34rem),
@@ -4602,7 +4605,8 @@ html,body{background:var(--background);color:var(--foreground);width:100%;max-wi
 }
 .main-surface{
   flex:1 1 auto;
-  overflow-x:hidden;
+  /* Keep the Listing detail panel sticky while the page scrolls. */
+  overflow-x:clip;
 }
 .main-surface > *{
   max-width:100%;
