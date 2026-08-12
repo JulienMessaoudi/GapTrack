@@ -11663,16 +11663,6 @@ function PlanView({
                         />
                       </div>
 
-                      <TeamCommentsPanel
-                        enabled={collaborationEnabled}
-                        auditSessionId={auditSessionId}
-                        entityType="action"
-                        entityId={selectedRow.id}
-                        controlId={selectedRow.id}
-                        teamMembers={teamMembers}
-                        lang={lang}
-                        canWrite={canCollaborateWrite}
-                      />
                     </div>
                   );
                 })()}
