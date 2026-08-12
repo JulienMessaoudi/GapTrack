@@ -16,13 +16,14 @@ const {
 const siteUrl = "https://gaptrack.fr";
 const canonicalUrl = new URL(canonicalPath, siteUrl).toString();
 const imageUrl = new URL("/icon-512.png", siteUrl).toString();
+const isHomePage = canonicalPath === "/";
 
 const websiteJsonLd = {
   "@context": "https://schema.org",
   "@type": "WebSite",
   url: `${siteUrl}/`,
   name: "GapTrack",
-  alternateName: ["GapTrack.fr"],
+  alternateName: ["gaptrack.fr"],
 };
 ---
 
@@ -37,10 +38,12 @@ const websiteJsonLd = {
     <meta name="robots" content={robots} />
     <link rel="canonical" href={canonicalUrl} />
 
-    <script
-      type="application/ld+json"
-      set:html={JSON.stringify(websiteJsonLd)}
-    />
+    {isHomePage && (
+      <script
+        type="application/ld+json"
+        set:html={JSON.stringify(websiteJsonLd)}
+      />
+    )}
 
     <meta property="og:site_name" content="GapTrack" />
     <meta property="og:type" content="website" />
