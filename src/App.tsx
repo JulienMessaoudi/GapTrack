@@ -4384,9 +4384,7 @@ html,body{background:var(--background);color:var(--foreground);width:100%;max-wi
   width:100%;
   max-width:100%;
   min-width:0;
-  /* `hidden` creates a scroll container and can prevent descendants using
-     position: sticky from following the viewport. `clip` keeps the horizontal
-     overflow contained without breaking the sticky detail panel. */
+  /* Avoid a scroll container so position: sticky can follow the viewport. */
   overflow-x:clip;
   min-height:100vh;
   background:
