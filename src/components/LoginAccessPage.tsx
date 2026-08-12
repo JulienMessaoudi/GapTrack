@@ -998,8 +998,8 @@ function DashboardPreview() {
 
         <div className="gt-preview-session">
           <span>Audit actif</span>
-          <strong>Audit ISO/IEC 27001</strong>
-          <small>Référentiel versionné</small>
+          <strong>Audit de conformité SSI</strong>
+          <small>Grille importée par l’organisation</small>
         </div>
 
         <div className="gt-preview-sync">
@@ -1034,7 +1034,7 @@ function DashboardPreview() {
         <section className="gt-preview-audit-card">
           <div className="gt-preview-audit-badges">
             <span className="is-complete">Fiche audit complète</span>
-            <span>ISO/IEC 27001</span>
+            <span>Référentiel interne</span>
             <span>Audit initial</span>
             <span>Criticité élevée</span>
           </div>

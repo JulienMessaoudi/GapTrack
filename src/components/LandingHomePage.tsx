@@ -140,8 +140,8 @@ const GAPTRACK_FAQS = [
     answer: "GapTrack est un logiciel d’audit SSI qui aide à centraliser les audits, les preuves, les écarts, les plans d’action et les indicateurs de conformité dans un espace sécurisé.",
   },
   {
-    question: "GapTrack peut-il aider pour ISO 27001, NIS2, DORA, RGPD ou PGSSI-S ?",
-    answer: "Oui. GapTrack permet de structurer le suivi de conformité autour de référentiels comme ISO 27001, NIS2, DORA, RGPD ou PGSSI-S, avec des preuves, statuts, responsables et actions correctives associés à chaque contrôle.",
+    question: "Quels référentiels peut-on utiliser dans GapTrack ?",
+    answer: "GapTrack est indépendant du référentiel utilisé. La plateforme ne fournit ni catalogue de référentiels ni contenu normatif préchargé : le RSSI, l’auditeur ou l’organisation renseigne le nom du référentiel et importe sa propre grille d’audit au format JSON ou XLSX. GapTrack sert ensuite à piloter les contrôles, les preuves, les écarts et les plans d’action.",
   },
   {
     question: "Quelle est la différence entre Free, Premium Solo et Premium Team ?",
@@ -243,7 +243,7 @@ function JsonLd() {
     operatingSystem: "Web",
     url: `${SITE_URL}/`,
     description:
-      "GapTrack est un logiciel d’audit SSI pour centraliser les audits, les preuves, les écarts et les plans d’action de conformité.",
+      "GapTrack est un logiciel d’audit SSI indépendant du référentiel : importez votre propre grille d’audit au format JSON ou XLSX, puis centralisez les contrôles, les preuves, les écarts et les plans d’action.",
     offers: {
       "@type": "Offer",
       price: "0",
@@ -461,7 +461,7 @@ function HomePage({
       <section className="gth-features-section gth-reveal" id="gth-features">
         <h2>Une plateforme complète pour votre conformité</h2>
         <div className="gth-feature-grid">
-          <Feature icon={<Layers />} title="Gestion des audits" text="Planifiez, exécutez et suivez vos audits de bout en bout." />
+          <Feature icon={<Layers />} title="Votre référentiel, votre audit" text="Renseignez le nom du référentiel, importez votre propre grille au format JSON ou XLSX, puis pilotez l’audit dans GapTrack." />
           <Feature icon={<FileText />} title="Gestion des écarts" text="Identifiez les écarts, évaluez leur impact et suivez leur résolution." />
           <Feature icon={<ClipboardCheck />} title="Plans d’action" text="Définissez, assignez et suivez vos actions correctives." />
           <Feature icon={<BarChart3 />} title="Reporting & KPIs" text="Visualisez vos indicateurs clés et générez des rapports." />
@@ -1190,9 +1190,10 @@ function TermsPage() {
       title: "Données, audits et preuves",
       text: (
         <>
-          L’utilisateur reste responsable des informations, commentaires, fichiers, preuves et documents qu’il ajoute dans
-          GapTrack. Il lui appartient de vérifier qu’il dispose des droits nécessaires pour importer, consulter ou partager ces
-          éléments au sein de son organisation.
+          GapTrack ne fournit aucun catalogue de référentiels ni contenu normatif ou réglementaire préchargé. L’utilisateur
+          renseigne le nom du référentiel et importe sa propre grille d’audit au format JSON ou XLSX. Il reste responsable des
+          informations, contrôles, commentaires, fichiers, preuves et documents qu’il ajoute dans GapTrack, ainsi que des droits
+          nécessaires pour importer, consulter ou partager ces éléments au sein de son organisation.
         </>
       ),
     },
@@ -1764,8 +1765,8 @@ function DashboardMock({ variant = "hero" }: { variant?: "hero" | "story" }) {
 
         <div className="gth-preview-session">
           <span>Audit actif</span>
-          <strong>Audit ISO/IEC 27001</strong>
-          <small>Référentiel versionné</small>
+          <strong>Audit de conformité SSI</strong>
+          <small>Grille importée par l’organisation</small>
         </div>
 
         <div className="gth-preview-sync"><CheckCircle2 aria-hidden="true" /> Synchronisé</div>
@@ -1798,7 +1799,7 @@ function DashboardMock({ variant = "hero" }: { variant?: "hero" | "story" }) {
         <section className="gth-preview-audit-card">
           <div className="gth-preview-audit-badges">
             <span className="is-complete">Fiche audit complète</span>
-            <span>ISO/IEC 27001</span>
+            <span>Référentiel interne</span>
             <span>Audit initial</span>
             <span>Criticité élevée</span>
           </div>
