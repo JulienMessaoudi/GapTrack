@@ -11220,21 +11220,6 @@ function PlanView({
         {showPlanSecondary && (
           <div className="rounded-xl border bg-background/50 p-3 space-y-3">
             <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2">
-              <Button
-                className="shrink-0"
-                variant="default"
-                size="sm"
-                onClick={() => generateVisiblePlans(false)}
-                disabled={readOnly || visibleWithoutPlan === 0}
-                title={
-                  lang === "fr"
-                    ? "Génère uniquement les plans manquants parmi les écarts visibles"
-                    : "Generate only missing plans among visible gaps"
-                }
-              >
-                <Lightbulb className="h-4 w-4 mr-1" />
-                {lang === "fr" ? "Compléter les écarts" : "Complete gaps"}
-              </Button>
               <div className="text-sm text-muted-foreground whitespace-nowrap">
                 {visibleWithoutPlan > 0
                   ? (lang === "fr" ? `${visibleWithoutPlan} plan(s) manquant(s)` : `${visibleWithoutPlan} missing plan(s)`)
