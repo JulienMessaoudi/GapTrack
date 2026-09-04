@@ -15571,7 +15571,8 @@ This will remove the account from GapTrack administration and persist the deleti
 
   const flushActiveAudit = React.useCallback(async () => {
     const sessionId = activeSessionIdRef.current;
-    if (!sessionId || auditLoadError) return;
+    // Les lecteurs n'ont aucune modification à pousser vers Supabase.
+    if (!canEditAuditFlag || !sessionId || auditLoadError) return;
     cancelScheduledAutosave();
     await waitForPendingSave(sessionId);
     setSaveState("syncing");
@@ -15580,7 +15581,7 @@ This will remove the account from GapTrack administration and persist the deleti
       setLastSavedAt(Date.now());
       setSaveState("saved");
     }
-  }, [auditLoadError, cancelScheduledAutosave, persistentSnapshot, pushToBackend, waitForPendingSave]);
+  }, [canEditAuditFlag, auditLoadError, cancelScheduledAutosave, persistentSnapshot, pushToBackend, waitForPendingSave]);
 
   const logoutAfterSaving = React.useCallback(async () => {
     if (isAuditLoading || isAuditMutating || isEvidenceBusy) {
@@ -15589,7 +15590,10 @@ This will remove the account from GapTrack administration and persist the deleti
     }
     setIsAuditMutating(true);
     try {
-      await flushActiveAudit();
+      // Un lecteur peut toujours se déconnecter : aucune sauvegarde n'est nécessaire.
+      if (canEditAuditFlag) {
+        await flushActiveAudit();
+      }
       logoutUser();
       navigate("home", true);
     } catch (error) {
@@ -15599,7 +15603,7 @@ This will remove the account from GapTrack administration and persist the deleti
     } finally {
       setIsAuditMutating(false);
     }
-  }, [flushActiveAudit, isAuditLoading, isAuditMutating, isEvidenceBusy, lang, logoutUser, navigate]);
+  }, [canEditAuditFlag, flushActiveAudit, isAuditLoading, isAuditMutating, isEvidenceBusy, lang, logoutUser, navigate]);
 
   useInactivityLogout({
     enabled: Boolean(activeUser),
@@ -15828,7 +15832,7 @@ This will remove the account from GapTrack administration and persist the deleti
   // Debounced autosave. Every write is captured for one immutable session id
   // and serialized with the previous write for that same audit.
   useEffect(() => {
-    if (!activeSessionId || isAuditLoading || isAuditMutating || auditLoadError) return;
+    if (!canEditAuditFlag || !activeSessionId || isAuditLoading || isAuditMutating || auditLoadError) return;
 
     if (skipNextAutosaveSessionRef.current === activeSessionId) {
       skipNextAutosaveSessionRef.current = null;
@@ -15870,7 +15874,7 @@ This will remove the account from GapTrack administration and persist the deleti
         saveTimerRef.current = null;
       }
     };
-  }, [activeSessionId, auditLoadError, auditLog, evidenceMap, isAuditLoading, isAuditMutating, plans, proofStatusMap, pushToBackend, rows]);
+  }, [canEditAuditFlag, activeSessionId, auditLoadError, auditLog, evidenceMap, isAuditLoading, isAuditMutating, plans, proofStatusMap, pushToBackend, rows]);
 
   useEffect(() => {
     const shouldGuard = saveState === "saving" || saveState === "syncing" || isAuditMutating;
