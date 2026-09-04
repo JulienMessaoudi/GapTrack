@@ -9391,7 +9391,7 @@ function useStickyShadow() {
   return { sentinelRef, isStuck };
 }
 
-function ListingView({ rows, setRows, lang, onOpenEvidence, evidenceCountFor, evidenceListFor, proofStatusFor, setProofStatusForRow, plans, openRequest, onOpenRequestConsumed, canExport = true, readOnly = false, onPremiumRequired, collaborationEnabled = false, canCollaborateWrite = true, teamMembers = [], auditSessionId = "" }: { rows: ControlItem[]; setRows: (r: ControlItem[]) => void; lang: LangKey; theme: "dark" | "light"; onOpenEvidence: (control: ControlItem) => void; evidenceCountFor: (controlId: string) => number; evidenceListFor: (controlId: string) => EvidenceItem[]; proofStatusFor: (controlId: string) => EvidenceStatus; setProofStatusForRow: (controlId: string, status: EvidenceStatus) => void; plans: Record<string, PlanAction>; openRequest?: ListingOpenRequest | null; onOpenRequestConsumed?: () => void; canExport?: boolean; readOnly?: boolean; onPremiumRequired?: (featureLabel?: string) => boolean; collaborationEnabled?: boolean; canCollaborateWrite?: boolean; teamMembers?: TeamMember[]; auditSessionId?: string}) {
+function ListingView({ rows, setRows, lang, onOpenEvidence, evidenceCountFor, evidenceListFor, proofStatusFor, setProofStatusForRow, plans, openRequest, onOpenRequestConsumed, canExport = true, readOnly = false, onPremiumRequired, collaborationEnabled = false, canCollaborateWrite = true, teamMembers = [], auditSessionId = "" }: { rows: ControlItem[]; setRows: (r: ControlItem[]) => boolean; lang: LangKey; theme: "dark" | "light"; onOpenEvidence: (control: ControlItem) => void; evidenceCountFor: (controlId: string) => number; evidenceListFor: (controlId: string) => EvidenceItem[]; proofStatusFor: (controlId: string) => EvidenceStatus; setProofStatusForRow: (controlId: string, status: EvidenceStatus) => void; plans: Record<string, PlanAction>; openRequest?: ListingOpenRequest | null; onOpenRequestConsumed?: () => void; canExport?: boolean; readOnly?: boolean; onPremiumRequired?: (featureLabel?: string) => boolean; collaborationEnabled?: boolean; canCollaborateWrite?: boolean; teamMembers?: TeamMember[]; auditSessionId?: string}) {
   const appDialog = useAppDialog();
   const t = I18N[lang];
 
@@ -9845,7 +9845,8 @@ function ListingView({ rows, setRows, lang, onOpenEvidence, evidenceCountFor, ev
 
     const previousRows = rows;
     const ids = new Set(targets.map((f) => f.id));
-    setRows(rows.map((r) => (ids.has(r.id) ? { ...r, realized: value } : r)));
+    const accepted = setRows(rows.map((r) => (ids.has(r.id) ? { ...r, realized: value } : r)));
+    if (!accepted) return;
 
     toast.success(
       lang === "fr"
@@ -10545,10 +10546,10 @@ function WeeklyPriorityView({
   readOnly = false,
 }: {
   rows: ControlItem[];
-  setRows: (r: ControlItem[]) => void;
+  setRows: (r: ControlItem[]) => boolean;
   lang: LangKey;
   plans: Record<string, PlanAction>;
-  patchPlan: (rowId: string, patch: Partial<PlanAction>) => void;
+  patchPlan: (rowId: string, patch: Partial<PlanAction>) => boolean;
   proofStatusFor: (controlId: string) => EvidenceStatus;
   onOpenControl: (controlId: string, domain: string) => void;
   onOpenPlan: (rowId?: string) => void;
@@ -10589,7 +10590,8 @@ function WeeklyPriorityView({
 
   const markDone = (row: ControlItem) => {
     if (readOnly) return;
-    setRows(rows.map((r) => (r.id === row.id ? { ...r, realized: 1 as ControlStatus } : r)));
+    const accepted = setRows(rows.map((r) => (r.id === row.id ? { ...r, realized: 1 as ControlStatus } : r)));
+    if (!accepted) return;
     toast.success(lang === "fr" ? `Contrôle ${row.ref} marqué conforme.` : `Control ${row.ref} marked compliant.`);
   };
 
@@ -10805,7 +10807,7 @@ function PlanView({
   rows: ControlItem[];
   lang: LangKey;
   plans: Record<string, PlanAction>;
-  patchPlan: (rowId: string, patch: Partial<PlanAction>) => void;
+  patchPlan: (rowId: string, patch: Partial<PlanAction>) => boolean;
   evidenceCountFor: (controlId: string) => number;
   proofStatusFor: (controlId: string) => EvidenceStatus;
   setProofStatusForRow: (controlId: string, status: EvidenceStatus) => void;
@@ -11088,7 +11090,10 @@ function PlanView({
       return;
     }
 
-    targets.forEach((r) => patchPlan(r.id, generatePlanForControl(r, lang)));
+    for (const r of targets) {
+      const accepted = patchPlan(r.id, generatePlanForControl(r, lang));
+      if (!accepted) return;
+    }
 
     toast.success(
       lang === "fr"
@@ -15617,8 +15622,8 @@ This will remove the account from GapTrack administration and persist the deleti
 
 
 
-  const patchPlanForRow = React.useCallback((rowId: string, patch: Partial<PlanAction>) => {
-	  if (!activeSessionId || !requireAuditEditor()) return;
+  const patchPlanForRow = React.useCallback((rowId: string, patch: Partial<PlanAction>): boolean => {
+	  if (!activeSessionId || !requireAuditEditor()) return false;
 	  rememberSnapshot();
 	  const prev = plansRef.current;
       const before = prev[rowId] || {};
@@ -15641,6 +15646,7 @@ This will remove the account from GapTrack administration and persist the deleti
         after: hasAnyPlanFields(next[rowId]) ? (lang === "fr" ? "Plan renseigné" : "Plan filled") : (lang === "fr" ? "Aucun plan" : "No plan"),
         details: Object.keys(patch).join(", "),
       });
+      return true;
   }, [activeSessionId, rememberSnapshot, requireAuditEditor, appendAuditLog, lang]);
 
   const proofStatusForRow = React.useCallback(
@@ -15986,8 +15992,8 @@ This will remove the account from GapTrack administration and persist the deleti
 
   // History-aware setters. L’historique couvre maintenant l’état complet de l’audit :
   // contrôles, preuves, statuts de preuve et plans d’action.
-  const setRowsWithHistory = React.useCallback((next: ControlItem[] | ((prev: ControlItem[]) => ControlItem[])) => {
-    if (!requireAuditEditor()) return;
+  const setRowsWithHistory = React.useCallback((next: ControlItem[] | ((prev: ControlItem[]) => ControlItem[])): boolean => {
+    if (!requireAuditEditor()) return false;
     rememberSnapshot();
     const previous = rowsRef.current;
     const actual: ControlItem[] = typeof next === "function" ? (next as (prev: ControlItem[]) => ControlItem[])(previous) : next;
@@ -16010,6 +16016,7 @@ This will remove the account from GapTrack administration and persist the deleti
         });
       }
     });
+    return true;
   }, [rememberSnapshot, requireAuditEditor, appendAuditLog, lang]);
 
 
