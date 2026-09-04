@@ -16600,7 +16600,7 @@ This will remove the account from GapTrack administration and persist the deleti
           ) : (
           <>
           <PageHeader tab={tab} lang={lang} rows={rows} subscriptionPlan={activeUser?.subscriptionPlan} />
-          {tab !== "mywork" ? (
+          {tab === "listing" ? (
             <AuditIdentityBanner
               session={currentSession}
               lang={lang}
