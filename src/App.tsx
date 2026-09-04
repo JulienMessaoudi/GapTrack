@@ -13392,7 +13392,15 @@ function EvidenceDrawer({ open, onClose, control, auditSessionId, evidenceMap, p
                         <div className="text-xs text-muted-foreground">{lang === "fr" ? "Commentaire" : "Comment"}: {it.reviewComment}</div>
                       )}
                     </div>
-                    <Badge variant="outline" className={isEvidenceContentAvailable(it) ? "border-emerald-500/50 text-emerald-700 dark:text-emerald-300 bg-emerald-500/10" : "border-amber-500/50 text-amber-700 dark:text-amber-300 bg-amber-500/10"}>
+                    <Badge
+                      variant="outline"
+                      className={
+                        "inline-flex min-h-7 items-center justify-center px-3 text-center leading-none " +
+                        (isEvidenceContentAvailable(it)
+                          ? "border-emerald-500/50 text-emerald-700 dark:text-emerald-300 bg-emerald-500/10"
+                          : "border-amber-500/50 text-amber-700 dark:text-amber-300 bg-amber-500/10")
+                      }
+                    >
                       {isEvidenceContentAvailable(it) ? (lang === "fr" ? "Consultable" : "Readable") : (lang === "fr" ? "Référence" : "Reference")}
                     </Badge>
                   </div>
