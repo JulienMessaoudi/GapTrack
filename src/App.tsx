@@ -10581,29 +10581,9 @@ function WeeklyPriorityView({
       .slice(0, 5);
   }, [gaps, plans, lang]);
 
-  const missingPlans = priorities.filter((p) => !hasAnyPlanFields(p.existingPlan)).length;
   const p1Count = priorities.filter((p) => p.plan?.priority === "high").length;
   const impactCovered = priorities.reduce((sum, p) => sum + p.row.impact, 0);
   const validatedProofs = priorities.filter((p) => proofStatusFor(p.row.id) === "validated").length;
-
-  const generateWeeklyPlans = (overwrite = false) => {
-    if (readOnly) return;
-    const targets = priorities.filter((p) => overwrite || !hasAnyPlanFields(p.existingPlan));
-    if (!targets.length) {
-      toast.info(lang === "fr" ? "Les actions affichées ont déjà un plan." : "Displayed actions already have a plan.");
-      return;
-    }
-
-    targets.forEach(({ row }) => {
-      patchPlan(row.id, generateWeeklyPlanForControl(row, lang));
-    });
-
-    toast.success(
-      lang === "fr"
-        ? `${targets.length} action(s) préparée(s) pour cette semaine.`
-        : `${targets.length} action(s) prepared for this week.`
-    );
-  };
 
   const markDone = (row: ControlItem) => {
     if (readOnly) return;
@@ -10661,12 +10641,6 @@ function WeeklyPriorityView({
               </p>
             </div>
 
-            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-              <Button size="sm" onClick={() => generateWeeklyPlans(false)} disabled={readOnly || missingPlans === 0}>
-                <Lightbulb className="h-4 w-4 mr-1" />
-                {lang === "fr" ? `Préparer ma semaine (${missingPlans})` : `Prepare my week (${missingPlans})`}
-              </Button>
-            </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 mt-4">
@@ -10732,10 +10706,6 @@ function WeeklyPriorityView({
                     </div>
 
                     <div className="flex flex-wrap gap-2 lg:justify-end">
-                      <Button size="sm" onClick={() => patchPlan(row.id, generateWeeklyPlanForControl(row, lang))} disabled={readOnly}>
-                        <Lightbulb className="h-4 w-4 mr-1" />
-                        {isPlanned ? (lang === "fr" ? "Mettre à jour" : "Update") : (lang === "fr" ? "Générer" : "Generate")}
-                      </Button>
                       <Button size="sm" variant="outline" onClick={() => onOpenPlan(row.id)}>
                         {lang === "fr" ? "Ouvrir plan" : "Open plan"}
                       </Button>
@@ -11116,12 +11086,6 @@ function PlanView({
     );
   };
 
-
-  const generateSelectedPlan = (row: ControlItem) => {
-    if (readOnly) return;
-    patchPlan(row.id, generatePlanForControl(row, lang));
-    toast.success(lang === "fr" ? "Proposition de plan générée." : "Suggested action plan generated.");
-  };
 
   const exportPlanCSV = () => {
     if (!canExport) {
@@ -11579,10 +11543,6 @@ function PlanView({
                     <div className="space-y-2 pt-2">
                       <div className="flex items-center justify-between gap-2">
                         <div className="text-xs text-muted-foreground">{lang === "fr" ? "Plan d’action" : "Action plan"}</div>
-                        <Button variant="outline" size="sm" onClick={() => generateSelectedPlan(selectedRow)} disabled={readOnly}>
-                          <Lightbulb className="h-4 w-4 mr-1" />
-                          {lang === "fr" ? "Générer" : "Generate"}
-                        </Button>
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
