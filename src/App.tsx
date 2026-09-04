@@ -9600,7 +9600,7 @@ function ListingView({ rows, setRows, lang, onOpenEvidence, evidenceCountFor, ev
   useEffect(() => {
     if (!openRequest) return;
 
-    setDomainFilter((openRequest.domain || "all") as any);
+    setDomainFilter((openRequest.controlId ? "all" : (openRequest.domain || "all")) as any);
     setImpactFilter("all");
     setStatusFilter("all");
     setEvidenceFilter("all");
@@ -10540,6 +10540,7 @@ function WeeklyPriorityView({
   plans,
   patchPlan,
   proofStatusFor,
+  onOpenControl,
   onOpenPlan,
   readOnly = false,
 }: {
@@ -10549,6 +10550,7 @@ function WeeklyPriorityView({
   plans: Record<string, PlanAction>;
   patchPlan: (rowId: string, patch: Partial<PlanAction>) => void;
   proofStatusFor: (controlId: string) => EvidenceStatus;
+  onOpenControl: (controlId: string, domain: string) => void;
   onOpenPlan: (rowId?: string) => void;
   readOnly?: boolean;
 }) {
@@ -10679,7 +10681,14 @@ function WeeklyPriorityView({
                         <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-bold">
                           {index + 1}
                         </span>
-                        <span className="font-semibold">{row.ref}</span>
+                        <button
+                          type="button"
+                          className="font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 rounded-sm"
+                          onClick={() => onOpenControl(row.id, row.domain)}
+                          title={lang === "fr" ? "Ouvrir ce contrôle dans le Listing" : "Open this control in Listing"}
+                        >
+                          {row.ref}
+                        </button>
                         <Badge variant="outline">{row.domain}</Badge>
                         <Badge variant="outline" className={priorityBadgeClass(plan?.priority)}>
                           {pLabel(plan?.priority)}
@@ -10783,6 +10792,7 @@ function PlanView({
   proofStatusFor,
   setProofStatusForRow,
   onOpenEvidence,
+  onOpenControl,
   canExport = true,
   canAssignOwners = true,
   collaborationEnabled = false,
@@ -10800,6 +10810,7 @@ function PlanView({
   proofStatusFor: (controlId: string) => EvidenceStatus;
   setProofStatusForRow: (controlId: string, status: EvidenceStatus) => void;
   onOpenEvidence: (control: ControlItem) => void;
+  onOpenControl: (controlId: string, domain: string) => void;
   canExport?: boolean;
   canAssignOwners?: boolean;
   collaborationEnabled?: boolean;
@@ -11398,7 +11409,17 @@ function PlanView({
                       data-rowid={r.id}
                     >
                       <td className="p-2 align-middle">
-                        <div className="font-medium">{r.ref}</div>
+                        <button
+                          type="button"
+                          className="font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 rounded-sm"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onOpenControl(r.id, r.domain);
+                          }}
+                          title={lang === "fr" ? "Ouvrir ce contrôle dans le Listing" : "Open this control in Listing"}
+                        >
+                          {r.ref}
+                        </button>
                         <div className="text-xs text-muted-foreground xl:hidden truncate">{r.domain}</div>
                       </td>
 
@@ -11485,7 +11506,14 @@ function PlanView({
             ) : (
               <>
                 <div className="space-y-1">
-                  <div className="text-sm font-semibold">{selectedRow.ref}</div>
+                  <button
+                    type="button"
+                    className="text-sm font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 rounded-sm"
+                    onClick={() => onOpenControl(selectedRow.id, selectedRow.domain)}
+                    title={lang === "fr" ? "Ouvrir ce contrôle dans le Listing" : "Open this control in Listing"}
+                  >
+                    {selectedRow.ref}
+                  </button>
                   <div className="text-xs text-muted-foreground">{selectedRow.domain}</div>
                 </div>
 
@@ -16615,6 +16643,9 @@ This will remove the account from GapTrack administration and persist the deleti
                     patchPlan={patchPlanForRow}
                     proofStatusFor={proofStatusForRow}
                     readOnly={isFreeTrialExpired}
+                    onOpenControl={(controlId, domain) => {
+                      openListingFromDashboard(domain, controlId);
+                    }}
                     onOpenPlan={(controlId) => {
                       setTab("plan");
                       if (controlId) {
@@ -16792,6 +16823,9 @@ This will remove the account from GapTrack administration and persist the deleti
 				proofStatusFor={proofStatusForRow}
 				setProofStatusForRow={setProofStatusForRow}
 				onOpenEvidence={openEvidence}
+                        onOpenControl={(controlId, domain) => {
+                          openListingFromDashboard(domain, controlId);
+                        }}
 					canExport={isPremiumProfessionalUser}
                         canAssignOwners={isPremiumTeamUser}
                         collaborationEnabled={isPremiumTeamUser}
